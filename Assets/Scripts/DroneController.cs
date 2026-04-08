@@ -132,10 +132,7 @@ public class DroneController : MonoBehaviour
                     oldTile.OnDroneExit();
 
                 CurrentRoom = toRoom;
-
-                var newTile = fog?.GetTile(CurrentRoom);
-                if (newTile != null)
-                    newTile.OnDroneEnter();
+                // OnDroneEnter already called when hop started
             }
 
             if (path.Count > 0)
@@ -144,6 +141,11 @@ public class DroneController : MonoBehaviour
                 toRoom = path.Dequeue();
                 travelDuration = GetTravelTime(fromRoom, toRoom);
                 travelProgress = 0f;
+
+                // Reveal destination the moment the drone enters the corridor
+                var destTile = fog?.GetTile(toRoom);
+                if (destTile != null)
+                    destTile.OnDroneEnter();
             }
         }
         else
