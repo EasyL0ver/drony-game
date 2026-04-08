@@ -606,28 +606,37 @@ public class HexMapGenerator : MonoBehaviour
         float   hw       = width * 0.5f;
         Vector3 off      = corrPerp * hw;
 
-        // Wall sits OUTSIDE floor edge: inner face at hw, outer face at hw+wallThickness.
-        // Outer face is behind the room wall so invisible.
-        Vector3 wallOff = corrPerp * (hw + wallThickness * 0.5f);
-
-        // Extend walls into room walls so end caps are buried
-        Vector3 wallA = midA - corrDir * wallThickness;
-        Vector3 wallB = midB + corrDir * wallThickness;
-
-        // Floor (PassageWidth — matches gap)
+        // Floor
         floorMB.Quad(midA + off, midA - off, midB - off, midB + off);
         Vector3 dn = Vector3.down * floorThickness;
         floorMB.Quad(midA + off, midB + off, midB + off + dn, midA + off + dn);
         floorMB.Quad(midB - off, midA - off, midA - off + dn, midB - off + dn);
 
-        // Side walls (outset so inner face = floor edge, extended to hide end caps)
+        // Side walls — only inner face visible, wall body extends outward behind room wall
         float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
-        EmitWallPanel(wallMB, wallA - wallOff, wallB - wallOff, sideH, false, false);
-        EmitWallPanel(wallMB, wallB + wallOff, wallA + wallOff, sideH, false, false);
+        Vector3 upV = Vector3.up * sideH;
+        Vector3 wt  = corrPerp * wallThickness;
+        {
+            // -corrPerp side wall
+            Vector3 fA = midA - off, fB = midB - off; // visible face at floor edge
+            Vector3 bA = fA - wt,    bB = fB - wt;    // back edge behind room wall
+            // visible face (same winding as EmitWallPanel "outer" = +n side)
+            wallMB.Quad(fA, fA + upV, fB + upV, fB);
+            // top
+            wallMB.Quad(fA + upV, bA + upV, bB + upV, fB + upV);
+
+            // +corrPerp side wall
+            Vector3 fC = midB + off, fD = midA + off; // visible face at floor edge
+            Vector3 bC = fC + wt,    bD = fD + wt;    // back edge behind room wall
+            // visible face
+            wallMB.Quad(fC, fC + upV, fD + upV, fD);
+            // top
+            wallMB.Quad(fC + upV, bC + upV, bD + upV, fD + upV);
+        }
 
         // Trim
-        EmitWallTrim(glowMB, midA - wallOff, midB - wallOff, sideH);
-        EmitWallTrim(glowMB, midB + wallOff, midA + wallOff, sideH);
+        EmitWallTrim(glowMB, midA - off, midB - off, sideH);
+        EmitWallTrim(glowMB, midB + off, midA + off, sideH);
 
         // Floor glow edge strips (at floor edge)
         float sw = 0.05f;
