@@ -606,24 +606,26 @@ public class HexMapGenerator : MonoBehaviour
         Vector3 corrPerp = Vector3.Cross(Vector3.up, corrDir).normalized;
         float   hw       = width * 0.5f;
         Vector3 off      = corrPerp * hw;
-        // Corridor wall outer face must align with room wall outer face.
-        // Room walls sit at hex edge + wallThickness/2 outward.
-        // So corridor wall centerline = hw + wallThickness/2
-        // (wall panel adds wallThickness/2 on each side of centerline).
+
+        // Corridor wall centerline outset so outer face aligns with room wall
         Vector3 wallOff  = corrPerp * (hw + wallThickness * 0.5f);
 
-        // Floor uses the wider width too so it reaches wall inner faces
+        // Extend walls into room walls so end caps are hidden
+        Vector3 wallA = midA - corrDir * wallThickness;
+        Vector3 wallB = midB + corrDir * wallThickness;
+
+        // Floor
         floorMB.Quad(midA + wallOff, midA - wallOff, midB - wallOff, midB + wallOff);
         Vector3 dn = Vector3.down * floorThickness;
         floorMB.Quad(midA + wallOff, midB + wallOff, midB + wallOff + dn, midA + wallOff + dn);
         floorMB.Quad(midB - wallOff, midA - wallOff, midA - wallOff + dn, midB - wallOff + dn);
 
-        // Side walls — centerline outset so outer face aligns with room wall outer face
+        // Side walls — widened + lengthened to bury end caps in room walls
         float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
-        EmitWallPanel(wallMB, midA - wallOff, midB - wallOff, sideH);
-        EmitWallPanel(wallMB, midB + wallOff, midA + wallOff, sideH);
+        EmitWallPanel(wallMB, wallA - wallOff, wallB - wallOff, sideH);
+        EmitWallPanel(wallMB, wallB + wallOff, wallA + wallOff, sideH);
 
-        // Trim on passage side walls
+        // Trim on passage side walls (original endpoints, not extended)
         EmitWallTrim(glowMB, midA - wallOff, midB - wallOff, sideH);
         EmitWallTrim(glowMB, midB + wallOff, midA + wallOff, sideH);
 
