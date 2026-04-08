@@ -72,8 +72,8 @@ public class GameManager : MonoBehaviour
         if (rtsCamera == null)
             rtsCamera = cam.gameObject.AddComponent<RTSCamera>();
 
-        cam.transform.position = new Vector3(0f, 35f, -20f);
-        cam.transform.rotation = Quaternion.Euler(55f, 0f, 0f);
+        cam.transform.position = new Vector3(0f, 30f, -15f);
+        cam.transform.rotation = Quaternion.Euler(60f, 0f, 0f);
 
         // Match background to fog so unknown rooms are truly invisible
         cam.clearFlags = CameraClearFlags.SolidColor;

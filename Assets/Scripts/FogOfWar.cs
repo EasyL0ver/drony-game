@@ -256,11 +256,29 @@ public class FogOfWar : MonoBehaviour
 
     void CreateMaterials()
     {
-        matUnknown    = MakeFogMat(unknownColor);
-        matDiscovered = MakeFogMat(discoveredColor);
+        matUnknown    = MakeOpaqueFogMat(unknownColor);
+        matDiscovered = MakeTransparentFogMat(discoveredColor);
     }
 
-    Material MakeFogMat(Color c)
+    /// <summary>Opaque material with Z-write — fully occludes glow and geometry behind it.</summary>
+    Material MakeOpaqueFogMat(Color c)
+    {
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Unlit/Color");
+
+        var mat = new Material(sh);
+        Color opaque = new Color(c.r, c.g, c.b, 1f);
+        mat.color = opaque;
+        mat.SetColor("_BaseColor", opaque);
+        mat.SetFloat("_Surface", 0f); // Opaque
+        mat.SetInt("_ZWrite", 1);
+        mat.SetInt("_Cull", 0); // double-sided
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry + 1;
+        return mat;
+    }
+
+    /// <summary>Transparent material for Discovered state — semi-see-through.</summary>
+    Material MakeTransparentFogMat(Color c)
     {
         Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
         if (sh == null) sh = Shader.Find("Unlit/Color");
@@ -268,8 +286,6 @@ public class FogOfWar : MonoBehaviour
         var mat = new Material(sh);
         mat.color = c;
         mat.SetColor("_BaseColor", c);
-
-        // URP transparent setup
         mat.SetFloat("_Surface", 1f);
         mat.SetFloat("_Blend", 0f);
         mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
@@ -277,9 +293,8 @@ public class FogOfWar : MonoBehaviour
         mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
         mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         mat.SetInt("_ZWrite", 0);
-        mat.SetInt("_Cull", 0); // double-sided
+        mat.SetInt("_Cull", 0);
         mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-
         return mat;
     }
 }
