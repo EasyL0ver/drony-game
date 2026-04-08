@@ -604,8 +604,11 @@ public class HexMapGenerator : MonoBehaviour
         Vector3 corrPerp = Vector3.Cross(Vector3.up, corrDir).normalized;
         float   hw       = width * 0.5f;
         Vector3 off      = corrPerp * hw;
-        // Wall centerline inset so outer face aligns with floor edge
-        Vector3 wallOff  = corrPerp * (hw - wallThickness * 0.5f);
+
+        // Extend walls into the hex wall so end caps are hidden
+        float wallExt = wallThickness;
+        Vector3 wallA = midA - corrDir * wallExt;
+        Vector3 wallB = midB + corrDir * wallExt;
 
         // Floor
         floorMB.Quad(midA + off, midA - off, midB - off, midB + off);
@@ -613,14 +616,14 @@ public class HexMapGenerator : MonoBehaviour
         floorMB.Quad(midA + off, midB + off, midB + off + dn, midA + off + dn);
         floorMB.Quad(midB - off, midA - off, midA - off + dn, midB - off + dn);
 
-        // Side walls — outer face flush with floor edge
+        // Side walls — extended past hex wall to hide end caps
         float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
-        EmitWallPanel(wallMB, midA - wallOff, midB - wallOff, sideH);
-        EmitWallPanel(wallMB, midB + wallOff, midA + wallOff, sideH);
+        EmitWallPanel(wallMB, wallA - off, wallB - off, sideH);
+        EmitWallPanel(wallMB, wallB + off, wallA + off, sideH);
 
-        // Trim on passage side walls
-        EmitWallTrim(glowMB, midA - wallOff, midB - wallOff, sideH);
-        EmitWallTrim(glowMB, midB + wallOff, midA + wallOff, sideH);
+        // Trim on passage side walls (original length, not extended)
+        EmitWallTrim(glowMB, midA - off, midB - off, sideH);
+        EmitWallTrim(glowMB, midB + off, midA + off, sideH);
 
         // Floor glow edge strips
         float sw = 0.05f;
