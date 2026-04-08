@@ -623,6 +623,17 @@ public class HexMapGenerator : MonoBehaviour
         // Glow bands at the room-side entrances
         EmitPipeBand(glowMB, startA, pipeDir);
         EmitPipeBand(glowMB, startB, pipeDir);
+
+        // Interior light rings evenly spaced along the pipe
+        float pipeLen = pipeDir.magnitude;
+        float spacing = ventPipeRadius * 6f;
+        int ringCount = Mathf.Max(1, Mathf.FloorToInt(pipeLen / spacing));
+        for (int i = 1; i <= ringCount; i++)
+        {
+            float t = i / (float)(ringCount + 1);
+            Vector3 pos = Vector3.Lerp(startA, startB, t);
+            EmitPipeRing(glowMB, pos, pipeDir, ventPipeRadius * 1.02f);
+        }
     }
 
     void EmitPipeSegment(MB mb, Vector3 from, Vector3 to)
@@ -682,6 +693,31 @@ public class HexMapGenerator : MonoBehaviour
             Vector3 d1 = (right * Mathf.Cos(a1) + fwd * Mathf.Sin(a1)) * r;
             Vector3 d2 = (right * Mathf.Cos(a2) + fwd * Mathf.Sin(a2)) * r;
             // Outer face of the band
+            mb.Quad(center + d1 - halfD, center + d1 + halfD,
+                    center + d2 + halfD, center + d2 - halfD);
+        }
+    }
+
+    /// <summary>Thin glowing ring inside the pipe — narrower than entrance bands.</summary>
+    void EmitPipeRing(MB mb, Vector3 center, Vector3 pipeDir, float r)
+    {
+        float bandW = ventPipeRadius * 0.3f;
+        Vector3 dir = pipeDir.normalized;
+        Vector3 halfD = dir * bandW * 0.5f;
+
+        Vector3 up = Vector3.up;
+        if (Mathf.Abs(Vector3.Dot(dir, up)) > 0.99f)
+            up = Vector3.right;
+        Vector3 right = Vector3.Cross(dir, up).normalized;
+        Vector3 fwd   = Vector3.Cross(right, dir).normalized;
+
+        int seg = 8;
+        for (int i = 0; i < seg; i++)
+        {
+            float a1 = Mathf.PI * 2f * i / seg;
+            float a2 = Mathf.PI * 2f * ((i + 1) % seg) / seg;
+            Vector3 d1 = (right * Mathf.Cos(a1) + fwd * Mathf.Sin(a1)) * r;
+            Vector3 d2 = (right * Mathf.Cos(a2) + fwd * Mathf.Sin(a2)) * r;
             mb.Quad(center + d1 - halfD, center + d1 + halfD,
                     center + d2 + halfD, center + d2 - halfD);
         }
