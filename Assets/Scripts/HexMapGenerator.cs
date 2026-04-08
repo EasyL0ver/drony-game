@@ -605,21 +605,21 @@ public class HexMapGenerator : MonoBehaviour
         float   hw       = width * 0.5f;
         Vector3 off      = corrPerp * hw;
 
-        // Wall centerline inset so outer face aligns with floor edge / gap edge.
-        // EmitWallPanel adds wallThickness/2 outward from centerline.
-        Vector3 wallOff = corrPerp * (hw - wallThickness * 0.5f);
+        // Wall sits OUTSIDE floor edge: inner face at hw, outer face at hw+wallThickness.
+        // Outer face is behind the room wall so invisible.
+        Vector3 wallOff = corrPerp * (hw + wallThickness * 0.5f);
 
         // Extend walls into room walls so end caps are buried
         Vector3 wallA = midA - corrDir * wallThickness;
         Vector3 wallB = midB + corrDir * wallThickness;
 
-        // Floor (full passage width)
+        // Floor (PassageWidth — matches gap)
         floorMB.Quad(midA + off, midA - off, midB - off, midB + off);
         Vector3 dn = Vector3.down * floorThickness;
         floorMB.Quad(midA + off, midB + off, midB + off + dn, midA + off + dn);
         floorMB.Quad(midB - off, midA - off, midA - off + dn, midB - off + dn);
 
-        // Side walls (inset + extended)
+        // Side walls (outset so inner face = floor edge, extended to hide end caps)
         float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
         EmitWallPanel(wallMB, wallA - wallOff, wallB - wallOff, sideH);
         EmitWallPanel(wallMB, wallB + wallOff, wallA + wallOff, sideH);
