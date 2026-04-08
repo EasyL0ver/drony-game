@@ -75,7 +75,7 @@ public class GameManager : MonoBehaviour
             rtsCamera = cam.gameObject.AddComponent<RTSCamera>();
 
         // Center camera on room 0 at origin
-        rtsCamera.Init(Vector3.zero, 20f, 85f);
+        rtsCamera.Init(Vector3.zero, 20f, 56f);
 
         // Match background to fog so unknown rooms are truly invisible
         cam.clearFlags = CameraClearFlags.SolidColor;
