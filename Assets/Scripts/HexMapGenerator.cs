@@ -94,7 +94,8 @@ public class HexMapGenerator : MonoBehaviour
         {
             if (type == PassageType.Vent) continue;
             int ea = EdgeToward(a, b);
-            float gapW = PassageWidth(type);
+            // Gap must match corridor outer width (inner + wall thickness)
+            float gapW = PassageWidth(type) + wallThickness;
             openEdges[a][ea]           = new PassageInfo { width = gapW, type = type };
             openEdges[b][(ea + 3) % 6] = new PassageInfo { width = gapW, type = type };
         }
