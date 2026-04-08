@@ -26,13 +26,21 @@ public class LowPolyDrone : MonoBehaviour
 
     void OnEnable()
     {
-        if (transform.childCount == 0)
+        if (transform.childCount > 0)
+            FindRotors();
+        else if (Application.isPlaying)
         {
             InitMaterials();
             Build();
         }
-        else
-            FindRotors();
+    }
+
+    /// <summary>Manual rebuild from editor (right-click → Rebuild Drone, or menu).</summary>
+    [ContextMenu("Rebuild Drone")]
+    public void Rebuild()
+    {
+        InitMaterials();
+        Build();
     }
 
     void Update()

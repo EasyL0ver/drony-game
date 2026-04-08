@@ -62,7 +62,8 @@ public class HexMapGenerator : MonoBehaviour
 
     void OnEnable()
     {
-        if (transform.childCount == 0)
+        // Only auto-generate at play-mode start if no children exist
+        if (Application.isPlaying && transform.childCount == 0)
             Generate();
     }
 

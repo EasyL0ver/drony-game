@@ -17,11 +17,11 @@ public class GameManager : MonoBehaviour
     // Drone's current hex room (for fog updates)
     Vector2Int droneRoom = Vector2Int.zero;
 
-    void OnEnable()
+    void Start()
     {
-        // Always rebuild — fog dictionaries aren't serialized and get lost
-        // on play-mode entry, domain reload, etc.
-        Setup();
+        // Only rebuild automatically when entering play mode
+        if (Application.isPlaying)
+            Setup();
     }
 
     void Update()

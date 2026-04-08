@@ -31,17 +31,21 @@ public class ProceduralDrone : MonoBehaviour
 
     void OnEnable()
     {
-        // Build immediately (works in both editor and play mode)
-        if (transform.childCount == 0)
+        if (transform.childCount > 0)
+            FindRotors();
+        else if (Application.isPlaying)
         {
             InitMaterials();
             Build();
         }
-        else
-        {
-            // Re-acquire rotor references after domain reload
-            FindRotors();
-        }
+    }
+
+    /// <summary>Manual rebuild from editor (right-click → Rebuild Drone, or menu).</summary>
+    [ContextMenu("Rebuild Drone")]
+    public void Rebuild()
+    {
+        InitMaterials();
+        Build();
     }
 
     void Start()

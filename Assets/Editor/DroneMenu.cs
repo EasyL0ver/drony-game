@@ -70,6 +70,21 @@ public static class ProceduralMenu
             SceneView.lastActiveSceneView.LookAt(Vector3.zero, Quaternion.Euler(90f, 0f, 0f), 40f);
     }
 
+    [MenuItem("Tools/Rebuild Drony Game", false, 21)]
+    static void RebuildGame()
+    {
+        var gm = Object.FindFirstObjectByType<GameManager>();
+        if (gm != null)
+        {
+            gm.Setup();
+            Debug.Log("Drony Game rebuilt.");
+        }
+        else
+        {
+            Debug.LogWarning("No GameManager in scene — use GameObject → 3D Object → Drony Game first.");
+        }
+    }
+
     [MenuItem("GameObject/3D Object/Hex Map", false, 13)]
     static void CreateHexMap()
     {
