@@ -445,6 +445,34 @@ public class HexMapGenerator : MonoBehaviour
                 EmitWallTrim(glowMB, c0, c1, rWallH);
             }
         }
+
+        // Corner pillars to fill notches where wall panels meet at 120°
+        float hw = wallThickness * 0.5f;
+        for (int i = 0; i < 6; i++)
+        {
+            Vector3 corner = Corner(c, i, r);
+
+            // Direction of the two edges meeting at this corner
+            Vector3 prev = Corner(c, (i + 5) % 6, r);
+            Vector3 next = Corner(c, (i + 1) % 6, r);
+            Vector3 dirPrev = (corner - prev).normalized;
+            Vector3 dirNext = (next - corner).normalized;
+
+            // Perpendicular offsets (outward normals of each edge)
+            Vector3 nPrev = Vector3.Cross(Vector3.up, dirPrev).normalized;
+            Vector3 nNext = Vector3.Cross(Vector3.up, dirNext).normalized;
+
+            // Build a small triangular prism to fill the gap
+            Vector3 p0 = corner;
+            Vector3 p1 = corner + nPrev * hw;
+            Vector3 p2 = corner + nNext * hw;
+            Vector3 up = Vector3.up * rWallH;
+
+            wallMB.Quad(p0, p0 + up, p1 + up, p1);
+            wallMB.Quad(p1, p1 + up, p2 + up, p2);
+            wallMB.Quad(p2, p2 + up, p0 + up, p0);
+            wallMB.Tri(p0 + up, p2 + up, p1 + up);
+        }
     }
 
     // ═══════════════════════════════════════
