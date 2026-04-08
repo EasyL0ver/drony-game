@@ -94,8 +94,7 @@ public class HexMapGenerator : MonoBehaviour
         {
             if (type == PassageType.Vent) continue;
             int ea = EdgeToward(a, b);
-            // Gap must match corridor outer width (inner + wall thickness)
-            float gapW = PassageWidth(type) + wallThickness;
+            float gapW = PassageWidth(type);
             openEdges[a][ea]           = new PassageInfo { width = gapW, type = type };
             openEdges[b][(ea + 3) % 6] = new PassageInfo { width = gapW, type = type };
         }
@@ -605,6 +604,8 @@ public class HexMapGenerator : MonoBehaviour
         Vector3 corrPerp = Vector3.Cross(Vector3.up, corrDir).normalized;
         float   hw       = width * 0.5f;
         Vector3 off      = corrPerp * hw;
+        // Wall centerline inset so outer face aligns with floor edge
+        Vector3 wallOff  = corrPerp * (hw - wallThickness * 0.5f);
 
         // Floor
         floorMB.Quad(midA + off, midA - off, midB - off, midB + off);
@@ -612,14 +613,14 @@ public class HexMapGenerator : MonoBehaviour
         floorMB.Quad(midA + off, midB + off, midB + off + dn, midA + off + dn);
         floorMB.Quad(midB - off, midA - off, midA - off + dn, midB - off + dn);
 
-        // Side walls — slightly shorter than room walls for corridors, matching ceiling for enclosed
+        // Side walls — outer face flush with floor edge
         float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
-        EmitWallPanel(wallMB, midA - off, midB - off, sideH);
-        EmitWallPanel(wallMB, midB + off, midA + off, sideH);
+        EmitWallPanel(wallMB, midA - wallOff, midB - wallOff, sideH);
+        EmitWallPanel(wallMB, midB + wallOff, midA + wallOff, sideH);
 
         // Trim on passage side walls
-        EmitWallTrim(glowMB, midA - off, midB - off, sideH);
-        EmitWallTrim(glowMB, midB + off, midA + off, sideH);
+        EmitWallTrim(glowMB, midA - wallOff, midB - wallOff, sideH);
+        EmitWallTrim(glowMB, midB + wallOff, midA + wallOff, sideH);
 
         // Floor glow edge strips
         float sw = 0.05f;
