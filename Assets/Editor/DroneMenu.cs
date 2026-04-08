@@ -56,7 +56,21 @@ public static class ProceduralMenu
         Undo.RegisterCreatedObjectUndo(go, "Create Low-Poly Drone");
     }
 
-    [MenuItem("GameObject/3D Object/Hex Map", false, 12)]
+    [MenuItem("GameObject/3D Object/Drony Game", false, 12)]
+    static void CreateGame()
+    {
+        GameObject go = new GameObject("DronyGame");
+        go.AddComponent<GameManager>();
+        go.transform.position = Vector3.zero;
+
+        Selection.activeGameObject = go;
+        Undo.RegisterCreatedObjectUndo(go, "Create Drony Game");
+
+        if (SceneView.lastActiveSceneView != null)
+            SceneView.lastActiveSceneView.LookAt(Vector3.zero, Quaternion.Euler(90f, 0f, 0f), 40f);
+    }
+
+    [MenuItem("GameObject/3D Object/Hex Map", false, 13)]
     static void CreateHexMap()
     {
         GameObject go = new GameObject("HexMap");
