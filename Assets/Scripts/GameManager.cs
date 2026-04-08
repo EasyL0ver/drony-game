@@ -72,14 +72,8 @@ public class GameManager : MonoBehaviour
         if (rtsCamera == null)
             rtsCamera = cam.gameObject.AddComponent<RTSCamera>();
 
-        // Position so screen center hits (0,0,0) exactly.
-        // RTSCamera.Start() captures transform.position as its target,
-        // so we must set the actual transform — not use FocusOn().
-        float camH     = 20f;
-        float camPitch = 85f; // near top-down
-        float camZ     = -camH / Mathf.Tan(camPitch * Mathf.Deg2Rad); // ≈ -1.75
-        cam.transform.position = new Vector3(0f, camH, camZ);
-        cam.transform.rotation = Quaternion.Euler(camPitch, 0f, 0f);
+        // Center camera on room 0 at origin
+        rtsCamera.Init(Vector3.zero, 20f, 85f);
 
         // Match background to fog so unknown rooms are truly invisible
         cam.clearFlags = CameraClearFlags.SolidColor;

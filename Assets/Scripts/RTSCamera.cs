@@ -42,17 +42,39 @@ public class RTSCamera : MonoBehaviour
     float   targetYaw;
     float   targetPitch;
     Vector3 currentVelocity;
+    bool    initialized;
 
     // Input devices
     Keyboard kb;
     Mouse    mouse;
 
+    /// <summary>
+    /// Set camera to look at a world XZ point from a given height and pitch.
+    /// Must be called before Start() to prevent Start from overriding.
+    /// </summary>
+    public void Init(Vector3 lookAt, float zoom, float pitch)
+    {
+        targetZoom  = zoom;
+        targetPitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+        targetYaw   = 0f;
+
+        float zOff = -zoom / Mathf.Tan(targetPitch * Mathf.Deg2Rad);
+        targetPosition = new Vector3(lookAt.x, zoom, lookAt.z + zOff);
+
+        transform.position = targetPosition;
+        transform.rotation = Quaternion.Euler(targetPitch, targetYaw, 0f);
+        initialized = true;
+    }
+
     void Start()
     {
-        targetPosition = transform.position;
-        targetZoom     = transform.position.y;
-        targetYaw      = transform.eulerAngles.y;
-        targetPitch    = transform.eulerAngles.x;
+        if (!initialized)
+        {
+            targetPosition = transform.position;
+            targetZoom     = transform.position.y;
+            targetYaw      = transform.eulerAngles.y;
+            targetPitch    = transform.eulerAngles.x;
+        }
 
         if (targetPitch < minPitch) targetPitch = (minPitch + maxPitch) * 0.5f;
     }
