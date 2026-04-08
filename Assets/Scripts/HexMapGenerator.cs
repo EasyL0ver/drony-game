@@ -406,29 +406,37 @@ public class HexMapGenerator : MonoBehaviour
     void EmitHexWalls(MB wallMB, MB glowMB, Vector3 c, float r, float rWallH,
                       Dictionary<int, PassageInfo> openEdges)
     {
+        // Extend each wall panel slightly past hex corners so adjacent
+        // panels overlap — eliminates corner notches without extra geometry.
+        float ext = wallThickness * 0.6f;
+
         for (int i = 0; i < 6; i++)
         {
             Vector3 c0 = Corner(c, i, r);
             Vector3 c1 = Corner(c, (i + 1) % 6, r);
+            Vector3 edgeDir = (c1 - c0).normalized;
+
+            // Extended corners for solid wall segments at hex vertices
+            Vector3 c0ext = c0 - edgeDir * ext;
+            Vector3 c1ext = c1 + edgeDir * ext;
 
             if (openEdges.ContainsKey(i))
             {
                 PassageInfo pi = openEdges[i];
                 Vector3 mid     = (c0 + c1) * 0.5f;
-                Vector3 edgeDir = (c1 - c0).normalized;
                 float   hw      = pi.width * 0.5f;
                 Vector3 gapA    = mid - edgeDir * hw;
                 Vector3 gapB    = mid + edgeDir * hw;
 
                 if (Vector3.Distance(c0, gapA) > 0.05f)
                 {
-                    EmitWallPanel(wallMB, c0, gapA, rWallH);
-                    EmitWallTrim(glowMB, c0, gapA, rWallH);
+                    EmitWallPanel(wallMB, c0ext, gapA, rWallH);
+                    EmitWallTrim(glowMB, c0ext, gapA, rWallH);
                 }
                 if (Vector3.Distance(gapB, c1) > 0.05f)
                 {
-                    EmitWallPanel(wallMB, gapB, c1, rWallH);
-                    EmitWallTrim(glowMB, gapB, c1, rWallH);
+                    EmitWallPanel(wallMB, gapB, c1ext, rWallH);
+                    EmitWallTrim(glowMB, gapB, c1ext, rWallH);
                 }
 
                 // Lintel (header wall) above the opening
@@ -441,37 +449,9 @@ public class HexMapGenerator : MonoBehaviour
             }
             else
             {
-                EmitWallPanel(wallMB, c0, c1, rWallH);
-                EmitWallTrim(glowMB, c0, c1, rWallH);
+                EmitWallPanel(wallMB, c0ext, c1ext, rWallH);
+                EmitWallTrim(glowMB, c0ext, c1ext, rWallH);
             }
-        }
-
-        // Corner pillars to fill notches where wall panels meet at 120°
-        float hw = wallThickness * 0.5f;
-        for (int i = 0; i < 6; i++)
-        {
-            Vector3 corner = Corner(c, i, r);
-
-            // Direction of the two edges meeting at this corner
-            Vector3 prev = Corner(c, (i + 5) % 6, r);
-            Vector3 next = Corner(c, (i + 1) % 6, r);
-            Vector3 dirPrev = (corner - prev).normalized;
-            Vector3 dirNext = (next - corner).normalized;
-
-            // Perpendicular offsets (outward normals of each edge)
-            Vector3 nPrev = Vector3.Cross(Vector3.up, dirPrev).normalized;
-            Vector3 nNext = Vector3.Cross(Vector3.up, dirNext).normalized;
-
-            // Build a small triangular prism to fill the gap
-            Vector3 p0 = corner;
-            Vector3 p1 = corner + nPrev * hw;
-            Vector3 p2 = corner + nNext * hw;
-            Vector3 up = Vector3.up * rWallH;
-
-            wallMB.Quad(p0, p0 + up, p1 + up, p1);
-            wallMB.Quad(p1, p1 + up, p2 + up, p2);
-            wallMB.Quad(p2, p2 + up, p0 + up, p0);
-            wallMB.Tri(p0 + up, p2 + up, p1 + up);
         }
     }
 
