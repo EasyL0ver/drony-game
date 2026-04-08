@@ -452,12 +452,14 @@ public class HexMapGenerator : MonoBehaviour
 
                 if (Vector3.Distance(c0, gapA) > 0.05f)
                 {
-                    EmitMiteredWall(wallMB, outerV[i], innerV[i], gapAo, gapAi, rWallH, false, true);
+                    // No cap at gap edge — corridor wall covers it
+                    EmitMiteredWall(wallMB, outerV[i], innerV[i], gapAo, gapAi, rWallH, false, false);
                     EmitMiteredTrim(glowMB, outerV[i], innerV[i], gapAo, gapAi, rWallH);
                 }
                 if (Vector3.Distance(gapB, c1) > 0.05f)
                 {
-                    EmitMiteredWall(wallMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH, true, false);
+                    // No cap at gap edge — corridor wall covers it
+                    EmitMiteredWall(wallMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH, false, false);
                     EmitMiteredTrim(glowMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH);
                 }
 
