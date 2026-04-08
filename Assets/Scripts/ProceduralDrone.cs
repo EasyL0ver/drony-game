@@ -40,13 +40,6 @@ public class ProceduralDrone : MonoBehaviour
         }
     }
 
-    /// <summary>Manual rebuild from editor (right-click → Rebuild Drone, or menu).</summary>
-    [ContextMenu("Rebuild Drone")]
-    public void Rebuild()
-    {
-        InitMaterials();
-        Build();
-    }
 
     void Start()
     {
