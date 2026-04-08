@@ -117,7 +117,7 @@ public class FogOfWar : MonoBehaviour
         {
             states[room] = FogState.Unknown;
 
-            float r = map.RoomRadius(map.RoomSizeMap[room]) * 1.03f;
+            float r = map.RoomRadius(map.RoomSizeMap[room]) + 0.20f;
             Vector3 c = map.HexCenter(room);
 
             var go = SpawnFog($"FogRoom_{room.x}_{room.y}",
@@ -129,7 +129,7 @@ public class FogOfWar : MonoBehaviour
         {
             var (midA, midB) = map.PassageEndpoints(a, b);
             Vector3 midpoint = (midA + midB) * 0.5f;
-            float w = map.PassageWidth(type) * 1.15f;
+            float w = map.PassageWidth(type) + 0.30f;
 
             // half A (room A side)
             var goA = SpawnFog($"FogPass_{a.x}_{a.y}_{b.x}_{b.y}",
