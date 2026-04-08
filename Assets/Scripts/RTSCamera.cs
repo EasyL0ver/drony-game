@@ -57,6 +57,7 @@ public class RTSCamera : MonoBehaviour
         targetZoom  = zoom;
         targetPitch = Mathf.Clamp(pitch, minPitch, maxPitch);
         targetYaw   = 0f;
+        currentVelocity = Vector3.zero;
 
         float zOff = -zoom / Mathf.Tan(targetPitch * Mathf.Deg2Rad);
         targetPosition = new Vector3(lookAt.x, zoom, lookAt.z + zOff);

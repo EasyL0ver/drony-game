@@ -4,7 +4,9 @@ using System.Collections.Generic;
 /// <summary>
 /// Top-level game object that spawns the hex map, drone, fog of war, and camera.
 /// Attach to an empty root GameObject or use the menu item.
+/// Runs before RTSCamera so Init() wins over Start().
 /// </summary>
+[DefaultExecutionOrder(-50)]
 public class GameManager : MonoBehaviour
 {
     [Header("References (auto-created if empty)")]
