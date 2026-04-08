@@ -12,6 +12,7 @@ public class TileConnection
 {
     public RoomTile neighbor;
     public HexMapGenerator.PassageType passageType;
+    public int edgeIndex; // which hex edge (0-5) this neighbor is on
 }
 
 /// <summary>
@@ -31,7 +32,8 @@ public class RoomTile : MonoBehaviour
 
     // Visuals
     MeshRenderer fogRenderer;
-    GameObject outlineObject;
+    GameObject[] outlineEdges = new GameObject[6]; // one quad per hex edge
+    bool outlineShown;
     Material matUnknown, matDiscovered, matOutline;
 
     // Config (set once by builder)
@@ -124,8 +126,58 @@ public class RoomTile : MonoBehaviour
 
     public void ShowOutline(bool show)
     {
-        if (outlineObject != null)
-            outlineObject.SetActive(show);
+        outlineShown = show;
+        RefreshOutlineEdges();
+
+        // Neighbors sharing an edge need to refresh too
+        foreach (var conn in Connections)
+            if (conn.neighbor.outlineShown)
+                conn.neighbor.RefreshOutlineEdges();
+    }
+
+    /// <summary>
+    /// Activate only edges that don't overlap with an adjacent outlined tile.
+    /// For shared edges, the tile with the lower coord draws it.
+    /// </summary>
+    void RefreshOutlineEdges()
+    {
+        for (int i = 0; i < 6; i++)
+        {
+            if (outlineEdges[i] == null) continue;
+
+            if (!outlineShown)
+            {
+                outlineEdges[i].SetActive(false);
+                continue;
+            }
+
+            // Check if a neighbor on this edge also has outline shown
+            bool neighborOutlined = false;
+            foreach (var conn in Connections)
+            {
+                if (conn.edgeIndex == i && conn.neighbor.outlineShown)
+                {
+                    neighborOutlined = true;
+                    break;
+                }
+            }
+
+            if (neighborOutlined)
+            {
+                // Only the tile with the "lower" coord draws the shared edge
+                Vector2Int neighborCoord = Vector2Int.zero;
+                foreach (var conn in Connections)
+                    if (conn.edgeIndex == i) { neighborCoord = conn.neighbor.Coord; break; }
+
+                bool iDraw = (Coord.x < neighborCoord.x) ||
+                             (Coord.x == neighborCoord.x && Coord.y < neighborCoord.y);
+                outlineEdges[i].SetActive(iDraw);
+            }
+            else
+            {
+                outlineEdges[i].SetActive(true);
+            }
+        }
     }
 
     // ── mesh builders ────────────────────────
@@ -149,19 +201,39 @@ public class RoomTile : MonoBehaviour
     {
         float fogY = map.WallHeight + fogElevation + 0.02f;
         Vector3 center = map.HexCenter(Coord);
-        float r = outlineRadius;
-        float thickness = 0.08f;
+        float outerR = outlineRadius;
+        float innerR = outerR - 0.08f;
 
-        outlineObject = new GameObject("Outline");
-        outlineObject.transform.SetParent(transform, false);
-        var mf = outlineObject.AddComponent<MeshFilter>();
-        var mr = outlineObject.AddComponent<MeshRenderer>();
-        mf.sharedMesh = MakeHexRing(center, r, r - thickness, fogY);
-        mr.sharedMaterial = matOutline;
-        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        mr.receiveShadows = false;
+        for (int i = 0; i < 6; i++)
+        {
+            float a1 = Mathf.Deg2Rad * 60f * i;
+            float a2 = Mathf.Deg2Rad * 60f * ((i + 1) % 6);
+            float c1 = Mathf.Cos(a1), s1 = Mathf.Sin(a1);
+            float c2 = Mathf.Cos(a2), s2 = Mathf.Sin(a2);
 
-        outlineObject.SetActive(false);
+            Vector3 o1 = new Vector3(center.x + c1 * outerR, fogY, center.z + s1 * outerR);
+            Vector3 o2 = new Vector3(center.x + c2 * outerR, fogY, center.z + s2 * outerR);
+            Vector3 i1 = new Vector3(center.x + c1 * innerR, fogY, center.z + s1 * innerR);
+            Vector3 i2 = new Vector3(center.x + c2 * innerR, fogY, center.z + s2 * innerR);
+
+            var mesh = new Mesh { name = $"Edge{i}" };
+            mesh.SetVertices(new List<Vector3> { o1, i1, i2, o2 });
+            mesh.SetTriangles(new List<int> { 0, 1, 2, 0, 2, 3 }, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            var go = new GameObject($"Edge_{i}");
+            go.transform.SetParent(transform, false);
+            var mf = go.AddComponent<MeshFilter>();
+            var mr = go.AddComponent<MeshRenderer>();
+            mf.sharedMesh = mesh;
+            mr.sharedMaterial = matOutline;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            go.SetActive(false);
+
+            outlineEdges[i] = go;
+        }
     }
 
     // ── hex lid mesh ─────────────────────────
@@ -203,39 +275,6 @@ public class RoomTile : MonoBehaviour
         }
 
         var m = new Mesh { name = "FogHex" };
-        m.SetVertices(verts);
-        m.SetTriangles(tris, 0);
-        m.RecalculateNormals();
-        m.RecalculateBounds();
-        return m;
-    }
-
-    // ── hex ring (outline) ───────────────────
-
-    Mesh MakeHexRing(Vector3 center, float outerR, float innerR, float y)
-    {
-        var verts = new List<Vector3>();
-        var tris  = new List<int>();
-        int n = 6;
-
-        for (int i = 0; i < n; i++)
-        {
-            float a = Mathf.Deg2Rad * 60f * i;
-            float co = Mathf.Cos(a), si = Mathf.Sin(a);
-            verts.Add(new Vector3(center.x + co * outerR, y, center.z + si * outerR));
-            verts.Add(new Vector3(center.x + co * innerR, y, center.z + si * innerR));
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int next = (i + 1) % n;
-            int o = i * 2, inn = i * 2 + 1;
-            int no = next * 2, ni = next * 2 + 1;
-            tris.Add(o);   tris.Add(no);  tris.Add(inn);
-            tris.Add(inn); tris.Add(no);  tris.Add(ni);
-        }
-
-        var m = new Mesh { name = "OutlineHex" };
         m.SetVertices(verts);
         m.SetTriangles(tris, 0);
         m.RecalculateNormals();

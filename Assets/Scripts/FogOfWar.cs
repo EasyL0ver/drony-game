@@ -71,8 +71,11 @@ public class FogOfWar : MonoBehaviour
             var tileB = GetTile(b);
             if (tileA == null || tileB == null) continue;
 
-            tileA.AddConnection(new TileConnection { neighbor = tileB, passageType = type });
-            tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type });
+            int edgeAB = map.EdgeToward(a, b);
+            int edgeBA = (edgeAB + 3) % 6;
+
+            tileA.AddConnection(new TileConnection { neighbor = tileB, passageType = type, edgeIndex = edgeAB });
+            tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type, edgeIndex = edgeBA });
         }
     }
 

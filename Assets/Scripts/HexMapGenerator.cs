@@ -335,7 +335,7 @@ public class HexMapGenerator : MonoBehaviour
         return center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r;
     }
 
-    int EdgeToward(Vector2Int from, Vector2Int to)
+    public int EdgeToward(Vector2Int from, Vector2Int to)
     {
         Vector2Int d = to - from;
         for (int i = 0; i < 6; i++)
