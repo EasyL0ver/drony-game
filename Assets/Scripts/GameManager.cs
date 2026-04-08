@@ -42,7 +42,8 @@ public class GameManager : MonoBehaviour
         var mapGO = new GameObject("HexMap");
         mapGO.transform.SetParent(transform, false);
         hexMap = mapGO.AddComponent<HexMapGenerator>();
-        // Generate() fires automatically via OnEnable
+        if (hexMap.RoomList == null)
+            hexMap.Generate();
 
         // ── fog of war ──
         var fogGO = new GameObject("FogOfWar");
