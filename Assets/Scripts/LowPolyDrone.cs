@@ -22,6 +22,11 @@ public class LowPolyDrone : MonoBehaviour
     Material matHull, matArm, matGlow;
     float baseLocalY;
 
+    /// <summary>The shared glow material used by all emissive parts.</summary>
+    public Material GlowMaterial => matGlow;
+    public Color BaseGlowColor => glowColor;
+    public float BaseGlowIntensity => glowIntensity;
+
     // ── lifecycle ──────────────────────────
 
     void OnEnable()

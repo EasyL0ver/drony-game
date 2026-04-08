@@ -21,8 +21,10 @@ public class DroneController : MonoBehaviour
     float travelDuration;
     [SerializeField] float hoverY = 1f;
 
-    // Selection ring
+    // Selection visuals
     GameObject selectionRing;
+    Material ringMat;
+    LowPolyDrone droneModel;
 
     // ── public API ───────────────────────────
 
@@ -55,14 +57,51 @@ public class DroneController : MonoBehaviour
 
     // ── lifecycle ────────────────────────────
 
+    void Start()
+    {
+        // Find the LowPolyDrone model (child)
+        droneModel = GetComponentInChildren<LowPolyDrone>();
+    }
+
     void Update()
     {
         if (!Application.isPlaying || map == null) return;
 
         UpdateMovement();
+        UpdateSelectionVisuals();
+    }
 
+    void UpdateSelectionVisuals()
+    {
+        // Ring: show + pulse when selected
         if (selectionRing != null)
+        {
             selectionRing.SetActive(IsSelected);
+            if (IsSelected && ringMat != null)
+            {
+                float pulse = 0.6f + 0.4f * Mathf.Sin(Time.time * 4f);
+                Color col = new Color(0f, 0.85f, 1f, pulse);
+                ringMat.color = col;
+                ringMat.SetColor("_BaseColor", col);
+            }
+        }
+
+        // Drone glow: boost when selected
+        if (droneModel != null && droneModel.GlowMaterial != null)
+        {
+            Color baseCol = droneModel.BaseGlowColor;
+            float baseInt = droneModel.BaseGlowIntensity;
+
+            if (IsSelected)
+            {
+                float boost = 1.5f + 0.5f * Mathf.Sin(Time.time * 3f);
+                droneModel.GlowMaterial.SetColor("_EmissionColor", baseCol * baseInt * boost);
+            }
+            else
+            {
+                droneModel.GlowMaterial.SetColor("_EmissionColor", baseCol * baseInt);
+            }
+        }
     }
 
     void UpdateMovement()
@@ -132,18 +171,18 @@ public class DroneController : MonoBehaviour
 
         Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
         if (sh == null) sh = Shader.Find("Unlit/Color");
-        var mat = new Material(sh);
+        ringMat = new Material(sh);
         Color col = new Color(0f, 0.85f, 1f, 0.8f);
-        mat.color = col;
-        mat.SetColor("_BaseColor", col);
-        mat.SetFloat("_Surface", 1f);
-        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        mat.SetOverrideTag("RenderType", "Transparent");
-        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        mat.SetInt("_ZWrite", 0);
-        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-        mr.sharedMaterial = mat;
+        ringMat.color = col;
+        ringMat.SetColor("_BaseColor", col);
+        ringMat.SetFloat("_Surface", 1f);
+        ringMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        ringMat.SetOverrideTag("RenderType", "Transparent");
+        ringMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        ringMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        ringMat.SetInt("_ZWrite", 0);
+        ringMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        mr.sharedMaterial = ringMat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
         selectionRing.SetActive(false);
