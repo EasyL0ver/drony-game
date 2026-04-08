@@ -452,14 +452,12 @@ public class HexMapGenerator : MonoBehaviour
 
                 if (Vector3.Distance(c0, gapA) > 0.05f)
                 {
-                    // No cap at gap edge — corridor wall covers it
-                    EmitMiteredWall(wallMB, outerV[i], innerV[i], gapAo, gapAi, rWallH, false, false);
+                    EmitMiteredWall(wallMB, outerV[i], innerV[i], gapAo, gapAi, rWallH, false, true);
                     EmitMiteredTrim(glowMB, outerV[i], innerV[i], gapAo, gapAi, rWallH);
                 }
                 if (Vector3.Distance(gapB, c1) > 0.05f)
                 {
-                    // No cap at gap edge — corridor wall covers it
-                    EmitMiteredWall(wallMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH, false, false);
+                    EmitMiteredWall(wallMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH, true, false);
                     EmitMiteredTrim(glowMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH);
                 }
 
@@ -516,7 +514,8 @@ public class HexMapGenerator : MonoBehaviour
     // ═══════════════════════════════════════
 
     /// <summary>Wall panel from floor (y=0) to height h.</summary>
-    void EmitWallPanel(MB mb, Vector3 a, Vector3 b, float h)
+    void EmitWallPanel(MB mb, Vector3 a, Vector3 b, float h,
+                       bool capA = true, bool capB = true)
     {
         Vector3 dir = (b - a).normalized;
         Vector3 n   = Vector3.Cross(Vector3.up, dir).normalized;
@@ -529,8 +528,8 @@ public class HexMapGenerator : MonoBehaviour
         mb.Quad(ao, ao + up, bo + up, bo);           // outer
         mb.Quad(bi, bi + up, ai + up, ai);           // inner
         mb.Quad(ao + up, ai + up, bi + up, bo + up); // top
-        mb.Quad(ao, ai, ai + up, ao + up);           // cap a
-        mb.Quad(bi, bo, bo + up, bi + up);           // cap b
+        if (capA) mb.Quad(ao, ai, ai + up, ao + up); // cap a
+        if (capB) mb.Quad(bi, bo, bo + up, bi + up); // cap b
     }
 
     /// <summary>Wall panel from minH to maxH (for lintels above duct openings).</summary>
@@ -623,8 +622,8 @@ public class HexMapGenerator : MonoBehaviour
 
         // Side walls (outset so inner face = floor edge, extended to hide end caps)
         float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
-        EmitWallPanel(wallMB, wallA - wallOff, wallB - wallOff, sideH);
-        EmitWallPanel(wallMB, wallB + wallOff, wallA + wallOff, sideH);
+        EmitWallPanel(wallMB, wallA - wallOff, wallB - wallOff, sideH, false, false);
+        EmitWallPanel(wallMB, wallB + wallOff, wallA + wallOff, sideH, false, false);
 
         // Trim
         EmitWallTrim(glowMB, midA - wallOff, midB - wallOff, sideH);
