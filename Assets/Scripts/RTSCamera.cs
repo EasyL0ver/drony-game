@@ -15,7 +15,7 @@ public class RTSCamera : MonoBehaviour
     [SerializeField] bool enableEdgeScroll = true;
 
     [Header("Zoom")]
-    [SerializeField] float zoomSpeed = 12f;
+    [SerializeField] float zoomSpeed = 3f;
     [SerializeField] float minHeight = 5f;
     [SerializeField] float maxHeight = 80f;
     [SerializeField] float zoomSmoothing = 8f;
