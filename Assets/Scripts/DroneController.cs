@@ -1,0 +1,179 @@
+using UnityEngine;
+using System.Collections.Generic;
+
+/// <summary>
+/// Per-drone component: tracks current room, travel path, selection state.
+/// Movement is graph-based — drone hops room-to-room with visual lerp.
+/// </summary>
+public class DroneController : MonoBehaviour
+{
+    public Vector2Int CurrentRoom { get; private set; }
+    public bool IsSelected { get; set; }
+    public bool IsMoving => path.Count > 0 || travelProgress < 1f;
+
+    HexMapGenerator map;
+    Queue<Vector2Int> path = new Queue<Vector2Int>();
+
+    // Current hop
+    Vector2Int fromRoom;
+    Vector2Int toRoom;
+    float travelProgress = 1f;  // 1 = arrived
+    float travelDuration;
+    [SerializeField] float hoverY = 1f;
+
+    // Selection ring
+    GameObject selectionRing;
+
+    // ── public API ───────────────────────────
+
+    public void Init(HexMapGenerator mapGen, Vector2Int startRoom)
+    {
+        map = mapGen;
+        CurrentRoom = startRoom;
+        fromRoom = startRoom;
+        toRoom = startRoom;
+        travelProgress = 1f;
+        transform.position = RoomWorldPos(startRoom);
+        CreateSelectionRing();
+    }
+
+    public void SetPath(List<Vector2Int> newPath)
+    {
+        path.Clear();
+
+        // If mid-travel, snap to nearest room
+        if (travelProgress < 1f)
+        {
+            CurrentRoom = travelProgress < 0.5f ? fromRoom : toRoom;
+            travelProgress = 1f;
+            transform.position = RoomWorldPos(CurrentRoom);
+        }
+
+        foreach (var room in newPath)
+            path.Enqueue(room);
+    }
+
+    // ── lifecycle ────────────────────────────
+
+    void Update()
+    {
+        if (!Application.isPlaying || map == null) return;
+
+        UpdateMovement();
+
+        if (selectionRing != null)
+            selectionRing.SetActive(IsSelected);
+    }
+
+    void UpdateMovement()
+    {
+        if (travelProgress >= 1f)
+        {
+            CurrentRoom = toRoom;
+
+            if (path.Count > 0)
+            {
+                fromRoom = CurrentRoom;
+                toRoom = path.Dequeue();
+                travelDuration = GetTravelTime(fromRoom, toRoom);
+                travelProgress = 0f;
+            }
+        }
+        else
+        {
+            travelProgress += Time.deltaTime / travelDuration;
+            travelProgress = Mathf.Clamp01(travelProgress);
+
+            Vector3 a = RoomWorldPos(fromRoom);
+            Vector3 b = RoomWorldPos(toRoom);
+            transform.position = Vector3.Lerp(a, b, SmoothStep(travelProgress));
+        }
+    }
+
+    // ── helpers ──────────────────────────────
+
+    float GetTravelTime(Vector2Int a, Vector2Int b)
+    {
+        foreach (var (ca, cb, type) in map.ConnectionList)
+        {
+            if ((ca == a && cb == b) || (ca == b && cb == a))
+            {
+                switch (type)
+                {
+                    case HexMapGenerator.PassageType.Corridor: return 2f;
+                    case HexMapGenerator.PassageType.Duct:     return 4f;
+                    case HexMapGenerator.PassageType.Vent:     return 6f;
+                }
+            }
+        }
+        return 2f;
+    }
+
+    Vector3 RoomWorldPos(Vector2Int room)
+    {
+        Vector3 c = map.HexCenter(room);
+        return new Vector3(c.x, hoverY, c.z);
+    }
+
+    float SmoothStep(float t) => t * t * (3f - 2f * t);
+
+    // ── selection ring ───────────────────────
+
+    void CreateSelectionRing()
+    {
+        selectionRing = new GameObject("SelectionRing");
+        selectionRing.transform.SetParent(transform, false);
+        selectionRing.transform.localPosition = new Vector3(0f, -hoverY + 0.05f, 0f);
+
+        var mf = selectionRing.AddComponent<MeshFilter>();
+        var mr = selectionRing.AddComponent<MeshRenderer>();
+
+        mf.sharedMesh = MakeRingMesh(0.45f, 0.35f, 12);
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Unlit/Color");
+        var mat = new Material(sh);
+        Color col = new Color(0f, 0.85f, 1f, 0.8f);
+        mat.color = col;
+        mat.SetColor("_BaseColor", col);
+        mat.SetFloat("_Surface", 1f);
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.SetOverrideTag("RenderType", "Transparent");
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetInt("_ZWrite", 0);
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        selectionRing.SetActive(false);
+    }
+
+    Mesh MakeRingMesh(float outerR, float innerR, int segments)
+    {
+        var verts = new List<Vector3>();
+        var tris  = new List<int>();
+
+        for (int i = 0; i < segments; i++)
+        {
+            float a = i * Mathf.PI * 2f / segments;
+            verts.Add(new Vector3(Mathf.Cos(a) * outerR, 0f, Mathf.Sin(a) * outerR));
+            verts.Add(new Vector3(Mathf.Cos(a) * innerR, 0f, Mathf.Sin(a) * innerR));
+        }
+
+        for (int i = 0; i < segments; i++)
+        {
+            int next = (i + 1) % segments;
+            int o = i * 2, n = i * 2 + 1;
+            int no = next * 2, nn = next * 2 + 1;
+            tris.Add(o);  tris.Add(no); tris.Add(n);
+            tris.Add(n);  tris.Add(no); tris.Add(nn);
+        }
+
+        var m = new Mesh { name = "SelectionRing" };
+        m.SetVertices(verts);
+        m.SetTriangles(tris, 0);
+        m.RecalculateNormals();
+        return m;
+    }
+}

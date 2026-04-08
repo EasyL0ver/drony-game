@@ -20,6 +20,7 @@ public class LowPolyDrone : MonoBehaviour
 
     Transform[] rotors;
     Material matHull, matArm, matGlow;
+    float baseLocalY;
 
     // ── lifecycle ──────────────────────────
 
@@ -32,6 +33,7 @@ public class LowPolyDrone : MonoBehaviour
             InitMaterials();
             Build();
         }
+        baseLocalY = transform.localPosition.y;
     }
 
     /// <summary>Manual rebuild from editor (right-click → Rebuild Drone, or menu).</summary>
@@ -55,11 +57,11 @@ public class LowPolyDrone : MonoBehaviour
                 rotors[i].Rotate(Vector3.up, dirs[i] * rotorSpeed * dt, Space.Self);
         }
 
-        // gentle hover bob
+        // gentle hover bob (relative to parent)
         float bob = Mathf.Sin(Time.time * 2.5f) * 0.03f;
         transform.localPosition = new Vector3(
             transform.localPosition.x,
-            1.0f + bob,
+            baseLocalY + bob,
             transform.localPosition.z);
     }
 
