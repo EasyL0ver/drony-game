@@ -6,7 +6,6 @@ using System.Collections.Generic;
 /// Attach to an empty GameObject — the drone builds immediately in the editor
 /// and animates (rotor spin + hover) at runtime.
 /// </summary>
-[ExecuteAlways]
 public class ProceduralDrone : MonoBehaviour
 {
     [Header("Design")]
@@ -33,7 +32,7 @@ public class ProceduralDrone : MonoBehaviour
     {
         if (transform.childCount > 0)
             FindRotors();
-        else if (Application.isPlaying)
+        else
         {
             InitMaterials();
             Build();

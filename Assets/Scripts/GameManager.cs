@@ -5,7 +5,6 @@ using System.Collections.Generic;
 /// Top-level game object that spawns the hex map, drone, fog of war, and camera.
 /// Attach to an empty root GameObject or use the menu item.
 /// </summary>
-[ExecuteAlways]
 public class GameManager : MonoBehaviour
 {
     [Header("References (auto-created if empty)")]

@@ -5,7 +5,6 @@ using System.Collections.Generic;
 /// Low-poly procedural drone that matches the hex-map art style.
 /// Tiny geometric shapes — hex body, thin arms, flat 2-blade rotors.
 /// </summary>
-[ExecuteAlways]
 public class LowPolyDrone : MonoBehaviour
 {
     [Header("Scale")]
@@ -28,7 +27,7 @@ public class LowPolyDrone : MonoBehaviour
     {
         if (transform.childCount > 0)
             FindRotors();
-        else if (Application.isPlaying)
+        else
         {
             InitMaterials();
             Build();

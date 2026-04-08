@@ -6,7 +6,6 @@ using System.Collections.Generic;
 ///   Large (cyan) → Corridor/Duct/Vent, Medium (orange) → Duct/Vent, Small (green) → Vent only.
 /// All geometry is code-built meshes. No ceiling (RTS aerial view).
 /// </summary>
-[ExecuteAlways]
 public class HexMapGenerator : MonoBehaviour
 {
     public enum PassageType { Corridor, Duct, Vent }
@@ -62,8 +61,7 @@ public class HexMapGenerator : MonoBehaviour
 
     void OnEnable()
     {
-        // Only auto-generate at play-mode start if no children exist
-        if (Application.isPlaying && transform.childCount == 0)
+        if (transform.childCount == 0)
             Generate();
     }
 
