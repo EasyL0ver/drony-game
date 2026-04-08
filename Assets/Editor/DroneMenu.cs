@@ -42,7 +42,21 @@ public static class ProceduralMenu
         Debug.Log("RTS Camera ready — WASD pan, scroll zoom, MMB orbit, Q/E rotate");
     }
 
-    [MenuItem("GameObject/3D Object/Hex Map", false, 11)]
+    [MenuItem("GameObject/3D Object/Low-Poly Drone", false, 11)]
+    static void CreateLowPolyDrone()
+    {
+        GameObject go = new GameObject("LowPoly_Drone");
+        go.AddComponent<LowPolyDrone>();
+        go.transform.position = new Vector3(0, 1.0f, 0);
+
+        if (SceneView.lastActiveSceneView != null)
+            SceneView.lastActiveSceneView.FrameSelected();
+
+        Selection.activeGameObject = go;
+        Undo.RegisterCreatedObjectUndo(go, "Create Low-Poly Drone");
+    }
+
+    [MenuItem("GameObject/3D Object/Hex Map", false, 12)]
     static void CreateHexMap()
     {
         GameObject go = new GameObject("HexMap");
