@@ -34,7 +34,7 @@ public class RoomTile : MonoBehaviour
     MeshRenderer fogRenderer;
     GameObject[] outlineEdges = new GameObject[6]; // one quad per hex edge
     bool outlineShown;
-    Material matUnknown, matDiscovered, matOutline;
+    Material matUnknown, matDiscovered, matOutline, matOutlineHover;
 
     // Interaction
     GameObject hoverHighlight;
@@ -45,6 +45,7 @@ public class RoomTile : MonoBehaviour
     bool isHovered;
     float flashTimer;
     const float flashDuration = 0.5f;
+    float fogMeshY;
 
     // Config (set once by builder)
     float fogElevation;
@@ -63,6 +64,14 @@ public class RoomTile : MonoBehaviour
         matUnknown = unknown;
         matDiscovered = discovered;
         matOutline = outline;
+
+        // Bright version of outline for hover
+        matOutlineHover = new Material(outline);
+        Color hc = outline.color;
+        hc = Color.Lerp(hc, Color.white, 0.35f);
+        hc.a = Mathf.Min(1f, outline.color.a * 2.2f);
+        matOutlineHover.color = hc;
+        matOutlineHover.SetColor("_BaseColor", hc);
 
         BuildFogMesh(map);
         BuildOutlineMesh(map);
@@ -197,7 +206,27 @@ public class RoomTile : MonoBehaviour
     {
         isHovered = hovered;
         if (hoverHighlight != null)
+        {
             hoverHighlight.SetActive(hovered);
+            if (hovered)
+            {
+                // Above fog when fog visible, at floor level when revealed
+                float yOff = (fogRenderer != null && fogRenderer.enabled)
+                    ? fogMeshY : 0f;
+                hoverHighlight.transform.localPosition = new Vector3(0f, yOff, 0f);
+            }
+        }
+
+        // Brighten outline edges on hover
+        if (outlineShown)
+        {
+            Material mat = hovered ? matOutlineHover : matOutline;
+            for (int i = 0; i < 6; i++)
+            {
+                if (outlineEdges[i] != null)
+                    outlineEdges[i].GetComponent<MeshRenderer>().sharedMaterial = mat;
+            }
+        }
     }
 
     public void FlashMoveTarget()
@@ -234,7 +263,7 @@ public class RoomTile : MonoBehaviour
 
     void BuildFogMesh(HexMapGenerator map)
     {
-        float fogY = map.WallHeight + fogElevation;
+        fogMeshY = map.WallHeight + fogElevation;
         Vector3 center = map.HexCenter(Coord);
 
         var go = new GameObject("Fog");
@@ -242,7 +271,7 @@ public class RoomTile : MonoBehaviour
         var mf = go.AddComponent<MeshFilter>();
         fogRenderer = go.AddComponent<MeshRenderer>();
         var col = go.AddComponent<MeshCollider>();
-        mf.sharedMesh = MakeHexLid(center, outlineRadius, fogY);
+        mf.sharedMesh = MakeHexLid(center, outlineRadius, fogMeshY);
         col.sharedMesh = mf.sharedMesh;
         fogRenderer.sharedMaterial = matUnknown;
         fogRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
