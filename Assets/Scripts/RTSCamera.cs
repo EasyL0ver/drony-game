@@ -43,6 +43,7 @@ public class RTSCamera : MonoBehaviour
     float   targetPitch;
     Vector3 currentVelocity;
     bool    initialized;
+    float   initCooldown;   // ignore input briefly after Init
 
     // Input devices
     Keyboard kb;
@@ -58,7 +59,9 @@ public class RTSCamera : MonoBehaviour
         targetPitch = Mathf.Clamp(pitch, minPitch, maxPitch);
         targetYaw   = 0f;
         currentVelocity = Vector3.zero;
+        initCooldown = 0.5f; // ignore input for half a second to prevent edge-scroll drift
 
+        // Position camera directly above lookAt, offset back by pitch
         float zOff = -zoom / Mathf.Tan(targetPitch * Mathf.Deg2Rad);
         targetPosition = new Vector3(lookAt.x, zoom, lookAt.z + zOff);
 
@@ -85,6 +88,13 @@ public class RTSCamera : MonoBehaviour
         kb    = Keyboard.current;
         mouse = Mouse.current;
         if (kb == null || mouse == null) return;
+
+        // Skip input briefly after Init to prevent edge-scroll drift
+        if (initCooldown > 0f)
+        {
+            initCooldown -= Time.unscaledDeltaTime;
+            return;
+        }
 
         HandlePan();
         HandleZoom();
