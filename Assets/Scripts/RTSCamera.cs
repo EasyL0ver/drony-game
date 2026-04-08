@@ -190,12 +190,16 @@ public class RTSCamera : MonoBehaviour
     {
         float dt = Time.unscaledDeltaTime;
 
-        // Smooth position
+        // Smooth XZ position (SmoothDamp for pan momentum)
         Vector3 pos = transform.position;
-        float smoothedY = Mathf.Lerp(pos.y, targetZoom, dt * zoomSmoothing);
-        Vector3 goal = new Vector3(targetPosition.x, smoothedY, targetPosition.z);
-        transform.position = Vector3.SmoothDamp(pos, goal, ref currentVelocity,
+        Vector3 goalXZ = new Vector3(targetPosition.x, pos.y, targetPosition.z);
+        Vector3 smoothedXZ = Vector3.SmoothDamp(pos, goalXZ, ref currentVelocity,
             1f / moveDamping, Mathf.Infinity, dt);
+
+        // Smooth Y zoom (Lerp only — no momentum buildup)
+        float smoothedY = Mathf.Lerp(pos.y, targetZoom, dt * zoomSmoothing);
+
+        transform.position = new Vector3(smoothedXZ.x, smoothedY, smoothedXZ.z);
 
         // Smooth rotation
         float yaw   = Mathf.LerpAngle(transform.eulerAngles.y, targetYaw,   dt * moveDamping);
