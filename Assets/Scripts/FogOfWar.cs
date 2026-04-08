@@ -129,18 +129,17 @@ public class FogOfWar : MonoBehaviour
         {
             var (midA, midB) = map.PassageEndpoints(a, b);
             Vector3 midpoint = (midA + midB) * 0.5f;
-            float baseW = map.PassageWidth(type);
-            float padding = baseW * 0.15f; // proportional padding
-            float w = baseW + padding;
+            float w = map.PassageWidth(type) + 0.30f;
+            float passFogY = map.PassageTopY(type) + fogElevation;
 
             // half A (room A side)
             var goA = SpawnFog($"FogPass_{a.x}_{a.y}_{b.x}_{b.y}",
-                               MakeRectLid(midA, midpoint, w, fogY), matUnknown);
+                               MakeRectLid(midA, midpoint, w, passFogY), matUnknown);
             passFog[(a, b)] = goA.GetComponent<MeshRenderer>();
 
             // half B (room B side)
             var goB = SpawnFog($"FogPass_{b.x}_{b.y}_{a.x}_{a.y}",
-                               MakeRectLid(midpoint, midB, w, fogY), matUnknown);
+                               MakeRectLid(midpoint, midB, w, passFogY), matUnknown);
             passFog[(b, a)] = goB.GetComponent<MeshRenderer>();
         }
     }

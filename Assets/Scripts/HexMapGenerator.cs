@@ -195,6 +195,12 @@ public class HexMapGenerator : MonoBehaviour
         }
     }
 
+    /// <summary>Returns the top Y of a passage type (for fog overlay positioning).</summary>
+    public float PassageTopY(PassageType t)
+    {
+        return PassageWallHeight(t);
+    }
+
     struct PassageInfo
     {
         public float width;
