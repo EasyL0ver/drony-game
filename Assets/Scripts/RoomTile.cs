@@ -29,6 +29,9 @@ public class RoomTile : MonoBehaviour
 
     public List<TileConnection> Connections { get; private set; } = new List<TileConnection>();
 
+    // Drone tracking
+    int droneCount;
+
     // Visuals
     MeshRenderer fogRenderer;
     GameObject outlineObject;
@@ -70,6 +73,7 @@ public class RoomTile : MonoBehaviour
     /// </summary>
     public void OnDroneEnter()
     {
+        droneCount++;
         SetState(FogState.Visible);
 
         foreach (var conn in Connections)
@@ -80,12 +84,13 @@ public class RoomTile : MonoBehaviour
     }
 
     /// <summary>
-    /// Call when the last drone leaves this room.
-    /// Demotes to Discovered.
+    /// Call when a drone leaves this room.
+    /// Only demotes to Discovered when the last drone leaves.
     /// </summary>
     public void OnDroneExit()
     {
-        if (State == FogState.Visible)
+        droneCount = Mathf.Max(0, droneCount - 1);
+        if (droneCount == 0 && State == FogState.Visible)
             SetState(FogState.Discovered);
     }
 
