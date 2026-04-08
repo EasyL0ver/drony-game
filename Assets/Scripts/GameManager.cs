@@ -74,5 +74,9 @@ public class GameManager : MonoBehaviour
 
         cam.transform.position = new Vector3(0f, 35f, -20f);
         cam.transform.rotation = Quaternion.Euler(55f, 0f, 0f);
+
+        // Match background to fog so unknown rooms are truly invisible
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = new Color(0.01f, 0.01f, 0.02f, 1f);
     }
 }
