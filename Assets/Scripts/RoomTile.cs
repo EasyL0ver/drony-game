@@ -12,9 +12,6 @@ public class TileConnection
 {
     public RoomTile neighbor;
     public HexMapGenerator.PassageType passageType;
-
-    // Fog mesh covering this tile's half of the passage
-    public MeshRenderer fogRenderer;
 }
 
 /// <summary>
@@ -100,10 +97,6 @@ public class RoomTile : MonoBehaviour
     {
         State = newState;
         ApplyVisuals();
-
-        // Update this tile's passage fog halves
-        foreach (var conn in Connections)
-            SetPassageFog(conn);
     }
 
     void ApplyVisuals()
@@ -129,26 +122,6 @@ public class RoomTile : MonoBehaviour
         }
     }
 
-    void SetPassageFog(TileConnection conn)
-    {
-        if (conn.fogRenderer == null) return;
-
-        switch (State)
-        {
-            case FogState.Unknown:
-                conn.fogRenderer.enabled = true;
-                conn.fogRenderer.sharedMaterial = matUnknown;
-                break;
-            case FogState.Discovered:
-                conn.fogRenderer.enabled = true;
-                conn.fogRenderer.sharedMaterial = matDiscovered;
-                break;
-            case FogState.Visible:
-                conn.fogRenderer.enabled = false;
-                break;
-        }
-    }
-
     public void ShowOutline(bool show)
     {
         if (outlineObject != null)
@@ -160,14 +133,13 @@ public class RoomTile : MonoBehaviour
     void BuildFogMesh(HexMapGenerator map)
     {
         float fogY = map.WallHeight + fogElevation;
-        float r = map.RoomRadius(Size) + 0.20f;
         Vector3 center = map.HexCenter(Coord);
 
         var go = new GameObject("Fog");
         go.transform.SetParent(transform, false);
         var mf = go.AddComponent<MeshFilter>();
         fogRenderer = go.AddComponent<MeshRenderer>();
-        mf.sharedMesh = MakeHexLid(center, r, fogY);
+        mf.sharedMesh = MakeHexLid(center, outlineRadius, fogY);
         fogRenderer.sharedMaterial = matUnknown;
         fogRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         fogRenderer.receiveShadows = false;
@@ -192,24 +164,7 @@ public class RoomTile : MonoBehaviour
         outlineObject.SetActive(false);
     }
 
-    /// <summary>
-    /// Creates a passage fog half-piece. Called by the builder for each connection.
-    /// Returns the MeshRenderer to store on TileConnection.
-    /// </summary>
-    public MeshRenderer BuildPassageFog(Vector3 from, Vector3 to, float width, float y)
-    {
-        var go = new GameObject($"PassFog_{Coord.x}_{Coord.y}");
-        go.transform.SetParent(transform, false);
-        var mf = go.AddComponent<MeshFilter>();
-        var mr = go.AddComponent<MeshRenderer>();
-        mf.sharedMesh = MakeRectLid(from, to, width, y);
-        mr.sharedMaterial = matUnknown;
-        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        mr.receiveShadows = false;
-        return mr;
-    }
-
-    // ── hex lid mesh (same as old FogOfWar) ──
+    // ── hex lid mesh ─────────────────────────
 
     Mesh MakeHexLid(Vector3 center, float r, float y)
     {
@@ -288,46 +243,4 @@ public class RoomTile : MonoBehaviour
         return m;
     }
 
-    // ── rect lid (passage fog) ───────────────
-
-    Mesh MakeRectLid(Vector3 from, Vector3 to, float width, float y)
-    {
-        Vector3 dir  = (to - from); dir.y = 0; dir = dir.normalized;
-        Vector3 perp = Vector3.Cross(Vector3.up, dir).normalized;
-        float hw = width * 0.5f;
-
-        Vector3 a = new Vector3(from.x, y, from.z);
-        Vector3 b = new Vector3(to.x,   y, to.z);
-
-        Vector3 v0 = a + perp * hw;
-        Vector3 v1 = a - perp * hw;
-        Vector3 v2 = b - perp * hw;
-        Vector3 v3 = b + perp * hw;
-
-        var verts = new List<Vector3> { v0, v1, v2, v3 };
-        var tris  = new List<int> { 0, 1, 2, 0, 2, 3 };
-
-        float floorY = -0.05f;
-        AddSkirtEdge(verts, tris, v0, v3, floorY);
-        AddSkirtEdge(verts, tris, v2, v1, floorY);
-        AddSkirtEdge(verts, tris, v1, v0, floorY);
-        AddSkirtEdge(verts, tris, v3, v2, floorY);
-
-        var m = new Mesh { name = "FogRect" };
-        m.SetVertices(verts);
-        m.SetTriangles(tris, 0);
-        m.RecalculateNormals();
-        m.RecalculateBounds();
-        return m;
-    }
-
-    void AddSkirtEdge(List<Vector3> verts, List<int> tris, Vector3 topA, Vector3 topB, float floorY)
-    {
-        int v = verts.Count;
-        Vector3 botA = new Vector3(topA.x, floorY, topA.z);
-        Vector3 botB = new Vector3(topB.x, floorY, topB.z);
-        verts.Add(topA); verts.Add(botA); verts.Add(botB); verts.Add(topB);
-        tris.Add(v); tris.Add(v + 1); tris.Add(v + 2);
-        tris.Add(v); tris.Add(v + 2); tris.Add(v + 3);
-    }
 }

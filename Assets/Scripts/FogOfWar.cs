@@ -71,20 +71,8 @@ public class FogOfWar : MonoBehaviour
             var tileB = GetTile(b);
             if (tileA == null || tileB == null) continue;
 
-            // Passage fog geometry
-            var (midA, midB) = map.PassageEndpoints(a, b);
-            Vector3 midpoint = (midA + midB) * 0.5f;
-            float w = map.PassageWidth(type) + 0.30f;
-            float passFogY = type == HexMapGenerator.PassageType.Vent
-                ? map.VentTopY(a, b) + fogElevation
-                : map.PassageTopY(type) + fogElevation;
-
-            // Each tile gets its half of the passage fog
-            var fogA = tileA.BuildPassageFog(midA, midpoint, w, passFogY);
-            var fogB = tileB.BuildPassageFog(midpoint, midB, w, passFogY);
-
-            tileA.AddConnection(new TileConnection { neighbor = tileB, passageType = type, fogRenderer = fogA });
-            tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type, fogRenderer = fogB });
+            tileA.AddConnection(new TileConnection { neighbor = tileB, passageType = type });
+            tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type });
         }
     }
 
