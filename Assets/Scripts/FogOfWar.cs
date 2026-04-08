@@ -26,10 +26,8 @@ public class FogOfWar : MonoBehaviour
     {
         map = mapGen;
 
-        // Tile outline = large room radius + half the corridor gap
-        float largeR = map.RoomRadius(HexMapGenerator.RoomSize.Large);
-        float halfGap = (map.HexRadiusValue * map.GridScaleValue - largeR) * 0.5f;
-        outlineRadius = largeR + halfGap;
+        // Outline radius = grid spacing so outlines tessellate as a uniform hex grid
+        outlineRadius = map.HexRadiusValue * map.GridScaleValue;
 
         CreateMaterials();
         BuildTiles();
