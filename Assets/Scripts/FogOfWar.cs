@@ -129,7 +129,9 @@ public class FogOfWar : MonoBehaviour
         {
             var (midA, midB) = map.PassageEndpoints(a, b);
             Vector3 midpoint = (midA + midB) * 0.5f;
-            float w = map.PassageWidth(type) + 0.30f;
+            float baseW = map.PassageWidth(type);
+            float padding = baseW * 0.15f; // proportional padding
+            float w = baseW + padding;
 
             // half A (room A side)
             var goA = SpawnFog($"FogPass_{a.x}_{a.y}_{b.x}_{b.y}",
