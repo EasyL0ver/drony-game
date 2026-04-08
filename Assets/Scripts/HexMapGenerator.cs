@@ -35,6 +35,7 @@ public class HexMapGenerator : MonoBehaviour
     public List<(Vector2Int a, Vector2Int b, PassageType type)> ConnectionList { get; private set; }
     public float WallHeight => wallHeight;
     public float HexRadiusValue => hexRadius;
+    public float GridScaleValue => gridScale;
 
     [Header("Colors")]
     [SerializeField] Color floorColor      = new Color(0.05f, 0.05f, 0.07f);

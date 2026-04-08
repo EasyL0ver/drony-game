@@ -12,10 +12,10 @@ public class FogOfWar : MonoBehaviour
     [SerializeField] Color unknownColor   = new Color(0.01f, 0.01f, 0.02f, 1.0f);
     [SerializeField] Color discoveredColor = new Color(0.02f, 0.02f, 0.04f, 0.50f);
     [SerializeField] Color outlineColor   = new Color(0f, 0.85f, 1f, 0.35f);
-    [SerializeField] float outlineRadius  = 2.0f;
 
     HexMapGenerator map;
     Material matUnknown, matDiscovered, matOutline;
+    float outlineRadius;
 
     public Dictionary<Vector2Int, RoomTile> Tiles { get; private set; }
         = new Dictionary<Vector2Int, RoomTile>();
@@ -25,6 +25,12 @@ public class FogOfWar : MonoBehaviour
     public void Init(HexMapGenerator mapGen)
     {
         map = mapGen;
+
+        // Tile outline = large room radius + half the corridor gap
+        float largeR = map.RoomRadius(HexMapGenerator.RoomSize.Large);
+        float halfGap = (map.HexRadiusValue * map.GridScaleValue - largeR) * 0.5f;
+        outlineRadius = largeR + halfGap;
+
         CreateMaterials();
         BuildTiles();
         WireConnections();
