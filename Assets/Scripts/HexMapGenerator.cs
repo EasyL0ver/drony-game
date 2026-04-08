@@ -94,9 +94,7 @@ public class HexMapGenerator : MonoBehaviour
         {
             if (type == PassageType.Vent) continue;
             int ea = EdgeToward(a, b);
-            // Gap = passage width + wallThickness so corridor outer walls
-            // align flush with room wall outer faces
-            float gapW = PassageWidth(type) + wallThickness;
+            float gapW = PassageWidth(type);
             openEdges[a][ea]           = new PassageInfo { width = gapW, type = type };
             openEdges[b][(ea + 3) % 6] = new PassageInfo { width = gapW, type = type };
         }
@@ -607,39 +605,40 @@ public class HexMapGenerator : MonoBehaviour
         float   hw       = width * 0.5f;
         Vector3 off      = corrPerp * hw;
 
-        // Corridor wall centerline outset so outer face aligns with room wall
-        Vector3 wallOff  = corrPerp * (hw + wallThickness * 0.5f);
+        // Wall centerline inset so outer face aligns with floor edge / gap edge.
+        // EmitWallPanel adds wallThickness/2 outward from centerline.
+        Vector3 wallOff = corrPerp * (hw - wallThickness * 0.5f);
 
-        // Extend walls into room walls so end caps are hidden
+        // Extend walls into room walls so end caps are buried
         Vector3 wallA = midA - corrDir * wallThickness;
         Vector3 wallB = midB + corrDir * wallThickness;
 
-        // Floor
-        floorMB.Quad(midA + wallOff, midA - wallOff, midB - wallOff, midB + wallOff);
+        // Floor (full passage width)
+        floorMB.Quad(midA + off, midA - off, midB - off, midB + off);
         Vector3 dn = Vector3.down * floorThickness;
-        floorMB.Quad(midA + wallOff, midB + wallOff, midB + wallOff + dn, midA + wallOff + dn);
-        floorMB.Quad(midB - wallOff, midA - wallOff, midA - wallOff + dn, midB - wallOff + dn);
+        floorMB.Quad(midA + off, midB + off, midB + off + dn, midA + off + dn);
+        floorMB.Quad(midB - off, midA - off, midA - off + dn, midB - off + dn);
 
-        // Side walls — widened + lengthened to bury end caps in room walls
+        // Side walls (inset + extended)
         float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
         EmitWallPanel(wallMB, wallA - wallOff, wallB - wallOff, sideH);
         EmitWallPanel(wallMB, wallB + wallOff, wallA + wallOff, sideH);
 
-        // Trim on passage side walls (original endpoints, not extended)
+        // Trim
         EmitWallTrim(glowMB, midA - wallOff, midB - wallOff, sideH);
         EmitWallTrim(glowMB, midB + wallOff, midA + wallOff, sideH);
 
-        // Floor glow edge strips
+        // Floor glow edge strips (at floor edge)
         float sw = 0.05f;
         Vector3 up = Vector3.up * 0.005f;
-        glowMB.Quad(midA + wallOff + up,
-                    midA + wallOff - corrPerp * sw + up,
-                    midB + wallOff - corrPerp * sw + up,
-                    midB + wallOff + up);
-        glowMB.Quad(midA - wallOff + corrPerp * sw + up,
-                    midA - wallOff + up,
-                    midB - wallOff + up,
-                    midB - wallOff + corrPerp * sw + up);
+        glowMB.Quad(midA + off + up,
+                    midA + off - corrPerp * sw + up,
+                    midB + off - corrPerp * sw + up,
+                    midB + off + up);
+        glowMB.Quad(midA - off + corrPerp * sw + up,
+                    midA - off + up,
+                    midB - off + up,
+                    midB - off + corrPerp * sw + up);
 
         // Ceiling slab for enclosed passages (duct + vent)
         if (type != PassageType.Corridor)
@@ -647,10 +646,10 @@ public class HexMapGenerator : MonoBehaviour
             Vector3 ceilY = Vector3.up * wHeight;
             float ceilT = wallThickness * 0.5f;
             Vector3 cUp = Vector3.up * ceilT;
-            floorMB.Quad(midA - wallOff + ceilY + cUp, midA + wallOff + ceilY + cUp,
-                         midB + wallOff + ceilY + cUp, midB - wallOff + ceilY + cUp);
-            floorMB.Quad(midA + wallOff + ceilY, midA - wallOff + ceilY,
-                         midB - wallOff + ceilY, midB + wallOff + ceilY);
+            floorMB.Quad(midA - off + ceilY + cUp, midA + off + ceilY + cUp,
+                         midB + off + ceilY + cUp, midB - off + ceilY + cUp);
+            floorMB.Quad(midA + off + ceilY, midA - off + ceilY,
+                         midB - off + ceilY, midB + off + ceilY);
         }
     }
 
