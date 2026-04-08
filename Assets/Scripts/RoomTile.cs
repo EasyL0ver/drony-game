@@ -240,8 +240,7 @@ public class RoomTile : MonoBehaviour
     {
         if (isHovered && matHover != null)
         {
-            float pulse = 0.06f + 0.04f * Mathf.Sin(Time.time * 5f);
-            Color c = new Color(0f, 0.85f, 1f, pulse);
+            Color c = new Color(1f, 1f, 1f, 0.18f);
             matHover.color = c;
             matHover.SetColor("_BaseColor", c);
         }
@@ -250,7 +249,7 @@ public class RoomTile : MonoBehaviour
         {
             flashTimer -= Time.deltaTime;
             float t = Mathf.Clamp01(flashTimer / flashDuration);
-            Color c = new Color(0f, 0.85f, 1f, t * 0.3f);
+            Color c = new Color(1f, 1f, 1f, t * 0.3f);
             matFlash.color = c;
             matFlash.SetColor("_BaseColor", c);
 
@@ -376,7 +375,7 @@ public class RoomTile : MonoBehaviour
         var mf1 = hoverHighlight.AddComponent<MeshFilter>();
         hoverRenderer = hoverHighlight.AddComponent<MeshRenderer>();
         mf1.sharedMesh = hex;
-        matHover = MakeInteractionMat(new Color(0f, 0.85f, 1f, 0.08f));
+        matHover = MakeInteractionMat(new Color(1f, 1f, 1f, 0.18f));
         hoverRenderer.sharedMaterial = matHover;
         hoverRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         hoverRenderer.receiveShadows = false;
@@ -388,7 +387,7 @@ public class RoomTile : MonoBehaviour
         var mf2 = moveFlash.AddComponent<MeshFilter>();
         flashRenderer = moveFlash.AddComponent<MeshRenderer>();
         mf2.sharedMesh = hex;
-        matFlash = MakeInteractionMat(new Color(0f, 0.85f, 1f, 0.3f));
+        matFlash = MakeInteractionMat(new Color(1f, 1f, 1f, 0.3f));
         flashRenderer.sharedMaterial = matFlash;
         flashRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         flashRenderer.receiveShadows = false;
