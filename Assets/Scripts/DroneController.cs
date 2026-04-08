@@ -20,6 +20,7 @@ public class DroneController : MonoBehaviour
     Vector2Int toRoom;
     float travelProgress = 1f;  // 1 = arrived
     float travelDuration;
+    Vector3 travelStart, travelEnd;
     [SerializeField] float hoverY = 1f;
 
     // Selection visuals
@@ -34,6 +35,10 @@ public class DroneController : MonoBehaviour
     float wanderWait;
     bool hasWanderTarget;
 
+    // Swarm
+    Vector3 swarmOffset;   // per-drone random position offset
+    float speedJitter;     // per-drone speed multiplier
+
     // ── public API ───────────────────────────
 
     public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom)
@@ -44,9 +49,16 @@ public class DroneController : MonoBehaviour
         fromRoom = startRoom;
         toRoom = startRoom;
         travelProgress = 1f;
-        transform.position = RoomWorldPos(startRoom);
         CreateSelectionRing();
         idlePhase = Random.Range(0f, Mathf.PI * 2f);
+
+        // Swarm: each drone gets a unique offset + speed
+        float sAngle = Random.Range(0f, Mathf.PI * 2f);
+        float sDist  = Random.Range(0.1f, 0.35f);
+        swarmOffset = new Vector3(Mathf.Cos(sAngle) * sDist, 0f, Mathf.Sin(sAngle) * sDist);
+        speedJitter = Random.Range(0.8f, 1.2f);
+
+        transform.position = RoomWorldPos(startRoom) + swarmOffset;
 
         // Notify start tile
         var tile = fog.GetTile(startRoom);
@@ -58,12 +70,12 @@ public class DroneController : MonoBehaviour
     {
         path.Clear();
 
-        // If mid-travel, snap to nearest room
+        // If mid-travel, resolve which room we're in logically
         if (travelProgress < 1f)
         {
             CurrentRoom = travelProgress < 0.5f ? fromRoom : toRoom;
             travelProgress = 1f;
-            transform.position = RoomWorldPos(CurrentRoom);
+            // Don't snap position — travel will lerp from current pos
         }
 
         foreach (var room in newPath)
@@ -139,8 +151,12 @@ public class DroneController : MonoBehaviour
             {
                 fromRoom = CurrentRoom;
                 toRoom = path.Dequeue();
-                travelDuration = GetTravelTime(fromRoom, toRoom);
+                travelDuration = GetTravelTime(fromRoom, toRoom) * speedJitter;
                 travelProgress = 0f;
+
+                // Start from wherever the drone currently is
+                travelStart = transform.position;
+                travelEnd = RoomWorldPos(toRoom) + swarmOffset;
 
                 // Reveal destination the moment the drone enters the corridor
                 var destTile = fog?.GetTile(toRoom);
@@ -153,9 +169,7 @@ public class DroneController : MonoBehaviour
             travelProgress += Time.deltaTime / travelDuration;
             travelProgress = Mathf.Clamp01(travelProgress);
 
-            Vector3 a = RoomWorldPos(fromRoom);
-            Vector3 b = RoomWorldPos(toRoom);
-            transform.position = Vector3.Lerp(a, b, SmoothStep(travelProgress));
+            transform.position = Vector3.Lerp(travelStart, travelEnd, SmoothStep(travelProgress));
         }
     }
 
