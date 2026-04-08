@@ -19,8 +19,9 @@ public class GameManager : MonoBehaviour
 
     void OnEnable()
     {
-        if (transform.childCount == 0)
-            Setup();
+        // Always rebuild — fog dictionaries aren't serialized and get lost
+        // on play-mode entry, domain reload, etc.
+        Setup();
     }
 
     void Update()
@@ -28,7 +29,6 @@ public class GameManager : MonoBehaviour
         if (!Application.isPlaying) return;
         if (fog == null || hexMap == null) return;
 
-        // Update fog visibility each frame based on drone position
         fog.UpdateVisibility(new List<Vector2Int> { droneRoom });
     }
 

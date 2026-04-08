@@ -11,7 +11,7 @@ public enum FogState { Unknown, Discovered, Visible }
 public class FogOfWar : MonoBehaviour
 {
     [Header("Appearance")]
-    [SerializeField] float fogElevation   = 0.15f;
+    [SerializeField] float fogElevation   = 0.25f;
     [SerializeField] Color unknownColor   = new Color(0.01f, 0.01f, 0.02f, 1.0f);
     [SerializeField] Color discoveredColor = new Color(0.02f, 0.02f, 0.04f, 0.50f);
 
@@ -117,7 +117,7 @@ public class FogOfWar : MonoBehaviour
         {
             states[room] = FogState.Unknown;
 
-            float r = map.RoomRadius(map.RoomSizeMap[room]) * 1.08f;
+            float r = map.RoomRadius(map.RoomSizeMap[room]) * 1.15f;
             Vector3 c = map.HexCenter(room);
 
             var go = SpawnFog($"FogRoom_{room.x}_{room.y}",
