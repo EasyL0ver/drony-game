@@ -30,6 +30,13 @@ public class HexMapGenerator : MonoBehaviour
     [SerializeField] float ductWidth = 1.2f;
     [SerializeField] float ventPipeRadius = 0.22f;
 
+    // Public layout data — populated after Generate()
+    public List<Vector2Int> RoomList { get; private set; }
+    public Dictionary<Vector2Int, RoomSize> RoomSizeMap { get; private set; }
+    public List<(Vector2Int a, Vector2Int b, PassageType type)> ConnectionList { get; private set; }
+    public float WallHeight => wallHeight;
+    public float HexRadiusValue => hexRadius;
+
     [Header("Colors")]
     [SerializeField] Color floorColor      = new Color(0.05f, 0.05f, 0.07f);
     [SerializeField] Color wallColor       = new Color(0.10f, 0.10f, 0.14f);
@@ -72,6 +79,11 @@ public class HexMapGenerator : MonoBehaviour
         Dictionary<Vector2Int, RoomSize> roomSizes;
         List<(Vector2Int a, Vector2Int b, PassageType type)> connections;
         BuildLayout(rng, out rooms, out roomSizes, out connections);
+
+        // Store for external systems (fog of war, pathfinding, etc.)
+        RoomList = new List<Vector2Int>(rooms);
+        RoomSizeMap = roomSizes;
+        ConnectionList = connections;
 
         // --- 2. Open edges per room ---
         var openEdges = new Dictionary<Vector2Int, Dictionary<int, PassageInfo>>();
@@ -140,7 +152,7 @@ public class HexMapGenerator : MonoBehaviour
         SpawnChild("Glow_Vent",    ventGlowMB.ToMesh("VentGlow"), matVentGlow);
     }
 
-    float RoomRadius(RoomSize s)
+    public float RoomRadius(RoomSize s)
     {
         switch (s)
         {
@@ -151,7 +163,7 @@ public class HexMapGenerator : MonoBehaviour
         }
     }
 
-    float RoomWallHeight(RoomSize s)
+    public float RoomWallHeight(RoomSize s)
     {
         switch (s)
         {
@@ -162,7 +174,7 @@ public class HexMapGenerator : MonoBehaviour
         }
     }
 
-    float PassageWidth(PassageType t)
+    public float PassageWidth(PassageType t)
     {
         switch (t)
         {
@@ -290,7 +302,7 @@ public class HexMapGenerator : MonoBehaviour
     //  HEX MATH
     // ═══════════════════════════════════════
 
-    Vector3 HexCenter(Vector2Int h)
+    public Vector3 HexCenter(Vector2Int h)
     {
         float s = hexRadius * gridScale;
         float x = s * 1.5f * h.x;
@@ -303,7 +315,7 @@ public class HexMapGenerator : MonoBehaviour
         return Corner(center, i, hexRadius);
     }
 
-    Vector3 Corner(Vector3 center, int i, float r)
+    public Vector3 Corner(Vector3 center, int i, float r)
     {
         float a = Mathf.Deg2Rad * 60f * i;
         return center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r;
@@ -315,6 +327,20 @@ public class HexMapGenerator : MonoBehaviour
         for (int i = 0; i < 6; i++)
             if (HexDirs[i].x == d.x && HexDirs[i].y == d.y) return i;
         return 0;
+    }
+
+    /// <summary>Returns world-space wall-exit midpoints for a passage between two rooms.</summary>
+    public (Vector3 midA, Vector3 midB) PassageEndpoints(Vector2Int roomA, Vector2Int roomB)
+    {
+        int eA = EdgeToward(roomA, roomB);
+        int eB = (eA + 3) % 6;
+        Vector3 cA = HexCenter(roomA);
+        Vector3 cB = HexCenter(roomB);
+        float rA = RoomRadius(RoomSizeMap[roomA]);
+        float rB = RoomRadius(RoomSizeMap[roomB]);
+        Vector3 midA = (Corner(cA, eA, rA) + Corner(cA, (eA + 1) % 6, rA)) * 0.5f;
+        Vector3 midB = (Corner(cB, eB, rB) + Corner(cB, (eB + 1) % 6, rB)) * 0.5f;
+        return (midA, midB);
     }
 
     // ═══════════════════════════════════════
