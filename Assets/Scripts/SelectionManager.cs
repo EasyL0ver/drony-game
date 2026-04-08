@@ -17,6 +17,9 @@ public class SelectionManager : MonoBehaviour
     Vector2 dragStart;
     const float dragThreshold = 5f;
 
+    // Hover
+    RoomTile hoveredTile;
+
     // Box visuals
     [SerializeField] Color boxColor       = new Color(0f, 0.85f, 1f, 0.15f);
     [SerializeField] Color boxBorderColor = new Color(0f, 0.85f, 1f, 0.8f);
@@ -41,6 +44,9 @@ public class SelectionManager : MonoBehaviour
         if (mouse == null) return;
 
         Vector2 mousePos = mouse.position.ReadValue();
+
+        // Hover tracking
+        UpdateHover(mousePos);
 
         // Left click: start drag
         if (mouse.leftButton.wasPressedThisFrame)
@@ -111,70 +117,46 @@ public class SelectionManager : MonoBehaviour
         }
     }
 
+    // ── hover ────────────────────────────────
+
+    void UpdateHover(Vector2 screenPos)
+    {
+        RoomTile tile = RaycastTile(screenPos);
+        if (tile != hoveredTile)
+        {
+            if (hoveredTile != null)
+                hoveredTile.SetHovered(false);
+            hoveredTile = tile;
+            if (hoveredTile != null)
+                hoveredTile.SetHovered(true);
+        }
+    }
+
+    RoomTile RaycastTile(Vector2 screenPos)
+    {
+        Ray ray = cam.ScreenPointToRay(screenPos);
+        if (Physics.Raycast(ray, out RaycastHit hit, 500f))
+            return hit.collider.GetComponentInParent<RoomTile>();
+        return null;
+    }
+
     // ── move orders ──────────────────────────
 
     void IssueMoveOrder(Vector2 screenPos)
     {
-        Vector2Int? target = ScreenToRoom(screenPos);
-        if (target == null) return;
+        RoomTile tile = RaycastTile(screenPos);
+        if (tile == null) return;
+
+        tile.FlashMoveTarget();
+        Vector2Int target = tile.Coord;
 
         foreach (var d in gm.Drones)
         {
             if (!d.IsSelected) continue;
-            var p = FindPath(d.CurrentRoom, target.Value);
+            var p = FindPath(d.CurrentRoom, target);
             if (p != null && p.Count > 0)
                 d.SetPath(p);
         }
-    }
-
-    // ── screen → room ────────────────────────
-
-    Vector2Int? ScreenToRoom(Vector2 screenPos)
-    {
-        Ray ray = cam.ScreenPointToRay(screenPos);
-        if (ray.direction.y >= 0) return null;
-        float t = -ray.origin.y / ray.direction.y;
-        Vector3 hit = ray.origin + ray.direction * t;
-
-        float bestDist = float.MaxValue;
-        Vector2Int? bestRoom = null;
-
-        // Check rooms
-        foreach (var room in gm.hexMap.RoomList)
-        {
-            Vector3 c = gm.hexMap.HexCenter(room);
-            float dist = new Vector2(hit.x - c.x, hit.z - c.z).magnitude;
-            float radius = gm.hexMap.RoomRadius(gm.hexMap.RoomSizeMap[room]);
-            if (dist < radius && dist < bestDist)
-            {
-                bestDist = dist;
-                bestRoom = room;
-            }
-        }
-
-        // Check passages if no room hit
-        if (bestRoom == null)
-        {
-            foreach (var (a, b, type) in gm.hexMap.ConnectionList)
-            {
-                var (midA, midB) = gm.hexMap.PassageEndpoints(a, b);
-                Vector3 passCenter = (midA + midB) * 0.5f;
-                float passW = gm.hexMap.PassageWidth(type);
-                float dist = new Vector2(hit.x - passCenter.x, hit.z - passCenter.z).magnitude;
-                if (dist < passW)
-                {
-                    // Pick the room on the far side from the click
-                    Vector3 cA = gm.hexMap.HexCenter(a);
-                    Vector3 cB = gm.hexMap.HexCenter(b);
-                    float dA = new Vector2(hit.x - cA.x, hit.z - cA.z).magnitude;
-                    float dB = new Vector2(hit.x - cB.x, hit.z - cB.z).magnitude;
-                    bestRoom = dA < dB ? a : b;
-                    break;
-                }
-            }
-        }
-
-        return bestRoom;
     }
 
     // ── pathfinding (Dijkstra) ───────────────

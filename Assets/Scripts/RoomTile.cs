@@ -36,6 +36,16 @@ public class RoomTile : MonoBehaviour
     bool outlineShown;
     Material matUnknown, matDiscovered, matOutline;
 
+    // Interaction
+    GameObject hoverHighlight;
+    GameObject moveFlash;
+    MeshRenderer hoverRenderer;
+    MeshRenderer flashRenderer;
+    Material matHover, matFlash;
+    bool isHovered;
+    float flashTimer;
+    const float flashDuration = 0.5f;
+
     // Config (set once by builder)
     float fogElevation;
     float outlineRadius;
@@ -56,6 +66,7 @@ public class RoomTile : MonoBehaviour
 
         BuildFogMesh(map);
         BuildOutlineMesh(map);
+        BuildInteractionMeshes(map);
         ApplyVisuals();
     }
 
@@ -180,6 +191,45 @@ public class RoomTile : MonoBehaviour
         }
     }
 
+    // ── interaction ──────────────────────────
+
+    public void SetHovered(bool hovered)
+    {
+        isHovered = hovered;
+        if (hoverHighlight != null)
+            hoverHighlight.SetActive(hovered);
+    }
+
+    public void FlashMoveTarget()
+    {
+        flashTimer = flashDuration;
+        if (moveFlash != null)
+            moveFlash.SetActive(true);
+    }
+
+    void Update()
+    {
+        if (isHovered && matHover != null)
+        {
+            float pulse = 0.06f + 0.04f * Mathf.Sin(Time.time * 5f);
+            Color c = new Color(0f, 0.85f, 1f, pulse);
+            matHover.color = c;
+            matHover.SetColor("_BaseColor", c);
+        }
+
+        if (flashTimer > 0f)
+        {
+            flashTimer -= Time.deltaTime;
+            float t = Mathf.Clamp01(flashTimer / flashDuration);
+            Color c = new Color(0f, 0.85f, 1f, t * 0.3f);
+            matFlash.color = c;
+            matFlash.SetColor("_BaseColor", c);
+
+            if (flashTimer <= 0f && moveFlash != null)
+                moveFlash.SetActive(false);
+        }
+    }
+
     // ── mesh builders ────────────────────────
 
     void BuildFogMesh(HexMapGenerator map)
@@ -191,7 +241,9 @@ public class RoomTile : MonoBehaviour
         go.transform.SetParent(transform, false);
         var mf = go.AddComponent<MeshFilter>();
         fogRenderer = go.AddComponent<MeshRenderer>();
+        var col = go.AddComponent<MeshCollider>();
         mf.sharedMesh = MakeHexLid(center, outlineRadius, fogY);
+        col.sharedMesh = mf.sharedMesh;
         fogRenderer.sharedMaterial = matUnknown;
         fogRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         fogRenderer.receiveShadows = false;
@@ -280,6 +332,86 @@ public class RoomTile : MonoBehaviour
         m.RecalculateNormals();
         m.RecalculateBounds();
         return m;
+    }
+
+    // ── interaction meshes ───────────────────
+
+    void BuildInteractionMeshes(HexMapGenerator map)
+    {
+        Vector3 center = map.HexCenter(Coord);
+        Mesh hex = MakeFlatHex(center, outlineRadius * 0.97f, 0.03f);
+
+        // Hover highlight
+        hoverHighlight = new GameObject("Hover");
+        hoverHighlight.transform.SetParent(transform, false);
+        var mf1 = hoverHighlight.AddComponent<MeshFilter>();
+        hoverRenderer = hoverHighlight.AddComponent<MeshRenderer>();
+        mf1.sharedMesh = hex;
+        matHover = MakeInteractionMat(new Color(0f, 0.85f, 1f, 0.08f));
+        hoverRenderer.sharedMaterial = matHover;
+        hoverRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        hoverRenderer.receiveShadows = false;
+        hoverHighlight.SetActive(false);
+
+        // Move flash
+        moveFlash = new GameObject("MoveFlash");
+        moveFlash.transform.SetParent(transform, false);
+        var mf2 = moveFlash.AddComponent<MeshFilter>();
+        flashRenderer = moveFlash.AddComponent<MeshRenderer>();
+        mf2.sharedMesh = hex;
+        matFlash = MakeInteractionMat(new Color(0f, 0.85f, 1f, 0.3f));
+        flashRenderer.sharedMaterial = matFlash;
+        flashRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        flashRenderer.receiveShadows = false;
+        moveFlash.SetActive(false);
+    }
+
+    Mesh MakeFlatHex(Vector3 center, float r, float y)
+    {
+        var verts = new List<Vector3>();
+        var tris  = new List<int>();
+
+        verts.Add(new Vector3(center.x, y, center.z));
+        for (int i = 0; i < 6; i++)
+        {
+            float a = Mathf.Deg2Rad * 60f * i;
+            verts.Add(new Vector3(
+                center.x + Mathf.Cos(a) * r, y,
+                center.z + Mathf.Sin(a) * r));
+        }
+
+        for (int i = 0; i < 6; i++)
+        {
+            tris.Add(0);
+            tris.Add(((i + 1) % 6) + 1);
+            tris.Add(i + 1);
+        }
+
+        var m = new Mesh { name = "FlatHex" };
+        m.SetVertices(verts);
+        m.SetTriangles(tris, 0);
+        m.RecalculateNormals();
+        m.RecalculateBounds();
+        return m;
+    }
+
+    Material MakeInteractionMat(Color c)
+    {
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Unlit/Color");
+
+        var mat = new Material(sh);
+        mat.color = c;
+        mat.SetColor("_BaseColor", c);
+        mat.SetFloat("_Surface", 1f);
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.SetOverrideTag("RenderType", "Transparent");
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetInt("_ZWrite", 0);
+        mat.SetInt("_Cull", 0);
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        return mat;
     }
 
 }
