@@ -27,6 +27,10 @@ public class DroneController : MonoBehaviour
     Material ringMat;
     LowPolyDrone droneModel;
 
+    // Idle animation
+    float idlePhase;
+    float idleBlend;   // 0 = moving, 1 = fully idle
+
     // ── public API ───────────────────────────
 
     public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom)
@@ -39,6 +43,7 @@ public class DroneController : MonoBehaviour
         travelProgress = 1f;
         transform.position = RoomWorldPos(startRoom);
         CreateSelectionRing();
+        idlePhase = Random.Range(0f, Mathf.PI * 2f);
 
         // Notify start tile
         var tile = fog.GetTile(startRoom);
@@ -75,6 +80,7 @@ public class DroneController : MonoBehaviour
         if (!Application.isPlaying || map == null) return;
 
         UpdateMovement();
+        UpdateIdleAnimation();
         UpdateSelectionVisuals();
     }
 
@@ -146,6 +152,42 @@ public class DroneController : MonoBehaviour
             Vector3 b = RoomWorldPos(toRoom);
             transform.position = Vector3.Lerp(a, b, SmoothStep(travelProgress));
         }
+    }
+
+    void UpdateIdleAnimation()
+    {
+        float target = IsMoving ? 0f : 1f;
+        idleBlend = Mathf.MoveTowards(idleBlend, target, Time.deltaTime * 3f);
+
+        if (idleBlend < 0.001f)
+        {
+            transform.rotation = Quaternion.identity;
+            return;
+        }
+
+        float t = Time.time + idlePhase;
+
+        // Yaw: slow scanning sweep
+        float yaw = Mathf.Sin(t * 0.4f) * 18f + Mathf.Sin(t * 0.17f) * 10f;
+
+        // Tilt: subtle pitch + roll wobble
+        float pitch = Mathf.Sin(t * 0.7f) * 3f;
+        float roll  = Mathf.Cos(t * 0.53f) * 2.5f;
+
+        transform.rotation = Quaternion.Euler(
+            pitch * idleBlend,
+            yaw   * idleBlend,
+            roll  * idleBlend);
+
+        // Small XZ drift around room center
+        Vector3 home = RoomWorldPos(CurrentRoom);
+        float dx = Mathf.Sin(t * 0.3f)  * 0.15f;
+        float dz = Mathf.Cos(t * 0.43f) * 0.15f;
+
+        Vector3 pos = transform.position;
+        pos.x = Mathf.Lerp(pos.x, home.x + dx * idleBlend, Time.deltaTime * 2f);
+        pos.z = Mathf.Lerp(pos.z, home.z + dz * idleBlend, Time.deltaTime * 2f);
+        transform.position = pos;
     }
 
     // ── helpers ──────────────────────────────
