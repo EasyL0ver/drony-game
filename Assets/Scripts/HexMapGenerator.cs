@@ -406,32 +406,61 @@ public class HexMapGenerator : MonoBehaviour
     void EmitHexWalls(MB wallMB, MB glowMB, Vector3 c, float r, float rWallH,
                       Dictionary<int, PassageInfo> openEdges)
     {
+        float hw = wallThickness * 0.5f;
+
+        // Precompute mitered outer/inner positions at each hex vertex.
+        // At a corner where two edges meet at 120°, the miter point is where
+        // the outer (or inner) faces of adjacent panels would intersect.
+        Vector3[] outerV = new Vector3[6];
+        Vector3[] innerV = new Vector3[6];
+
         for (int i = 0; i < 6; i++)
         {
+            Vector3 corner = Corner(c, i, r);
+            Vector3 prev   = Corner(c, (i + 5) % 6, r);
+            Vector3 next   = Corner(c, (i + 1) % 6, r);
+
+            Vector3 nPrev = Vector3.Cross(Vector3.up, (corner - prev).normalized).normalized;
+            Vector3 nThis = Vector3.Cross(Vector3.up, (next - corner).normalized).normalized;
+
+            Vector3 bisector  = (nPrev + nThis).normalized;
+            float   miterDist = hw / Vector3.Dot(bisector, nThis);
+
+            outerV[i] = corner + bisector * miterDist;
+            innerV[i] = corner - bisector * miterDist;
+        }
+
+        for (int i = 0; i < 6; i++)
+        {
+            int ni = (i + 1) % 6;
             Vector3 c0 = Corner(c, i, r);
-            Vector3 c1 = Corner(c, (i + 1) % 6, r);
+            Vector3 c1 = Corner(c, ni, r);
 
             if (openEdges.ContainsKey(i))
             {
                 PassageInfo pi = openEdges[i];
                 Vector3 mid     = (c0 + c1) * 0.5f;
                 Vector3 edgeDir = (c1 - c0).normalized;
-                float   hw      = pi.width * 0.5f;
-                Vector3 gapA    = mid - edgeDir * hw;
-                Vector3 gapB    = mid + edgeDir * hw;
+                Vector3 edgeN   = Vector3.Cross(Vector3.up, edgeDir).normalized;
+                float   phw     = pi.width * 0.5f;
+                Vector3 gapA    = mid - edgeDir * phw;
+                Vector3 gapB    = mid + edgeDir * phw;
+
+                // Perpendicular offsets at gap edges (flat cut into the passage)
+                Vector3 gapAo = gapA + edgeN * hw, gapAi = gapA - edgeN * hw;
+                Vector3 gapBo = gapB + edgeN * hw, gapBi = gapB - edgeN * hw;
 
                 if (Vector3.Distance(c0, gapA) > 0.05f)
                 {
-                    EmitWallPanel(wallMB, c0, gapA, rWallH);
-                    EmitWallTrim(glowMB, c0, gapA, rWallH);
+                    EmitMiteredWall(wallMB, outerV[i], innerV[i], gapAo, gapAi, rWallH, false, true);
+                    EmitMiteredTrim(glowMB, outerV[i], innerV[i], gapAo, gapAi, rWallH);
                 }
                 if (Vector3.Distance(gapB, c1) > 0.05f)
                 {
-                    EmitWallPanel(wallMB, gapB, c1, rWallH);
-                    EmitWallTrim(glowMB, gapB, c1, rWallH);
+                    EmitMiteredWall(wallMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH, true, false);
+                    EmitMiteredTrim(glowMB, gapBo, gapBi, outerV[ni], innerV[ni], rWallH);
                 }
 
-                // Lintel (header wall) above the opening
                 float openH = PassageWallHeight(pi.type);
                 if (openH < rWallH - 0.01f)
                 {
@@ -441,10 +470,43 @@ public class HexMapGenerator : MonoBehaviour
             }
             else
             {
-                EmitWallPanel(wallMB, c0, c1, rWallH);
-                EmitWallTrim(glowMB, c0, c1, rWallH);
+                EmitMiteredWall(wallMB, outerV[i], innerV[i], outerV[ni], innerV[ni], rWallH, false, false);
+                EmitMiteredTrim(glowMB, outerV[i], innerV[i], outerV[ni], innerV[ni], rWallH);
             }
         }
+    }
+
+    /// <summary>Wall quads with explicit outer/inner corners. End caps only where needed.</summary>
+    void EmitMiteredWall(MB mb, Vector3 oA, Vector3 iA, Vector3 oB, Vector3 iB,
+                         float h, bool capA, bool capB)
+    {
+        Vector3 up = Vector3.up * h;
+        mb.Quad(oA, oA + up, oB + up, oB);           // outer
+        mb.Quad(iB, iB + up, iA + up, iA);           // inner
+        mb.Quad(oA + up, iA + up, iB + up, oB + up); // top
+        if (capA) { mb.Quad(oA, iA, iA + up, oA + up); }
+        if (capB) { mb.Quad(iB, oB, oB + up, iB + up); }
+    }
+
+    /// <summary>Glow trim with explicit outer/inner corners.</summary>
+    void EmitMiteredTrim(MB mb, Vector3 oA, Vector3 iA, Vector3 oB, Vector3 iB, float h)
+    {
+        // Top cap glow (slightly above wall top)
+        float trimBump = 0.025f;
+        Vector3 top = Vector3.up * h;
+        Vector3 th  = Vector3.up * 0.03f;
+        Vector3 oAt = oA + (oA - iA).normalized * trimBump;
+        Vector3 iAt = iA + (iA - oA).normalized * trimBump;
+        Vector3 oBt = oB + (oB - iB).normalized * trimBump;
+        Vector3 iBt = iB + (iB - oB).normalized * trimBump;
+        mb.Quad(oAt + top + th, iAt + top + th, iBt + top + th, oBt + top + th);
+
+        // Outer stripe at 82-90% height
+        Vector3 h1 = Vector3.up * (h * 0.82f);
+        Vector3 h2 = Vector3.up * (h * 0.90f);
+        Vector3 oAs = oA + (oA - iA).normalized * 0.003f;
+        Vector3 oBs = oB + (oB - iB).normalized * 0.003f;
+        mb.Quad(oAs + h1, oAs + h2, oBs + h2, oBs + h1);
     }
 
     // ═══════════════════════════════════════
