@@ -29,7 +29,10 @@ public class DroneController : MonoBehaviour
 
     // Idle animation
     float idlePhase;
-    float idleBlend;   // 0 = moving, 1 = fully idle
+    float idleBlend;       // 0 = moving, 1 = fully idle
+    Vector3 wanderTarget;
+    float wanderWait;
+    bool hasWanderTarget;
 
     // ── public API ───────────────────────────
 
@@ -162,32 +165,72 @@ public class DroneController : MonoBehaviour
         if (idleBlend < 0.001f)
         {
             transform.rotation = Quaternion.identity;
+            hasWanderTarget = false;
             return;
         }
 
         float t = Time.time + idlePhase;
 
-        // Yaw: slow scanning sweep
-        float yaw = Mathf.Sin(t * 0.4f) * 18f + Mathf.Sin(t * 0.17f) * 10f;
+        // ── pick wander targets within the room ──
+        if (!hasWanderTarget || wanderWait <= 0f)
+        {
+            wanderTarget = PickWanderPoint();
+            wanderWait = Random.Range(1.5f, 4f);
+            hasWanderTarget = true;
+        }
 
-        // Tilt: subtle pitch + roll wobble
+        Vector3 pos = transform.position;
+        Vector3 toTarget = wanderTarget - pos;
+        toTarget.y = 0f;
+        float dist = toTarget.magnitude;
+
+        if (dist < 0.1f)
+        {
+            // Close enough — wait then pick next
+            wanderWait -= Time.deltaTime;
+        }
+        else
+        {
+            // Fly toward target
+            float speed = 0.6f * idleBlend;
+            Vector3 move = toTarget.normalized * Mathf.Min(speed * Time.deltaTime, dist);
+            pos += move;
+            transform.position = pos;
+        }
+
+        // ── yaw toward movement direction + wobble ──
+        float yawTarget = 0f;
+        if (dist > 0.15f)
+            yawTarget = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
+        else
+            yawTarget = Mathf.Sin(t * 0.4f) * 18f + Mathf.Sin(t * 0.17f) * 10f;
+
         float pitch = Mathf.Sin(t * 0.7f) * 3f;
         float roll  = Mathf.Cos(t * 0.53f) * 2.5f;
 
-        transform.rotation = Quaternion.Euler(
+        // Lean into movement direction
+        if (dist > 0.15f)
+            pitch += 5f;
+
+        Quaternion desired = Quaternion.Euler(
             pitch * idleBlend,
-            yaw   * idleBlend,
-            roll  * idleBlend);
+            yawTarget,
+            roll * idleBlend);
+        transform.rotation = Quaternion.Slerp(transform.rotation, desired, Time.deltaTime * 4f);
+    }
 
-        // Small XZ drift around room center
-        Vector3 home = RoomWorldPos(CurrentRoom);
-        float dx = Mathf.Sin(t * 0.3f)  * 0.15f;
-        float dz = Mathf.Cos(t * 0.43f) * 0.15f;
+    Vector3 PickWanderPoint()
+    {
+        Vector3 center = RoomWorldPos(CurrentRoom);
+        float roomR = map.RoomRadius(map.RoomSizeMap[CurrentRoom]);
+        float maxR = roomR * 0.55f;
 
-        Vector3 pos = transform.position;
-        pos.x = Mathf.Lerp(pos.x, home.x + dx * idleBlend, Time.deltaTime * 2f);
-        pos.z = Mathf.Lerp(pos.z, home.z + dz * idleBlend, Time.deltaTime * 2f);
-        transform.position = pos;
+        float angle = Random.Range(0f, Mathf.PI * 2f);
+        float r = Mathf.Sqrt(Random.Range(0f, 1f)) * maxR; // sqrt for uniform distribution
+        return new Vector3(
+            center.x + Mathf.Cos(angle) * r,
+            center.y,
+            center.z + Mathf.Sin(angle) * r);
     }
 
     // ── helpers ──────────────────────────────
