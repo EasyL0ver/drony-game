@@ -25,17 +25,8 @@ public class GameManager : MonoBehaviour
             Setup();
     }
 
-    void Update()
-    {
-        if (!Application.isPlaying) return;
-        if (fog == null || hexMap == null) return;
-
-        var rooms = new List<Vector2Int>();
-        foreach (var d in Drones)
-            if (!rooms.Contains(d.CurrentRoom))
-                rooms.Add(d.CurrentRoom);
-        fog.UpdateVisibility(rooms);
-    }
+    // No per-frame fog update needed — RoomTile handles its own state
+    // when DroneController calls OnDroneEnter/OnDroneExit.
 
     [ContextMenu("Rebuild Game")]
     public void Setup()
@@ -65,7 +56,7 @@ public class GameManager : MonoBehaviour
             droneGO.transform.SetParent(transform, false);
 
             var controller = droneGO.AddComponent<DroneController>();
-            controller.Init(hexMap, Vector2Int.zero);
+            controller.Init(hexMap, fog, Vector2Int.zero);
 
             var modelGO = new GameObject("Model");
             modelGO.transform.SetParent(droneGO.transform, false);

@@ -12,6 +12,7 @@ public class DroneController : MonoBehaviour
     public bool IsMoving => path.Count > 0 || travelProgress < 1f;
 
     HexMapGenerator map;
+    FogOfWar fog;
     Queue<Vector2Int> path = new Queue<Vector2Int>();
 
     // Current hop
@@ -28,15 +29,21 @@ public class DroneController : MonoBehaviour
 
     // ── public API ───────────────────────────
 
-    public void Init(HexMapGenerator mapGen, Vector2Int startRoom)
+    public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom)
     {
         map = mapGen;
+        fog = fogOfWar;
         CurrentRoom = startRoom;
         fromRoom = startRoom;
         toRoom = startRoom;
         travelProgress = 1f;
         transform.position = RoomWorldPos(startRoom);
         CreateSelectionRing();
+
+        // Notify start tile
+        var tile = fog.GetTile(startRoom);
+        if (tile != null)
+            tile.OnDroneEnter();
     }
 
     public void SetPath(List<Vector2Int> newPath)
@@ -108,7 +115,19 @@ public class DroneController : MonoBehaviour
     {
         if (travelProgress >= 1f)
         {
-            CurrentRoom = toRoom;
+            if (toRoom != CurrentRoom)
+            {
+                // Left old room, arrived at new room
+                var oldTile = fog?.GetTile(CurrentRoom);
+                if (oldTile != null)
+                    oldTile.OnDroneExit();
+
+                CurrentRoom = toRoom;
+
+                var newTile = fog?.GetTile(CurrentRoom);
+                if (newTile != null)
+                    newTile.OnDroneEnter();
+            }
 
             if (path.Count > 0)
             {
