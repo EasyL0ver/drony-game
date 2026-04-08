@@ -406,37 +406,29 @@ public class HexMapGenerator : MonoBehaviour
     void EmitHexWalls(MB wallMB, MB glowMB, Vector3 c, float r, float rWallH,
                       Dictionary<int, PassageInfo> openEdges)
     {
-        // Extend each wall panel slightly past hex corners so adjacent
-        // panels overlap — eliminates corner notches without extra geometry.
-        float ext = wallThickness * 0.6f;
-
         for (int i = 0; i < 6; i++)
         {
             Vector3 c0 = Corner(c, i, r);
             Vector3 c1 = Corner(c, (i + 1) % 6, r);
-            Vector3 edgeDir = (c1 - c0).normalized;
-
-            // Extended corners for solid wall segments at hex vertices
-            Vector3 c0ext = c0 - edgeDir * ext;
-            Vector3 c1ext = c1 + edgeDir * ext;
 
             if (openEdges.ContainsKey(i))
             {
                 PassageInfo pi = openEdges[i];
                 Vector3 mid     = (c0 + c1) * 0.5f;
+                Vector3 edgeDir = (c1 - c0).normalized;
                 float   hw      = pi.width * 0.5f;
                 Vector3 gapA    = mid - edgeDir * hw;
                 Vector3 gapB    = mid + edgeDir * hw;
 
                 if (Vector3.Distance(c0, gapA) > 0.05f)
                 {
-                    EmitWallPanel(wallMB, c0ext, gapA, rWallH);
-                    EmitWallTrim(glowMB, c0ext, gapA, rWallH);
+                    EmitWallPanel(wallMB, c0, gapA, rWallH);
+                    EmitWallTrim(glowMB, c0, gapA, rWallH);
                 }
                 if (Vector3.Distance(gapB, c1) > 0.05f)
                 {
-                    EmitWallPanel(wallMB, gapB, c1ext, rWallH);
-                    EmitWallTrim(glowMB, gapB, c1ext, rWallH);
+                    EmitWallPanel(wallMB, gapB, c1, rWallH);
+                    EmitWallTrim(glowMB, gapB, c1, rWallH);
                 }
 
                 // Lintel (header wall) above the opening
@@ -449,8 +441,8 @@ public class HexMapGenerator : MonoBehaviour
             }
             else
             {
-                EmitWallPanel(wallMB, c0ext, c1ext, rWallH);
-                EmitWallTrim(glowMB, c0ext, c1ext, rWallH);
+                EmitWallPanel(wallMB, c0, c1, rWallH);
+                EmitWallTrim(glowMB, c0, c1, rWallH);
             }
         }
     }
