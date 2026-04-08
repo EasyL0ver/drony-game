@@ -198,6 +198,8 @@ public class HexMapGenerator : MonoBehaviour
     /// <summary>Returns the top Y of a passage type (for fog overlay positioning).</summary>
     public float PassageTopY(PassageType t)
     {
+        if (t == PassageType.Vent)
+            return PassageWallHeight(t) + ventPipeRadius; // just above pipe top
         return PassageWallHeight(t);
     }
 
