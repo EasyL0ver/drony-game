@@ -58,6 +58,12 @@ public class GameManager : MonoBehaviour
         if (stationTile != null)
             stationTile.RModel.IsRefittingStation = true;
 
+        // ── spawn refitting station building ──
+        var stationBldgGO = new GameObject("RefittingStation");
+        stationBldgGO.transform.SetParent(transform, false);
+        stationBldgGO.transform.position = hexMap.HexCenter(Vector2Int.zero);
+        stationBldgGO.AddComponent<RefittingStation>();
+
         // ── player economy ──
         Player = new PlayerModel(startingPoints);
 
