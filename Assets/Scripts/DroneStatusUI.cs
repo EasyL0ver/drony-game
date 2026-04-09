@@ -259,8 +259,9 @@ public class DroneStatusUI : MonoBehaviour
             // Determine how many segments are "threatened" by journey or preview
             int journeyCost = c.drone.JourneyEnergyCost;
             int previewCost = c.drone.PreviewEnergyCost;
-            // Total cost to highlight: active journey + preview
             int totalPending = journeyCost + previewCost;
+            bool overBudget = c.drone.PreviewExceedsEnergy;
+            Color insufficientCol = new Color(1f, 0.15f, 0.10f, 0.85f);
 
             // Update discrete energy segments
             for (int s = 0; s < c.energySegments.Count && s < maxE; s++)
@@ -268,16 +269,25 @@ public class DroneStatusUI : MonoBehaviour
                 Color col;
                 if (s >= curE)
                 {
-                    // Empty segment
-                    col = segEmptyCol;
+                    // Empty — flash red when over budget to show deficit
+                    col = (overBudget && s < curE + (totalPending - curE))
+                        ? insufficientCol * (0.5f + 0.2f * Mathf.Sin(Time.time * 6f))
+                        : segEmptyCol;
                 }
                 else if (s >= curE - totalPending)
                 {
-                    // This segment will be consumed — highlight it
-                    if (previewCost > 0 && s >= curE - previewCost)
+                    if (overBudget)
+                    {
+                        col = insufficientCol; // all pending segments red
+                    }
+                    else if (previewCost > 0 && s >= curE - previewCost)
+                    {
                         col = segPreviewCol; // preview (hover) cost — orange
+                    }
                     else
+                    {
                         col = segPreviewCol * 0.7f; // committed journey cost — dimmer orange
+                    }
                 }
                 else
                 {
@@ -290,7 +300,16 @@ public class DroneStatusUI : MonoBehaviour
                 c.energySegments[s].color = col;
             }
 
-            c.energyText.text = $"{curE}/{maxE}";
+            // Energy text — red when preview would exceed available energy
+            if (overBudget)
+            {
+                int available = curE - journeyCost;
+                c.energyText.text = $"<color=#FF2222>{curE}/{maxE} (need {previewCost}, have {available})</color>";
+            }
+            else
+            {
+                c.energyText.text = $"{curE}/{maxE}";
+            }
 
             // Selection highlight
             bool sel = c.drone.IsSelected;

@@ -19,6 +19,10 @@ public class DroneController : MonoBehaviour
     public int CurrentEnergy { get; set; } = 10;
     public float EnergyFraction => MaxEnergy > 0 ? (float)CurrentEnergy / MaxEnergy : 0f;
 
+    /// <summary>True when the preview path costs more energy than available.</summary>
+    public bool PreviewExceedsEnergy =>
+        isShowingPreview && PreviewEnergyCost > (CurrentEnergy - JourneyEnergyCost);
+
     public string CurrentAction
     {
         get
@@ -256,6 +260,22 @@ public class DroneController : MonoBehaviour
 
     public void SetPath(List<Vector2Int> newPath)
     {
+        // Calculate total energy cost of this path before committing
+        int cost = 0;
+        Vector2Int prev = CurrentRoom;
+        foreach (var room in newPath)
+        {
+            cost += StepEnergyCost(GetPassageType(prev, room));
+            prev = room;
+        }
+        // Add scan cost if final room is unknown
+        var checkTile = fog?.GetTile(newPath[newPath.Count - 1]);
+        if (checkTile != null && checkTile.State == FogState.Unknown)
+            cost += scanEnergyCost;
+
+        int available = CurrentEnergy - JourneyEnergyCost;
+        if (cost > available) return; // Not enough energy — block move
+
         path.Clear();
         hopPoints.Clear();
         hopCumulDist.Clear();
@@ -413,7 +433,10 @@ public class DroneController : MonoBehaviour
         // Build preview dashed line
         EnsurePreviewLine();
         previewLineGO.SetActive(true);
-        Color col = new Color(1f, 0.75f, 0f, 0.4f);
+        bool overBudget = PreviewExceedsEnergy;
+        Color col = overBudget
+            ? new Color(1f, 0.15f, 0.10f, 0.5f)   // red — can't afford
+            : new Color(1f, 0.75f, 0f, 0.4f);      // orange — ok
         previewMat.color = col;
         previewMat.SetColor("_BaseColor", col);
         BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f);
@@ -427,14 +450,14 @@ public class DroneController : MonoBehaviour
         {
             var (midA, midB) = map.PassageEndpoints(prev, room);
             Vector3 passageMid = (midA + midB) * 0.5f;
-            CreatePreviewStepBar(new Vector3(passageMid.x, 0.5f, passageMid.z), stepIdx);
+            CreatePreviewStepBar(new Vector3(passageMid.x, 0.5f, passageMid.z), stepIdx, overBudget);
             stepIdx++;
             prev = room;
         }
         if (finalTile != null && finalTile.State == FogState.Unknown)
         {
             Vector3 rc = map.HexCenter(previewPath[previewPath.Count - 1]);
-            CreatePreviewStepBar(new Vector3(rc.x, 0.5f, rc.z), stepIdx);
+            CreatePreviewStepBar(new Vector3(rc.x, 0.5f, rc.z), stepIdx, overBudget);
         }
     }
 
@@ -1251,9 +1274,14 @@ public class DroneController : MonoBehaviour
         previewMF.sharedMesh = previewMesh;
     }
 
-    void CreatePreviewStepBar(Vector3 worldPos, int idx)
+    void CreatePreviewStepBar(Vector3 worldPos, int idx, bool overBudget = false)
     {
         EnsureStepBarCanvas();
+
+        Color barBg   = overBudget ? new Color(0.12f, 0.02f, 0.02f, 0.80f) : new Color(0.08f, 0.06f, 0.01f, 0.75f);
+        Color barFill = overBudget ? new Color(1f, 0.15f, 0.10f, 0.50f)    : new Color(1f, 0.75f, 0f, 0.45f);
+        Color lblCol  = overBudget ? new Color(1f, 0.30f, 0.25f, 1f)       : new Color(1f, 0.85f, 0.3f, 1f);
+        Color outCol  = overBudget ? new Color(1f, 0.20f, 0.15f, 0.6f)     : new Color(1f, 0.75f, 0f, 0.5f);
 
         var bar = new WorldStepBar();
         bar.worldPos = worldPos;
@@ -1267,7 +1295,7 @@ public class DroneController : MonoBehaviour
         var bgGO = new GameObject("Bg");
         bgGO.transform.SetParent(bar.root.transform, false);
         bar.bgImage = bgGO.AddComponent<Image>();
-        bar.bgImage.color = new Color(0.08f, 0.06f, 0.01f, 0.75f);
+        bar.bgImage.color = barBg;
         var bgRT = bgGO.GetComponent<RectTransform>();
         bgRT.anchorMin = new Vector2(0, 0);
         bgRT.anchorMax = new Vector2(1, 0);
@@ -1279,7 +1307,7 @@ public class DroneController : MonoBehaviour
         var fillGO = new GameObject("Fill");
         fillGO.transform.SetParent(bgGO.transform, false);
         bar.fillImage = fillGO.AddComponent<Image>();
-        bar.fillImage.color = new Color(1f, 0.75f, 0f, 0.45f);
+        bar.fillImage.color = barFill;
         bar.fillRect = fillGO.GetComponent<RectTransform>();
         bar.fillRect.anchorMin = new Vector2(0, 0);
         bar.fillRect.anchorMax = new Vector2(1, 1);
@@ -1296,7 +1324,7 @@ public class DroneController : MonoBehaviour
         bar.labelText.fontSize = 14;
         bar.labelText.fontStyle = FontStyle.Bold;
         bar.labelText.alignment = TextAnchor.LowerCenter;
-        bar.labelText.color = new Color(1f, 0.85f, 0.3f, 1f);
+        bar.labelText.color = lblCol;
         bar.labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
         bar.labelText.verticalOverflow = VerticalWrapMode.Overflow;
         var lblRT = labelGO.GetComponent<RectTransform>();
@@ -1324,7 +1352,7 @@ public class DroneController : MonoBehaviour
 
         // Outline
         var outline = bgGO.AddComponent<Outline>();
-        outline.effectColor = new Color(1f, 0.75f, 0f, 0.5f);
+        outline.effectColor = outCol;
         outline.effectDistance = new Vector2(1, -1);
 
         // Set text content from preview plan
