@@ -375,8 +375,7 @@ public class DroneController : MonoBehaviour
             Vector3 origin = map.HexCenter(CurrentRoom);
             journeyWaypoints.Add(new Vector3(origin.x, pathY, origin.z));
 
-            Vector2Int prev = CurrentRoom;
-            foreach (var room in newPath)
+            prev = CurrentRoom;            foreach (var room in newPath)
             {
                 var (midA, midB) = map.PassageEndpoints(prev, room);
                 journeyWaypoints.Add(new Vector3(midA.x, pathY, midA.z));
