@@ -13,6 +13,9 @@ public class FogOfWar : MonoBehaviour
     [SerializeField] Color discoveredColor = new Color(0.02f, 0.02f, 0.04f, 0.50f);
     [SerializeField] Color outlineColor   = new Color(0f, 0.85f, 1f, 0.35f);
 
+    [Header("Scanning")]
+    [SerializeField] float scanDuration = 3f;
+
     HexMapGenerator map;
     Material matUnknown, matDiscovered, matOutline;
     float outlineRadius;
@@ -43,7 +46,7 @@ public class FogOfWar : MonoBehaviour
     {
         var tile = GetTile(coord);
         if (tile != null)
-            tile.OnDroneEnter();
+            tile.RevealImmediate();
     }
 
     // ── build ─────────────────────────────
@@ -57,7 +60,7 @@ public class FogOfWar : MonoBehaviour
 
             var tile = go.AddComponent<RoomTile>();
             tile.Init(room, map.RoomSizeMap[room], map, fogElevation, outlineRadius,
-                      matUnknown, matDiscovered, matOutline);
+                      matUnknown, matDiscovered, matOutline, scanDuration);
 
             Tiles[room] = tile;
         }

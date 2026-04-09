@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using System.Collections.Generic;
 
 /// <summary>
@@ -9,7 +10,61 @@ public class DroneController : MonoBehaviour
 {
     public Vector2Int CurrentRoom { get; private set; }
     public bool IsSelected { get; set; }
-    public bool IsMoving => path.Count > 0 || travelProgress < 1f;
+    public bool IsMoving => path.Count > 0 || travelProgress < 1f || isCentering;
+
+    public string DroneName { get; private set; } = "Drone";
+    public float Energy { get; set; } = 1f;
+
+    public string CurrentAction
+    {
+        get
+        {
+            if (IsMoving) return "MOVING";
+            var tile = fog?.GetTile(CurrentRoom);
+            if (tile != null && tile.State == FogState.Scanning) return "SCANNING";
+            return "IDLE";
+        }
+    }
+
+    public float ActionProgress
+    {
+        get
+        {
+            var tile = fog?.GetTile(CurrentRoom);
+            if (tile != null && tile.State == FogState.Scanning) return tile.ScanProgress;
+            return -1f;
+        }
+    }
+
+    public float ActionTimeLeft
+    {
+        get
+        {
+            var tile = fog?.GetTile(CurrentRoom);
+            if (tile != null && tile.State == FogState.Scanning) return tile.ScanTimeLeft;
+            return 0f;
+        }
+    }
+
+    public float ActionElapsed
+    {
+        get
+        {
+            var tile = fog?.GetTile(CurrentRoom);
+            if (tile != null && tile.State == FogState.Scanning) return tile.ScanElapsed;
+            return 0f;
+        }
+    }
+
+    public float ActionTotalTime
+    {
+        get
+        {
+            var tile = fog?.GetTile(CurrentRoom);
+            if (tile != null && tile.State == FogState.Scanning) return tile.ScanTotalTime;
+            return 0f;
+        }
+    }
 
     HexMapGenerator map;
     FogOfWar fog;
@@ -20,8 +75,12 @@ public class DroneController : MonoBehaviour
     Vector2Int toRoom;
     float travelProgress = 1f;  // 1 = arrived
     float travelDuration;
-    Vector3 travelStart, travelEnd;
     [SerializeField] float hoverY = 1f;
+
+    // Multi-waypoint hop path (routes through passage openings)
+    List<Vector3> hopPoints = new List<Vector3>();
+    List<float> hopCumulDist = new List<float>();
+    float hopTotalDist;
 
     // Selection visuals
     GameObject selectionRing;
@@ -35,13 +94,97 @@ public class DroneController : MonoBehaviour
     float wanderWait;
     bool hasWanderTarget;
 
+    // Centering phase: drone glides to room center before scanning starts
+    bool isCentering;
+    Vector3 centerFrom;
+    Vector3 centerTo;
+    float centerProgress;
+    const float centerDuration = 0.45f;
+
     // Swarm
     Vector3 swarmOffset;   // per-drone random position offset
     float speedJitter;     // per-drone speed multiplier
 
+    // Journey plan — full ordered list of steps (travel + scan) for UI display
+    public struct JourneyStep
+    {
+        public string label;
+        public float duration;
+        public bool isScan;
+    }
+
+    readonly List<JourneyStep> journeyPlan = new List<JourneyStep>();
+    int journeyIdx = -1;
+
+    // Floor path visualization (world-space dashed ribbon showing planned route)
+    readonly List<Vector3> journeyWaypoints = new List<Vector3>();
+    readonly List<float> journeyCumulDist = new List<float>();
+    GameObject pathLineGO;
+    MeshFilter pathMF;
+    MeshRenderer pathMR;
+    Material pathMat;
+    Mesh pathMesh;
+    const float pathY = 0.06f;
+    const float pathWidth = 0.12f;
+    const float dashLen = 0.30f;
+    const float gapLen  = 0.15f;
+    const float dashCycle = dashLen + gapLen;
+
+    // Screen-space UI progress bars for each journey step (projected from world coords)
+    struct WorldStepBar
+    {
+        public GameObject root;
+        public RectTransform rect;
+        public Image bgImage;
+        public Image fillImage;
+        public RectTransform fillRect;
+        public Text labelText;
+        public Text timeText;
+        public Vector3 worldPos;   // world position to project
+    }
+    readonly List<WorldStepBar> worldStepBars = new List<WorldStepBar>();
+    static Canvas stepBarCanvas;
+    static CanvasScaler stepBarScaler;
+    const float barUIWidth = 160f;
+    const float barUIHeight = 22f;
+
+    // Preview path (hover) — separate from the real journey
+    bool isShowingPreview;
+    readonly List<Vector3> previewWaypoints = new List<Vector3>();
+    readonly List<float> previewCumulDist = new List<float>();
+    readonly List<JourneyStep> previewPlan = new List<JourneyStep>();
+    readonly List<WorldStepBar> previewStepBars = new List<WorldStepBar>();
+    GameObject previewLineGO;
+    MeshFilter previewMF;
+    MeshRenderer previewMR;
+    Material previewMat;
+    Mesh previewMesh;
+
+    public IReadOnlyList<JourneyStep> Journey => journeyPlan;
+    public int JourneyCurrentIndex => journeyIdx;
+
+    public float GetJourneyStepProgress(int i)
+    {
+        if (journeyIdx < 0 || i < 0 || i >= journeyPlan.Count) return 0f;
+        if (i < journeyIdx) return 1f;
+        if (i > journeyIdx) return 0f;
+        // Active step
+        if (journeyPlan[i].isScan)
+        {
+            var tile = fog?.GetTile(CurrentRoom);
+            return tile != null ? tile.ScanProgress : 0f;
+        }
+        return travelProgress;
+    }
+
+    public float GetJourneyStepElapsed(int i)
+    {
+        return GetJourneyStepProgress(i) * journeyPlan[i].duration;
+    }
+
     // ── public API ───────────────────────────
 
-    public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom)
+    public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone")
     {
         map = mapGen;
         fog = fogOfWar;
@@ -49,6 +192,8 @@ public class DroneController : MonoBehaviour
         fromRoom = startRoom;
         toRoom = startRoom;
         travelProgress = 1f;
+        DroneName = droneName;
+        Energy = 1f;
         CreateSelectionRing();
         idlePhase = Random.Range(0f, Mathf.PI * 2f);
 
@@ -69,20 +214,199 @@ public class DroneController : MonoBehaviour
     public void SetPath(List<Vector2Int> newPath)
     {
         path.Clear();
+        hopPoints.Clear();
+        hopCumulDist.Clear();
+        isCentering = false;
 
         // If mid-travel, resolve which room we're in logically
         if (travelProgress < 1f)
         {
             CurrentRoom = travelProgress < 0.5f ? fromRoom : toRoom;
             travelProgress = 1f;
-            // Don't snap position — travel will lerp from current pos
         }
+
+        // Reset so the "hop arrived" check doesn't fire spuriously
+        fromRoom = CurrentRoom;
+        toRoom = CurrentRoom;
 
         foreach (var room in newPath)
             path.Enqueue(room);
+
+        // Build journey plan for UI
+        journeyPlan.Clear();
+        journeyIdx = -1;
+
+        if (newPath.Count > 0)
+        {
+            journeyIdx = 0;
+            Vector2Int prev = CurrentRoom;
+            foreach (var room in newPath)
+            {
+                var ptype = GetPassageType(prev, room);
+                float dur = GetTravelTime(prev, room) * speedJitter;
+                journeyPlan.Add(new JourneyStep
+                {
+                    label = PassageLabel(ptype),
+                    duration = dur,
+                    isScan = false,
+                });
+                prev = room;
+            }
+
+            // If final room needs scanning, add a SCAN step
+            var finalTile = fog?.GetTile(newPath[newPath.Count - 1]);
+            if (finalTile != null && finalTile.State == FogState.Unknown)
+            {
+                journeyPlan.Add(new JourneyStep
+                {
+                    label = "SCAN",
+                    duration = finalTile.ScanTotalTime,
+                    isScan = true,
+                });
+            }
+        }
+
+        // Build floor-level waypoints for dashed path line (origin + 3 per hop)
+        journeyWaypoints.Clear();
+        journeyCumulDist.Clear();
+        if (newPath.Count > 0)
+        {
+            // Origin room center
+            Vector3 origin = map.HexCenter(CurrentRoom);
+            journeyWaypoints.Add(new Vector3(origin.x, pathY, origin.z));
+
+            Vector2Int prev = CurrentRoom;
+            foreach (var room in newPath)
+            {
+                var (midA, midB) = map.PassageEndpoints(prev, room);
+                journeyWaypoints.Add(new Vector3(midA.x, pathY, midA.z));
+                journeyWaypoints.Add(new Vector3(midB.x, pathY, midB.z));
+                Vector3 rc = map.HexCenter(room);
+                journeyWaypoints.Add(new Vector3(rc.x, pathY, rc.z));
+                prev = room;
+            }
+
+            // Precompute cumulative distances
+            journeyCumulDist.Add(0f);
+            for (int i = 1; i < journeyWaypoints.Count; i++)
+                journeyCumulDist.Add(journeyCumulDist[i - 1]
+                    + Vector3.Distance(journeyWaypoints[i - 1], journeyWaypoints[i]));
+        }
+
+        // Build world-space progress bars at each step location
+        BuildWorldStepBars(newPath);
+
+        // Clear any hover preview since we're now moving
+        ClearPreviewPath();
     }
 
-    // ── lifecycle ────────────────────────────
+    /// <summary>
+    /// Show a preview path + step bars for a potential move (on hover).
+    /// Does NOT start movement.
+    /// </summary>
+    public void ShowPreviewPath(List<Vector2Int> previewPath)
+    {
+        if (previewPath == null || previewPath.Count == 0)
+        {
+            ClearPreviewPath();
+            return;
+        }
+
+        isShowingPreview = true;
+
+        // Build preview journey plan
+        previewPlan.Clear();
+        Vector2Int prev = CurrentRoom;
+        foreach (var room in previewPath)
+        {
+            var ptype = GetPassageType(prev, room);
+            float dur = GetTravelTime(prev, room) * speedJitter;
+            previewPlan.Add(new JourneyStep
+            {
+                label = PassageLabel(ptype),
+                duration = dur,
+                isScan = false,
+            });
+            prev = room;
+        }
+
+        var finalTile = fog?.GetTile(previewPath[previewPath.Count - 1]);
+        if (finalTile != null && finalTile.State == FogState.Unknown)
+        {
+            previewPlan.Add(new JourneyStep
+            {
+                label = "SCAN",
+                duration = finalTile.ScanTotalTime,
+                isScan = true,
+            });
+        }
+
+        // Build preview waypoints
+        previewWaypoints.Clear();
+        previewCumulDist.Clear();
+        Vector3 origin = map.HexCenter(CurrentRoom);
+        previewWaypoints.Add(new Vector3(origin.x, pathY, origin.z));
+
+        prev = CurrentRoom;
+        foreach (var room in previewPath)
+        {
+            var (midA, midB) = map.PassageEndpoints(prev, room);
+            previewWaypoints.Add(new Vector3(midA.x, pathY, midA.z));
+            previewWaypoints.Add(new Vector3(midB.x, pathY, midB.z));
+            Vector3 rc = map.HexCenter(room);
+            previewWaypoints.Add(new Vector3(rc.x, pathY, rc.z));
+            prev = room;
+        }
+
+        previewCumulDist.Add(0f);
+        for (int i = 1; i < previewWaypoints.Count; i++)
+            previewCumulDist.Add(previewCumulDist[i - 1]
+                + Vector3.Distance(previewWaypoints[i - 1], previewWaypoints[i]));
+
+        // Build preview dashed line
+        EnsurePreviewLine();
+        previewLineGO.SetActive(true);
+        Color col = new Color(1f, 0.75f, 0f, 0.4f);
+        previewMat.color = col;
+        previewMat.SetColor("_BaseColor", col);
+        BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f);
+
+        // Build preview step bars
+        DestroyPreviewStepBars();
+        EnsureStepBarCanvas();
+        prev = CurrentRoom;
+        int stepIdx = 0;
+        foreach (var room in previewPath)
+        {
+            var (midA, midB) = map.PassageEndpoints(prev, room);
+            Vector3 passageMid = (midA + midB) * 0.5f;
+            CreatePreviewStepBar(new Vector3(passageMid.x, 0.5f, passageMid.z), stepIdx);
+            stepIdx++;
+            prev = room;
+        }
+        if (finalTile != null && finalTile.State == FogState.Unknown)
+        {
+            Vector3 rc = map.HexCenter(previewPath[previewPath.Count - 1]);
+            CreatePreviewStepBar(new Vector3(rc.x, 0.5f, rc.z), stepIdx);
+        }
+    }
+
+    /// <summary>
+    /// Hide the preview path + step bars.
+    /// </summary>
+    public void ClearPreviewPath()
+    {
+        if (!isShowingPreview) return;
+        isShowingPreview = false;
+
+        if (previewLineGO != null)
+            previewLineGO.SetActive(false);
+
+        previewPlan.Clear();
+        previewWaypoints.Clear();
+        previewCumulDist.Clear();
+        DestroyPreviewStepBars();
+    }
 
     void Start()
     {
@@ -95,6 +419,10 @@ public class DroneController : MonoBehaviour
         if (!Application.isPlaying || map == null) return;
 
         UpdateMovement();
+        UpdateJourney();
+        UpdatePathLine();
+        UpdateWorldStepBars();
+        UpdatePreviewStepBars();
         UpdateIdleAnimation();
         UpdateSelectionVisuals();
     }
@@ -134,6 +462,25 @@ public class DroneController : MonoBehaviour
 
     void UpdateMovement()
     {
+        // Centering phase: glide to room center before scanning
+        if (isCentering)
+        {
+            centerProgress += Time.deltaTime / centerDuration;
+            centerProgress = Mathf.Clamp01(centerProgress);
+            float t = SmoothStep(centerProgress);
+            transform.position = Vector3.Lerp(centerFrom, centerTo, t);
+
+            if (centerProgress >= 1f)
+            {
+                isCentering = false;
+                // Now trigger scan / reveal
+                var arrivedTile = fog?.GetTile(CurrentRoom);
+                if (arrivedTile != null)
+                    arrivedTile.OnDroneArrived();
+            }
+            return;
+        }
+
         if (travelProgress >= 1f)
         {
             if (toRoom != CurrentRoom)
@@ -144,7 +491,27 @@ public class DroneController : MonoBehaviour
                     oldTile.OnDroneExit();
 
                 CurrentRoom = toRoom;
-                // OnDroneEnter already called when hop started
+
+                // Advance journey (travel step complete)
+                if (journeyIdx >= 0 && journeyIdx < journeyPlan.Count
+                    && !journeyPlan[journeyIdx].isScan)
+                    journeyIdx++;
+
+                // If room needs scanning and this is the last hop, center first
+                var arrivedTile = fog?.GetTile(CurrentRoom);
+                bool needsScan = arrivedTile != null && arrivedTile.State == FogState.Unknown;
+                if (needsScan && path.Count == 0)
+                {
+                    centerFrom = transform.position;
+                    centerTo = RoomWorldPos(CurrentRoom);
+                    centerProgress = 0f;
+                    isCentering = true;
+                    return;
+                }
+
+                // No scan needed — trigger immediately
+                if (arrivedTile != null)
+                    arrivedTile.OnDroneArrived();
             }
 
             if (path.Count > 0)
@@ -154,9 +521,24 @@ public class DroneController : MonoBehaviour
                 travelDuration = GetTravelTime(fromRoom, toRoom) * speedJitter;
                 travelProgress = 0f;
 
-                // Start from wherever the drone currently is
-                travelStart = transform.position;
-                travelEnd = RoomWorldPos(toRoom) + swarmOffset;
+                // Build multi-waypoint path through passage opening
+                hopPoints.Clear();
+                hopCumulDist.Clear();
+
+                hopPoints.Add(transform.position);
+                var (midA, midB) = map.PassageEndpoints(fromRoom, toRoom);
+                hopPoints.Add(new Vector3(midA.x, hoverY, midA.z));
+                hopPoints.Add(new Vector3(midB.x, hoverY, midB.z));
+                hopPoints.Add(RoomWorldPos(toRoom) + swarmOffset);
+
+                // Cumulative distance table for proportional interpolation
+                hopTotalDist = 0f;
+                hopCumulDist.Add(0f);
+                for (int i = 1; i < hopPoints.Count; i++)
+                {
+                    hopTotalDist += Vector3.Distance(hopPoints[i - 1], hopPoints[i]);
+                    hopCumulDist.Add(hopTotalDist);
+                }
 
                 // Reveal destination the moment the drone enters the corridor
                 var destTile = fog?.GetTile(toRoom);
@@ -169,7 +551,50 @@ public class DroneController : MonoBehaviour
             travelProgress += Time.deltaTime / travelDuration;
             travelProgress = Mathf.Clamp01(travelProgress);
 
-            transform.position = Vector3.Lerp(travelStart, travelEnd, SmoothStep(travelProgress));
+            transform.position = EvalHopPath(SmoothStep(travelProgress));
+        }
+    }
+
+    void UpdateJourney()
+    {
+        // Auto-create a 1-step journey if scanning without a move order
+        if (journeyPlan.Count == 0 && !IsMoving)
+        {
+            var tile = fog?.GetTile(CurrentRoom);
+            if (tile != null && tile.State == FogState.Scanning)
+            {
+                journeyPlan.Add(new JourneyStep
+                {
+                    label = "SCAN",
+                    duration = tile.ScanTotalTime,
+                    isScan = true,
+                });
+                journeyIdx = 0;
+
+                // World bar at room center for scan-only journey
+                DestroyWorldStepBars();
+                Vector3 rc = map.HexCenter(CurrentRoom);
+                CreateStepBar(new Vector3(rc.x, 0.5f, rc.z), 0);
+            }
+        }
+
+        // Check scan step completion
+        if (journeyIdx >= 0 && journeyIdx < journeyPlan.Count
+            && journeyPlan[journeyIdx].isScan)
+        {
+            var tile = fog?.GetTile(CurrentRoom);
+            if (tile != null && tile.State != FogState.Scanning && tile.State != FogState.Unknown)
+                journeyIdx++;
+        }
+
+        // Clear finished journey
+        if (journeyPlan.Count > 0 && journeyIdx >= journeyPlan.Count)
+        {
+            journeyPlan.Clear();
+            journeyWaypoints.Clear();
+            journeyCumulDist.Clear();
+            journeyIdx = -1;
+            DestroyWorldStepBars();
         }
     }
 
@@ -211,6 +636,15 @@ public class DroneController : MonoBehaviour
             float speed = 0.6f * idleBlend;
             Vector3 move = toTarget.normalized * Mathf.Min(speed * Time.deltaTime, dist);
             pos += move;
+
+            // Clamp to hex room boundary so drone can't drift through walls
+            Vector3 center = RoomWorldPos(CurrentRoom);
+            if (map.RoomSizeMap.TryGetValue(CurrentRoom, out var size))
+            {
+                float roomR = map.RoomRadius(size);
+                pos = ClampToHex(pos, center, roomR * 0.9f);
+            }
+
             transform.position = pos;
         }
 
@@ -238,15 +672,47 @@ public class DroneController : MonoBehaviour
     Vector3 PickWanderPoint()
     {
         Vector3 center = RoomWorldPos(CurrentRoom);
-        float roomR = map.RoomRadius(map.RoomSizeMap[CurrentRoom]);
-        float maxR = roomR * 0.55f;
+        if (!map.RoomSizeMap.TryGetValue(CurrentRoom, out var roomSize))
+            return center;
+        float roomR = map.RoomRadius(roomSize);
+        float maxR = roomR * 0.45f;
 
         float angle = Random.Range(0f, Mathf.PI * 2f);
-        float r = Mathf.Sqrt(Random.Range(0f, 1f)) * maxR; // sqrt for uniform distribution
+        float r = Mathf.Sqrt(Random.Range(0f, 1f)) * maxR;
         return new Vector3(
             center.x + Mathf.Cos(angle) * r,
             center.y,
             center.z + Mathf.Sin(angle) * r);
+    }
+
+    /// <summary>
+    /// Clamp a world position to stay inside a flat-top hex of given radius.
+    /// Tests against all 6 hex edge half-planes; pushes inward if outside any.
+    /// </summary>
+    Vector3 ClampToHex(Vector3 pos, Vector3 center, float hexR)
+    {
+        float dx = pos.x - center.x;
+        float dz = pos.z - center.z;
+
+        // Inner radius (apothem) = distance from center to edge midpoint
+        float apothem = hexR * 0.866025f; // cos(30°)
+
+        for (int i = 0; i < 6; i++)
+        {
+            float a = Mathf.Deg2Rad * 60f * i;
+            // Outward normal of edge i
+            float nx = Mathf.Cos(a);
+            float nz = Mathf.Sin(a);
+            float dot = dx * nx + dz * nz;
+            if (dot > apothem)
+            {
+                float push = dot - apothem;
+                dx -= nx * push;
+                dz -= nz * push;
+            }
+        }
+
+        return new Vector3(center.x + dx, pos.y, center.z + dz);
     }
 
     // ── helpers ──────────────────────────────
@@ -268,6 +734,25 @@ public class DroneController : MonoBehaviour
         return 2f;
     }
 
+    HexMapGenerator.PassageType GetPassageType(Vector2Int a, Vector2Int b)
+    {
+        foreach (var (ca, cb, type) in map.ConnectionList)
+            if ((ca == a && cb == b) || (ca == b && cb == a))
+                return type;
+        return HexMapGenerator.PassageType.Corridor;
+    }
+
+    static string PassageLabel(HexMapGenerator.PassageType type)
+    {
+        switch (type)
+        {
+            case HexMapGenerator.PassageType.Corridor: return "CORRIDOR";
+            case HexMapGenerator.PassageType.Duct:     return "DUCT";
+            case HexMapGenerator.PassageType.Vent:     return "VENT";
+            default:                                    return "TRAVEL";
+        }
+    }
+
     Vector3 RoomWorldPos(Vector2Int room)
     {
         Vector3 c = map.HexCenter(room);
@@ -275,6 +760,571 @@ public class DroneController : MonoBehaviour
     }
 
     float SmoothStep(float t) => t * t * (3f - 2f * t);
+
+    /// <summary>
+    /// Evaluate position along the multi-waypoint hop path at normalized time t (0–1).
+    /// Distributes t proportionally across segment lengths so speed stays uniform.
+    /// </summary>
+    Vector3 EvalHopPath(float t)
+    {
+        if (hopPoints.Count < 2 || hopTotalDist < 0.001f)
+            return hopPoints.Count > 0 ? hopPoints[hopPoints.Count - 1] : transform.position;
+
+        float d = t * hopTotalDist;
+        for (int i = 1; i < hopPoints.Count; i++)
+        {
+            if (d <= hopCumulDist[i] || i == hopPoints.Count - 1)
+            {
+                float segLen = hopCumulDist[i] - hopCumulDist[i - 1];
+                float segT = segLen > 0.001f ? (d - hopCumulDist[i - 1]) / segLen : 0f;
+                return Vector3.Lerp(hopPoints[i - 1], hopPoints[i], segT);
+            }
+        }
+        return hopPoints[hopPoints.Count - 1];
+    }
+
+    // ── floor path line ─────────────────────
+
+    void UpdatePathLine()
+    {
+        bool hasPath = journeyWaypoints.Count > 1 && journeyIdx >= 0;
+
+        // Hide when no journey or on a scan-only step with no remaining travel
+        if (!hasPath || (journeyIdx < journeyPlan.Count && journeyPlan[journeyIdx].isScan))
+        {
+            if (pathLineGO != null) pathLineGO.SetActive(false);
+            return;
+        }
+
+        EnsurePathLine();
+        pathLineGO.SetActive(true);
+
+        // Brightness: selected = bright, unselected = dim
+        float alpha = IsSelected ? 0.55f : 0.2f;
+        Color col = new Color(0f, 0.85f, 1f, alpha);
+        pathMat.color = col;
+        pathMat.SetColor("_BaseColor", col);
+
+        // Compute how much of the polyline the drone has consumed
+        // Hop k occupies waypoints k*3 .. (k+1)*3  (origin is at index 0)
+        float consumed = 0f;
+        int hopIdx = journeyIdx; // which travel hop we're on
+        int hopEndWP = hopIdx * 3 + 3;
+        if (hopEndWP < journeyCumulDist.Count)
+        {
+            float hopStart = journeyCumulDist[hopIdx * 3];
+            float hopEnd   = journeyCumulDist[hopEndWP];
+            consumed = hopStart + travelProgress * (hopEnd - hopStart);
+        }
+        else
+        {
+            consumed = journeyCumulDist[journeyCumulDist.Count - 1];
+        }
+
+        BuildDashedRibbon(consumed);
+    }
+
+    void EnsurePathLine()
+    {
+        if (pathLineGO != null) return;
+
+        pathLineGO = new GameObject("PathLine_" + DroneName);
+        pathMF = pathLineGO.AddComponent<MeshFilter>();
+        pathMR = pathLineGO.AddComponent<MeshRenderer>();
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Unlit/Color");
+        pathMat = new Material(sh);
+        Color col = new Color(0f, 0.85f, 1f, 0.3f);
+        pathMat.color = col;
+        pathMat.SetColor("_BaseColor", col);
+        pathMat.SetFloat("_Surface", 1f);
+        pathMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        pathMat.SetOverrideTag("RenderType", "Transparent");
+        pathMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        pathMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        pathMat.SetInt("_ZWrite", 0);
+        pathMat.SetFloat("_Cull", 0f); // double-sided
+        pathMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 1;
+        pathMR.sharedMaterial = pathMat;
+        pathMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        pathMesh = new Mesh { name = "PathDashed" };
+        pathMF.sharedMesh = pathMesh;
+    }
+
+    void BuildDashedRibbon(float consumedDist)
+    {
+        BuildDashedRibbonInto(pathMesh, journeyWaypoints, journeyCumulDist, consumedDist);
+    }
+
+    /// <summary>
+    /// Build a dashed ribbon mesh into the given mesh from waypoints.
+    /// Dashes are anchored to world-space positions; consumedDist clips
+    /// the front so the line is eaten as the drone advances.
+    /// </summary>
+    void BuildDashedRibbonInto(Mesh targetMesh, List<Vector3> waypoints, List<float> cumulDist, float consumedDist)
+    {
+        var verts = new List<Vector3>();
+        var tris  = new List<int>();
+
+        for (int i = 0; i < waypoints.Count - 1; i++)
+        {
+            Vector3 a = waypoints[i];
+            Vector3 b = waypoints[i + 1];
+            float segStart = cumulDist[i];
+            float segEnd   = cumulDist[i + 1];
+            float segLen   = segEnd - segStart;
+            if (segLen < 0.001f) continue;
+
+            if (segEnd <= consumedDist) continue;
+
+            Vector3 dir = (b - a) / segLen;
+            dir.y = 0f;
+            Vector3 right = new Vector3(-dir.z, 0f, dir.x);
+            float hw = pathWidth * 0.5f;
+
+            float local = 0f;
+            while (local < segLen - 0.001f)
+            {
+                float worldDist = segStart + local;
+                float phase = worldDist % dashCycle;
+
+                if (phase < dashLen)
+                {
+                    float dashRemain = dashLen - phase;
+                    float segRemain  = segLen - local;
+                    float seg = Mathf.Min(dashRemain, segRemain);
+                    if (seg < 0.001f) { local += 0.001f; continue; }
+                    float dStart = worldDist;
+                    float dEnd   = worldDist + seg;
+
+                    if (dEnd > consumedDist)
+                    {
+                        float clampStart = Mathf.Max(dStart, consumedDist);
+                        Vector3 p0 = a + dir * (clampStart - segStart);
+                        Vector3 p1 = a + dir * (dEnd - segStart);
+
+                        int vi = verts.Count;
+                        verts.Add(p0 - right * hw);
+                        verts.Add(p0 + right * hw);
+                        verts.Add(p1 - right * hw);
+                        verts.Add(p1 + right * hw);
+
+                        tris.Add(vi);     tris.Add(vi + 2); tris.Add(vi + 1);
+                        tris.Add(vi + 1); tris.Add(vi + 2); tris.Add(vi + 3);
+                    }
+
+                    local += seg;
+                }
+                else
+                {
+                    float gapRemain = dashCycle - phase;
+                    local += Mathf.Max(Mathf.Min(gapRemain, segLen - local), 0.001f);
+                }
+            }
+        }
+
+        targetMesh.Clear();
+        if (verts.Count > 0)
+        {
+            targetMesh.SetVertices(verts);
+            targetMesh.SetTriangles(tris, 0);
+            targetMesh.RecalculateBounds();
+        }
+    }
+
+    // ── screen-space step bars ────────────────
+
+    static void EnsureStepBarCanvas()
+    {
+        if (stepBarCanvas != null) return;
+
+        var go = new GameObject("StepBarCanvas");
+        Object.DontDestroyOnLoad(go);
+        stepBarCanvas = go.AddComponent<Canvas>();
+        stepBarCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        stepBarCanvas.sortingOrder = 5;
+
+        stepBarScaler = go.AddComponent<CanvasScaler>();
+        stepBarScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        stepBarScaler.referenceResolution = new Vector2(1920, 1080);
+        stepBarScaler.matchWidthOrHeight = 0.5f;
+    }
+
+    void BuildWorldStepBars(List<Vector2Int> newPath)
+    {
+        DestroyWorldStepBars();
+        if (newPath == null || newPath.Count == 0) return;
+
+        EnsureStepBarCanvas();
+
+        Vector2Int prev = CurrentRoom;
+        int stepIdx = 0;
+
+        foreach (var room in newPath)
+        {
+            // Travel step bar at passage midpoint (slightly elevated for projection)
+            var (midA, midB) = map.PassageEndpoints(prev, room);
+            Vector3 passageMid = (midA + midB) * 0.5f;
+            CreateStepBar(new Vector3(passageMid.x, 0.5f, passageMid.z), stepIdx);
+            stepIdx++;
+            prev = room;
+        }
+
+        // Scan step bar at destination room center
+        var finalTile = fog?.GetTile(newPath[newPath.Count - 1]);
+        if (finalTile != null && finalTile.State == FogState.Unknown)
+        {
+            Vector3 rc = map.HexCenter(newPath[newPath.Count - 1]);
+            CreateStepBar(new Vector3(rc.x, 0.5f, rc.z), stepIdx);
+        }
+    }
+
+    void CreateStepBar(Vector3 worldPos, int idx)
+    {
+        EnsureStepBarCanvas();
+
+        var bar = new WorldStepBar();
+        bar.worldPos = worldPos;
+
+        // Root container
+        bar.root = new GameObject($"StepBar_{DroneName}_{idx}");
+        bar.root.transform.SetParent(stepBarCanvas.transform, false);
+        bar.rect = bar.root.AddComponent<RectTransform>();
+        bar.rect.sizeDelta = new Vector2(barUIWidth, barUIHeight + 18f);
+
+        // Background bar
+        var bgGO = new GameObject("Bg");
+        bgGO.transform.SetParent(bar.root.transform, false);
+        bar.bgImage = bgGO.AddComponent<Image>();
+        bar.bgImage.color = new Color(0.02f, 0.04f, 0.08f, 0.88f);
+        var bgRT = bgGO.GetComponent<RectTransform>();
+        bgRT.anchorMin = new Vector2(0, 0);
+        bgRT.anchorMax = new Vector2(1, 0);
+        bgRT.pivot = new Vector2(0.5f, 0);
+        bgRT.offsetMin = new Vector2(0, 0);
+        bgRT.offsetMax = new Vector2(0, barUIHeight);
+
+        // Fill bar
+        var fillGO = new GameObject("Fill");
+        fillGO.transform.SetParent(bgGO.transform, false);
+        bar.fillImage = fillGO.AddComponent<Image>();
+        bar.fillImage.color = new Color(0f, 0.85f, 1f, 0.9f);
+        bar.fillRect = fillGO.GetComponent<RectTransform>();
+        bar.fillRect.anchorMin = new Vector2(0, 0);
+        bar.fillRect.anchorMax = new Vector2(0, 1);
+        bar.fillRect.pivot = new Vector2(0, 0.5f);
+        float inset = 2f;
+        bar.fillRect.offsetMin = new Vector2(inset, inset);
+        bar.fillRect.offsetMax = new Vector2(inset, -inset);
+
+        // Label text (step name — above the bar)
+        var labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(bar.root.transform, false);
+        bar.labelText = labelGO.AddComponent<Text>();
+        bar.labelText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (bar.labelText.font == null)
+            bar.labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        bar.labelText.fontSize = 14;
+        bar.labelText.fontStyle = FontStyle.Bold;
+        bar.labelText.alignment = TextAnchor.LowerCenter;
+        bar.labelText.color = new Color(0f, 0.85f, 1f, 1f);
+        bar.labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        bar.labelText.verticalOverflow = VerticalWrapMode.Overflow;
+        var lblRT = labelGO.GetComponent<RectTransform>();
+        lblRT.anchorMin = new Vector2(0, 1);
+        lblRT.anchorMax = new Vector2(1, 1);
+        lblRT.pivot = new Vector2(0.5f, 0);
+        lblRT.offsetMin = new Vector2(0, 0);
+        lblRT.offsetMax = new Vector2(0, 16f);
+
+        // Time text (elapsed/total — inside the bar)
+        var timeGO = new GameObject("Time");
+        timeGO.transform.SetParent(bgGO.transform, false);
+        bar.timeText = timeGO.AddComponent<Text>();
+        bar.timeText.font = bar.labelText.font;
+        bar.timeText.fontSize = 12;
+        bar.timeText.fontStyle = FontStyle.Bold;
+        bar.timeText.alignment = TextAnchor.MiddleCenter;
+        bar.timeText.color = Color.white;
+        bar.timeText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        var timeRT = timeGO.GetComponent<RectTransform>();
+        timeRT.anchorMin = Vector2.zero;
+        timeRT.anchorMax = Vector2.one;
+        timeRT.offsetMin = Vector2.zero;
+        timeRT.offsetMax = Vector2.zero;
+
+        // Outline for pop
+        var outline = bgGO.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0.6f, 0.9f, 0.5f);
+        outline.effectDistance = new Vector2(1, -1);
+
+        worldStepBars.Add(bar);
+    }
+
+    void UpdateWorldStepBars()
+    {
+        Camera cam = Camera.main;
+
+        for (int i = 0; i < worldStepBars.Count; i++)
+        {
+            var bar = worldStepBars[i];
+            if (bar.root == null) continue;
+
+            bool active = journeyIdx >= 0 && i < journeyPlan.Count;
+            bar.root.SetActive(active);
+            if (!active) continue;
+
+            // Project world position to screen, then to canvas
+            if (cam != null)
+            {
+                Vector3 screen = cam.WorldToScreenPoint(bar.worldPos);
+                if (screen.z > 0)
+                {
+                    // Convert screen coords to canvas coords
+                    RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        stepBarCanvas.transform as RectTransform, screen, null, out var canvasPos);
+                    bar.rect.localPosition = canvasPos;
+                    bar.root.SetActive(true);
+                }
+                else
+                {
+                    bar.root.SetActive(false);
+                    continue;
+                }
+            }
+
+            float progress = GetJourneyStepProgress(i);
+            float elapsed = GetJourneyStepElapsed(i);
+            float total = journeyPlan[i].duration;
+            string lbl = journeyPlan[i].label;
+
+            bool isDone = i < journeyIdx;
+            bool isActive = i == journeyIdx;
+
+            // Fill width
+            if (bar.fillRect != null)
+            {
+                float fillW = (barUIWidth - 4f) * Mathf.Clamp01(progress);
+                bar.fillRect.offsetMax = new Vector2(2f + fillW, -2f);
+            }
+
+            // Colors
+            Color fillCol, labelCol;
+            if (isDone)
+            {
+                fillCol = new Color(0.15f, 0.55f, 0.15f, 0.85f);
+                labelCol = new Color(0.3f, 0.75f, 0.3f, 0.7f);
+            }
+            else if (isActive)
+            {
+                fillCol = new Color(0f, 0.85f, 1f, 0.9f);
+                labelCol = new Color(0f, 0.85f, 1f, 1f);
+            }
+            else
+            {
+                fillCol = new Color(0.25f, 0.35f, 0.45f, 0.55f);
+                labelCol = new Color(0.5f, 0.6f, 0.7f, 0.6f);
+            }
+
+            if (bar.fillImage != null) bar.fillImage.color = fillCol;
+            if (bar.bgImage != null)
+                bar.bgImage.color = isActive
+                    ? new Color(0.02f, 0.04f, 0.08f, 0.88f)
+                    : new Color(0.02f, 0.04f, 0.08f, 0.55f);
+
+            // Label
+            if (bar.labelText != null)
+            {
+                bar.labelText.text = isDone ? $"✓ {lbl}" : lbl;
+                bar.labelText.color = labelCol;
+            }
+
+            // Time
+            if (bar.timeText != null)
+            {
+                if (isDone)
+                    bar.timeText.text = "";
+                else if (isActive)
+                    bar.timeText.text = $"{elapsed:F1}s / {total:F1}s";
+                else
+                    bar.timeText.text = $"{total:F1}s";
+                bar.timeText.color = Color.white;
+            }
+        }
+    }
+
+    void DestroyWorldStepBars()
+    {
+        foreach (var bar in worldStepBars)
+        {
+            if (bar.root != null) Destroy(bar.root);
+        }
+        worldStepBars.Clear();
+    }
+
+    // ── preview path helpers ─────────────────
+
+    void EnsurePreviewLine()
+    {
+        if (previewLineGO != null) return;
+
+        previewLineGO = new GameObject("PreviewLine_" + DroneName);
+        previewMF = previewLineGO.AddComponent<MeshFilter>();
+        previewMR = previewLineGO.AddComponent<MeshRenderer>();
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Unlit/Color");
+        previewMat = new Material(sh);
+        Color col = new Color(1f, 0.75f, 0f, 0.4f);
+        previewMat.color = col;
+        previewMat.SetColor("_BaseColor", col);
+        previewMat.SetFloat("_Surface", 1f);
+        previewMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        previewMat.SetOverrideTag("RenderType", "Transparent");
+        previewMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        previewMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        previewMat.SetInt("_ZWrite", 0);
+        previewMat.SetFloat("_Cull", 0f);
+        previewMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 1;
+        previewMR.sharedMaterial = previewMat;
+        previewMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        previewMesh = new Mesh { name = "PreviewDashed" };
+        previewMF.sharedMesh = previewMesh;
+    }
+
+    void CreatePreviewStepBar(Vector3 worldPos, int idx)
+    {
+        EnsureStepBarCanvas();
+
+        var bar = new WorldStepBar();
+        bar.worldPos = worldPos;
+
+        bar.root = new GameObject($"PreviewBar_{DroneName}_{idx}");
+        bar.root.transform.SetParent(stepBarCanvas.transform, false);
+        bar.rect = bar.root.AddComponent<RectTransform>();
+        bar.rect.sizeDelta = new Vector2(barUIWidth, barUIHeight + 18f);
+
+        // Background
+        var bgGO = new GameObject("Bg");
+        bgGO.transform.SetParent(bar.root.transform, false);
+        bar.bgImage = bgGO.AddComponent<Image>();
+        bar.bgImage.color = new Color(0.08f, 0.06f, 0.01f, 0.75f);
+        var bgRT = bgGO.GetComponent<RectTransform>();
+        bgRT.anchorMin = new Vector2(0, 0);
+        bgRT.anchorMax = new Vector2(1, 0);
+        bgRT.pivot = new Vector2(0.5f, 0);
+        bgRT.offsetMin = new Vector2(0, 0);
+        bgRT.offsetMax = new Vector2(0, barUIHeight);
+
+        // Fill (full width = total duration preview)
+        var fillGO = new GameObject("Fill");
+        fillGO.transform.SetParent(bgGO.transform, false);
+        bar.fillImage = fillGO.AddComponent<Image>();
+        bar.fillImage.color = new Color(1f, 0.75f, 0f, 0.45f);
+        bar.fillRect = fillGO.GetComponent<RectTransform>();
+        bar.fillRect.anchorMin = new Vector2(0, 0);
+        bar.fillRect.anchorMax = new Vector2(1, 1);
+        bar.fillRect.offsetMin = new Vector2(2, 2);
+        bar.fillRect.offsetMax = new Vector2(-2, -2);
+
+        // Label
+        var labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(bar.root.transform, false);
+        bar.labelText = labelGO.AddComponent<Text>();
+        bar.labelText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (bar.labelText.font == null)
+            bar.labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        bar.labelText.fontSize = 14;
+        bar.labelText.fontStyle = FontStyle.Bold;
+        bar.labelText.alignment = TextAnchor.LowerCenter;
+        bar.labelText.color = new Color(1f, 0.85f, 0.3f, 1f);
+        bar.labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        bar.labelText.verticalOverflow = VerticalWrapMode.Overflow;
+        var lblRT = labelGO.GetComponent<RectTransform>();
+        lblRT.anchorMin = new Vector2(0, 1);
+        lblRT.anchorMax = new Vector2(1, 1);
+        lblRT.pivot = new Vector2(0.5f, 0);
+        lblRT.offsetMin = new Vector2(0, 0);
+        lblRT.offsetMax = new Vector2(0, 16f);
+
+        // Time inside bar
+        var timeGO = new GameObject("Time");
+        timeGO.transform.SetParent(bgGO.transform, false);
+        bar.timeText = timeGO.AddComponent<Text>();
+        bar.timeText.font = bar.labelText.font;
+        bar.timeText.fontSize = 12;
+        bar.timeText.fontStyle = FontStyle.Bold;
+        bar.timeText.alignment = TextAnchor.MiddleCenter;
+        bar.timeText.color = Color.white;
+        bar.timeText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        var timeRT = timeGO.GetComponent<RectTransform>();
+        timeRT.anchorMin = Vector2.zero;
+        timeRT.anchorMax = Vector2.one;
+        timeRT.offsetMin = Vector2.zero;
+        timeRT.offsetMax = Vector2.zero;
+
+        // Outline
+        var outline = bgGO.AddComponent<Outline>();
+        outline.effectColor = new Color(1f, 0.75f, 0f, 0.5f);
+        outline.effectDistance = new Vector2(1, -1);
+
+        // Set text content from preview plan
+        if (idx < previewPlan.Count)
+        {
+            bar.labelText.text = previewPlan[idx].label;
+            bar.timeText.text = $"{previewPlan[idx].duration:F1}s";
+        }
+
+        previewStepBars.Add(bar);
+    }
+
+    void UpdatePreviewStepBars()
+    {
+        if (!isShowingPreview) return;
+
+        Camera mainCam = Camera.main;
+        for (int i = 0; i < previewStepBars.Count; i++)
+        {
+            var bar = previewStepBars[i];
+            if (bar.root == null) continue;
+
+            if (mainCam != null)
+            {
+                Vector3 screen = mainCam.WorldToScreenPoint(bar.worldPos);
+                if (screen.z > 0)
+                {
+                    RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        stepBarCanvas.transform as RectTransform, screen, null, out var canvasPos);
+                    bar.rect.localPosition = canvasPos;
+                    bar.root.SetActive(true);
+                }
+                else
+                {
+                    bar.root.SetActive(false);
+                }
+            }
+        }
+    }
+
+    void DestroyPreviewStepBars()
+    {
+        foreach (var bar in previewStepBars)
+        {
+            if (bar.root != null) Destroy(bar.root);
+        }
+        previewStepBars.Clear();
+    }
+
+    void OnDestroy()
+    {
+        if (pathLineGO != null) Destroy(pathLineGO);
+        if (previewLineGO != null) Destroy(previewLineGO);
+        DestroyWorldStepBars();
+        DestroyPreviewStepBars();
+    }
 
     // ── selection ring ───────────────────────
 

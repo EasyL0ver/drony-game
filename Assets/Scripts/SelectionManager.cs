@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
 using System.Collections.Generic;
 
 /// <summary>
@@ -48,8 +49,11 @@ public class SelectionManager : MonoBehaviour
         // Hover tracking
         UpdateHover(mousePos);
 
+        // Ignore input when clicking on UI
+        bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+
         // Left click: start drag
-        if (mouse.leftButton.wasPressedThisFrame)
+        if (mouse.leftButton.wasPressedThisFrame && !overUI)
         {
             dragStart = mousePos;
             isDragging = true;
@@ -67,7 +71,7 @@ public class SelectionManager : MonoBehaviour
         }
 
         // Right click: move order
-        if (mouse.rightButton.wasPressedThisFrame)
+        if (mouse.rightButton.wasPressedThisFrame && !overUI)
             IssueMoveOrder(mousePos);
     }
 
@@ -124,12 +128,37 @@ public class SelectionManager : MonoBehaviour
         RoomTile tile = RaycastTile(screenPos);
         if (tile != hoveredTile)
         {
+            // Clear old previews
+            ClearAllPreviews();
+
             if (hoveredTile != null)
                 hoveredTile.SetHovered(false);
             hoveredTile = tile;
             if (hoveredTile != null)
+            {
                 hoveredTile.SetHovered(true);
+                ShowPreviewsForTarget(hoveredTile.Coord);
+            }
         }
+    }
+
+    void ShowPreviewsForTarget(Vector2Int target)
+    {
+        foreach (var d in gm.Drones)
+        {
+            if (!d.IsSelected) continue;
+            var p = FindPath(d.CurrentRoom, target);
+            if (p != null && p.Count > 0)
+                d.ShowPreviewPath(p);
+            else
+                d.ClearPreviewPath();
+        }
+    }
+
+    void ClearAllPreviews()
+    {
+        foreach (var d in gm.Drones)
+            d.ClearPreviewPath();
     }
 
     RoomTile RaycastTile(Vector2 screenPos)
@@ -147,6 +176,7 @@ public class SelectionManager : MonoBehaviour
         RoomTile tile = RaycastTile(screenPos);
         if (tile == null) return;
 
+        ClearAllPreviews();
         tile.FlashMoveTarget();
         Vector2Int target = tile.Coord;
 
@@ -165,13 +195,50 @@ public class SelectionManager : MonoBehaviour
     {
         if (from == to) return null;
 
-        // Build adjacency
-        var adj = new Dictionary<Vector2Int, List<(Vector2Int neighbor, float cost)>>();
+        // Determine which rooms are traversable based on fog state.
+        // Known = Visible, Discovered, or Scanning.
+        // Unknown rooms are traversable only if connected to 2+ known rooms
+        // (their existence can be inferred). The destination is always allowed.
+        var fog = gm.fog;
+        var knownRooms = new HashSet<Vector2Int>();
+        var unknownRooms = new HashSet<Vector2Int>();
+
         foreach (var room in gm.hexMap.RoomList)
+        {
+            var tile = fog.GetTile(room);
+            if (tile != null && tile.State != FogState.Unknown)
+                knownRooms.Add(room);
+            else
+                unknownRooms.Add(room);
+        }
+
+        var traversable = new HashSet<Vector2Int>(knownRooms);
+
+        // Inferred rooms: unknown but connected to 2+ known rooms
+        foreach (var room in unknownRooms)
+        {
+            int knownNeighbors = 0;
+            foreach (var (a, b, _) in gm.hexMap.ConnectionList)
+            {
+                if (a == room && knownRooms.Contains(b)) knownNeighbors++;
+                else if (b == room && knownRooms.Contains(a)) knownNeighbors++;
+                if (knownNeighbors >= 2) break;
+            }
+            if (knownNeighbors >= 2)
+                traversable.Add(room);
+        }
+
+        // Destination is always allowed (so you can send a drone to scout)
+        traversable.Add(to);
+
+        // Build adjacency (only traversable rooms)
+        var adj = new Dictionary<Vector2Int, List<(Vector2Int neighbor, float cost)>>();
+        foreach (var room in traversable)
             adj[room] = new List<(Vector2Int, float)>();
 
         foreach (var (a, b, type) in gm.hexMap.ConnectionList)
         {
+            if (!traversable.Contains(a) || !traversable.Contains(b)) continue;
             float cost = TravelTime(type);
             adj[a].Add((b, cost));
             adj[b].Add((a, cost));
@@ -183,7 +250,7 @@ public class SelectionManager : MonoBehaviour
         var visited = new HashSet<Vector2Int>();
         var open    = new List<(float cost, Vector2Int room)>();
 
-        foreach (var room in gm.hexMap.RoomList)
+        foreach (var room in traversable)
         {
             dist[room] = float.MaxValue;
             prev[room] = null;
@@ -219,7 +286,7 @@ public class SelectionManager : MonoBehaviour
             }
         }
 
-        if (prev[to] == null) return null; // unreachable
+        if (!prev.ContainsKey(to) || prev[to] == null) return null; // unreachable
 
         var result = new List<Vector2Int>();
         var step = to;

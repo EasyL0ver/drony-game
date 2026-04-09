@@ -16,6 +16,7 @@ public class GameManager : MonoBehaviour
 
     [Header("Drone Settings")]
     [SerializeField] int startingDrones = 3;
+    [SerializeField] string[] droneNames = { "Hornet-1", "Hornet-2", "Hornet-3", "Hornet-4", "Hornet-5" };
 
     public List<DroneController> Drones { get; private set; } = new List<DroneController>();
 
@@ -52,11 +53,13 @@ public class GameManager : MonoBehaviour
         Drones = new List<DroneController>();
         for (int i = 0; i < startingDrones; i++)
         {
+            string droneName = i < droneNames.Length ? droneNames[i] : $"Drone-{i + 1}";
+
             var droneGO = new GameObject($"Drone_{i}");
             droneGO.transform.SetParent(transform, false);
 
             var controller = droneGO.AddComponent<DroneController>();
-            controller.Init(hexMap, fog, Vector2Int.zero);
+            controller.Init(hexMap, fog, Vector2Int.zero, droneName);
 
             var modelGO = new GameObject("Model");
             modelGO.transform.SetParent(droneGO.transform, false);
@@ -88,5 +91,11 @@ public class GameManager : MonoBehaviour
 
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.01f, 0.01f, 0.02f, 1f);
+
+        // ── drone status UI ──
+        var uiGO = new GameObject("DroneStatusUI");
+        uiGO.transform.SetParent(transform, false);
+        var statusUI = uiGO.AddComponent<DroneStatusUI>();
+        statusUI.Init(Drones);
     }
 }

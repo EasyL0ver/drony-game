@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-public enum FogState { Unknown, Discovered, Visible }
+public enum FogState { Unknown, Scanning, Discovered, Visible }
 
 /// <summary>
 /// A connection from this tile to a neighbor, through a specific passage type.
@@ -24,6 +24,11 @@ public class RoomTile : MonoBehaviour
     public Vector2Int Coord { get; private set; }
     public HexMapGenerator.RoomSize Size { get; private set; }
     public FogState State { get; private set; } = FogState.Unknown;
+    public float ScanProgress => scanProgress;
+    public float ScanTimeLeft => State == FogState.Scanning
+        ? scanDuration * (1f - scanProgress) : 0f;
+    public float ScanElapsed => scanDuration * scanProgress;
+    public float ScanTotalTime => scanDuration;
 
     public List<TileConnection> Connections { get; private set; } = new List<TileConnection>();
 
@@ -47,6 +52,10 @@ public class RoomTile : MonoBehaviour
     const float flashDuration = 0.5f;
     float fogMeshY;
 
+    // Scanning
+    float scanDuration = 3f;
+    float scanProgress;
+
     // Config (set once by builder)
     float fogElevation;
     float outlineRadius;
@@ -55,12 +64,14 @@ public class RoomTile : MonoBehaviour
 
     public void Init(Vector2Int coord, HexMapGenerator.RoomSize size,
                      HexMapGenerator map, float fogElev, float outlineR,
-                     Material unknown, Material discovered, Material outline)
+                     Material unknown, Material discovered, Material outline,
+                     float scanDur = 3f)
     {
         Coord = coord;
         Size = size;
         fogElevation = fogElev;
         outlineRadius = outlineR;
+        scanDuration = scanDur;
         matUnknown = unknown;
         matDiscovered = discovered;
         matOutline = outline;
@@ -93,8 +104,46 @@ public class RoomTile : MonoBehaviour
     public void OnDroneEnter()
     {
         droneCount++;
-        SetState(FogState.Visible);
+    }
 
+    /// <summary>
+    /// Call when a drone physically arrives in this room (not just heading toward it).
+    /// Unknown rooms begin scanning; Discovered rooms go straight to Visible.
+    /// </summary>
+    public void OnDroneArrived()
+    {
+        switch (State)
+        {
+            case FogState.Unknown:
+                scanProgress = 0f;
+                SetState(FogState.Scanning);
+                foreach (var conn in Connections)
+                {
+                    if (conn.neighbor.State == FogState.Unknown)
+                        conn.neighbor.ShowOutline(true);
+                }
+                break;
+            case FogState.Scanning:
+                // Already scanning — additional drone helps (resumes if paused)
+                break;
+            case FogState.Discovered:
+                SetState(FogState.Visible);
+                foreach (var conn in Connections)
+                {
+                    if (conn.neighbor.State == FogState.Unknown)
+                        conn.neighbor.ShowOutline(true);
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Instantly reveal this tile — used for the starting base room.
+    /// </summary>
+    public void RevealImmediate()
+    {
+        scanProgress = 1f;
+        SetState(FogState.Visible);
         foreach (var conn in Connections)
         {
             if (conn.neighbor.State == FogState.Unknown)
@@ -131,6 +180,10 @@ public class RoomTile : MonoBehaviour
                 fogRenderer.enabled = true;
                 fogRenderer.sharedMaterial = matUnknown;
                 ShowOutline(false);
+                break;
+            case FogState.Scanning:
+                fogRenderer.enabled = true;
+                fogRenderer.sharedMaterial = matUnknown;
                 break;
             case FogState.Discovered:
                 fogRenderer.enabled = true;
@@ -255,6 +308,21 @@ public class RoomTile : MonoBehaviour
 
             if (flashTimer <= 0f && moveFlash != null)
                 moveFlash.SetActive(false);
+        }
+
+        // Scanning progress
+        if (State == FogState.Scanning)
+        {
+            if (droneCount > 0)
+            {
+                scanProgress += Time.deltaTime / scanDuration;
+                if (scanProgress >= 1f)
+                {
+                    scanProgress = 1f;
+                    SetState(FogState.Visible);
+                    return;
+                }
+            }
         }
     }
 
