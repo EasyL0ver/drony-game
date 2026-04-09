@@ -337,7 +337,7 @@ public class DroneController : MonoBehaviour
         if (newPath.Count > 0)
         {
             journeyIdx = 0;
-            Vector2Int prev = CurrentRoom;
+            prev = CurrentRoom;
             foreach (var room in newPath)
             {
                 var ptype = GetPassageType(prev, room);
