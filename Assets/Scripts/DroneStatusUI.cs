@@ -31,6 +31,10 @@ public class DroneStatusUI : MonoBehaviour
         // Discrete energy segments
         public RectTransform energyContainer;
         public List<Image> energySegments;
+        // Total journey progress bar
+        public Image journeyBarBg;
+        public Image journeyBarFill;
+        public Text journeyText;
         // Journey step rows
         public RectTransform stepsContainer;
         public List<StepRow> stepRows;
@@ -68,11 +72,22 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color segEmptyCol    = new Color(0.10f, 0.10f, 0.12f, 0.5f);
     static readonly Color segPreviewCol  = new Color(1f, 0.55f, 0f, 0.7f);
 
+    // Journey total bar colors
+    static readonly Color journeyBarBgCol   = new Color(0.06f, 0.06f, 0.08f, 0.9f);
+    static readonly Color journeyBarFillCol = new Color(0f, 0.65f, 0.85f, 0.75f);
+    static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
+
     const float baseCardH = 48f;
+    const float journeyBarH = 12f;
     const float stepRowH  = 16f;
     const float stepGap   = 2f;
 
     Font uiFont;
+
+    // Bottom-center hover tooltip
+    GameObject hoverTooltipGO;
+    Text hoverTooltipText;
+    Image hoverTooltipBg;
 
     // ── public API ───────────────────────────
 
@@ -218,7 +233,32 @@ public class DroneStatusUI : MonoBehaviour
         pctRT.offsetMin = new Vector2(-40, -44);
         pctRT.offsetMax = new Vector2(-8, -26);
 
-        // ── Steps container — below energy, populated dynamically ──
+        // ── Row 3: total journey progress bar ──
+        var jBarGO = MakeImage(cardGO.transform, "JourneyBar", journeyBarBgCol);
+        var jBarRT = jBarGO.GetComponent<RectTransform>();
+        jBarRT.anchorMin = new Vector2(0, 1);
+        jBarRT.anchorMax = new Vector2(1, 1);
+        jBarRT.offsetMin = new Vector2(8, -(baseCardH - 2 + journeyBarH));
+        jBarRT.offsetMax = new Vector2(-8, -(baseCardH - 2));
+
+        var jFillGO = MakeImage(jBarGO.transform, "Fill", journeyBarFillCol);
+        var jFillRT = jFillGO.GetComponent<RectTransform>();
+        jFillRT.anchorMin = Vector2.zero;
+        jFillRT.anchorMax = new Vector2(0, 1);
+        jFillRT.offsetMin = Vector2.zero;
+        jFillRT.offsetMax = Vector2.zero;
+
+        var jTextGO = MakeText(jBarGO.transform, "JText", "", 9, journeyTextCol, TextAnchor.MiddleCenter);
+        var jTextRT = jTextGO.GetComponent<RectTransform>();
+        jTextRT.anchorMin = Vector2.zero;
+        jTextRT.anchorMax = Vector2.one;
+        jTextRT.offsetMin = Vector2.zero;
+        jTextRT.offsetMax = Vector2.zero;
+
+        // Initially hidden
+        jBarGO.SetActive(false);
+
+        // ── Steps container — below journey bar, populated dynamically ──
         var stepsGO = new GameObject("Steps");
         stepsGO.transform.SetParent(cardGO.transform, false);
         var stepsRT = stepsGO.AddComponent<RectTransform>();
@@ -238,6 +278,9 @@ public class DroneStatusUI : MonoBehaviour
             cardOutline = outline,
             energyContainer = energyContRT,
             energySegments = segments,
+            journeyBarBg = jBarGO.GetComponent<Image>(),
+            journeyBarFill = jFillGO.GetComponent<Image>(),
+            journeyText = jTextGO.GetComponent<Text>(),
             stepsContainer = stepsRT,
             stepRows = new List<StepRow>(),
             lastStepCount = 0,
@@ -371,7 +414,22 @@ public class DroneStatusUI : MonoBehaviour
                 row.label.text = prefix + step.label + costTag;
                 row.time.text = $"{elapsed:F1}s / {step.duration:F1}s";
             }
+
+            // ── Total journey progress bar ──
+            bool hasJourney = stepCount > 0;
+            c.journeyBarBg.gameObject.SetActive(hasJourney);
+            if (hasJourney)
+            {
+                float jProg = c.drone.JourneyOverallProgress;
+                c.journeyBarFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(jProg), 1);
+                float jElapsed = c.drone.JourneyElapsedTime;
+                float jTotal = c.drone.JourneyTotalTime;
+                c.journeyText.text = $"{jElapsed:F1}s / {jTotal:F1}s  ⚡{c.drone.JourneyEnergyCost}";
+            }
         }
+
+        // ── Bottom hover tooltip ──
+        UpdateHoverTooltip();
     }
 
     void RebuildStepRows(ref DroneCard c, int count)
@@ -433,9 +491,11 @@ public class DroneStatusUI : MonoBehaviour
         }
 
         // Resize container and card
+        float jBarExtra = count > 0 ? journeyBarH + 4f : 0f;
         float stepsH = count > 0 ? count * stepRowH + (count - 1) * stepGap + stepGap : 0;
         c.stepsContainer.sizeDelta = new Vector2(0, stepsH);
-        float totalH = baseCardH + stepsH;
+        c.stepsContainer.anchoredPosition = new Vector2(0, -(baseCardH + jBarExtra));
+        float totalH = baseCardH + jBarExtra + stepsH;
         c.layoutElem.preferredHeight = totalH;
         c.layoutElem.minHeight = totalH;
         c.lastStepCount = count;
@@ -457,6 +517,85 @@ public class DroneStatusUI : MonoBehaviour
     }
 
     // ── UI helpers ───────────────────────────
+
+    void EnsureHoverTooltip()
+    {
+        if (hoverTooltipGO != null) return;
+
+        // Find the status canvas (first canvas child)
+        var canvas = GetComponentInChildren<Canvas>();
+        if (canvas == null) return;
+
+        hoverTooltipGO = new GameObject("HoverTooltip");
+        hoverTooltipGO.transform.SetParent(canvas.transform, false);
+        var rt = hoverTooltipGO.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0);
+        rt.anchorMax = new Vector2(0.5f, 0);
+        rt.pivot = new Vector2(0.5f, 0);
+        rt.anchoredPosition = new Vector2(0, 16);
+        rt.sizeDelta = new Vector2(400, 36);
+
+        hoverTooltipBg = hoverTooltipGO.AddComponent<Image>();
+        hoverTooltipBg.color = new Color(0.03f, 0.03f, 0.06f, 0.88f);
+
+        var outl = hoverTooltipGO.AddComponent<Outline>();
+        outl.effectColor = new Color(0f, 0.85f, 1f, 0.3f);
+        outl.effectDistance = new Vector2(1, -1);
+
+        var txtGO = MakeText(hoverTooltipGO.transform, "Text", "", 14, Color.white, TextAnchor.MiddleCenter);
+        hoverTooltipText = txtGO.GetComponent<Text>();
+        hoverTooltipText.fontStyle = FontStyle.Bold;
+        hoverTooltipText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        var txtRT = txtGO.GetComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(8, 0);
+        txtRT.offsetMax = new Vector2(-8, 0);
+
+        hoverTooltipGO.SetActive(false);
+    }
+
+    void UpdateHoverTooltip()
+    {
+        EnsureHoverTooltip();
+        if (hoverTooltipGO == null) return;
+
+        // Gather preview info from all selected drones
+        float totalTime = 0f;
+        int totalEnergy = 0;
+        bool anyPreview = false;
+        bool anyOverBudget = false;
+
+        foreach (var c in cards)
+        {
+            if (c.drone == null || !c.drone.IsSelected) continue;
+            if (!c.drone.IsShowingPreview) continue;
+
+            anyPreview = true;
+            totalTime += c.drone.PreviewTotalTime;
+            totalEnergy += c.drone.PreviewEnergyCost;
+            if (c.drone.PreviewExceedsEnergy) anyOverBudget = true;
+        }
+
+        if (!anyPreview)
+        {
+            hoverTooltipGO.SetActive(false);
+            return;
+        }
+
+        hoverTooltipGO.SetActive(true);
+
+        if (anyOverBudget)
+        {
+            hoverTooltipText.text = $"<color=#FF3333>NOT ENOUGH ENERGY</color>   ⏱ {totalTime:F1}s   ⚡{totalEnergy}";
+            hoverTooltipBg.color = new Color(0.12f, 0.02f, 0.02f, 0.90f);
+        }
+        else
+        {
+            hoverTooltipText.text = $"⏱ {totalTime:F1}s   ⚡{totalEnergy}";
+            hoverTooltipBg.color = new Color(0.03f, 0.03f, 0.06f, 0.88f);
+        }
+    }
 
     GameObject MakeImage(Transform parent, string name, Color color)
     {

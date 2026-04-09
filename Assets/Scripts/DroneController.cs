@@ -172,6 +172,41 @@ public class DroneController : MonoBehaviour
     public IReadOnlyList<JourneyStep> Journey => journeyPlan;
     public int JourneyCurrentIndex => journeyIdx;
     public IReadOnlyList<JourneyStep> PreviewJourney => previewPlan;
+    public bool IsShowingPreview => isShowingPreview;
+
+    /// <summary>Total duration of all journey steps.</summary>
+    public float JourneyTotalTime
+    {
+        get { float t = 0; foreach (var s in journeyPlan) t += s.duration; return t; }
+    }
+
+    /// <summary>Elapsed time across all journey steps.</summary>
+    public float JourneyElapsedTime
+    {
+        get
+        {
+            float t = 0;
+            for (int i = 0; i < journeyPlan.Count; i++)
+                t += GetJourneyStepElapsed(i);
+            return t;
+        }
+    }
+
+    /// <summary>Overall journey progress 0..1.</summary>
+    public float JourneyOverallProgress
+    {
+        get
+        {
+            float total = JourneyTotalTime;
+            return total > 0 ? Mathf.Clamp01(JourneyElapsedTime / total) : 0f;
+        }
+    }
+
+    /// <summary>Total duration of the preview journey.</summary>
+    public float PreviewTotalTime
+    {
+        get { float t = 0; foreach (var s in previewPlan) t += s.duration; return t; }
+    }
 
     /// <summary>Total energy cost of remaining journey steps (current + future).</summary>
     public int JourneyEnergyCost
