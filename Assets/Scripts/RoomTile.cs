@@ -99,9 +99,9 @@ public class RoomTile : MonoBehaviour
         RModel.OnDroneEnter();
     }
 
-    public void OnDroneArrived()
+    public void OnDroneArrived(bool canScan = true)
     {
-        bool scanStarted = RModel.OnDroneArrived();
+        bool scanStarted = RModel.OnDroneArrived(canScan);
         // Show outlines on unknown neighbors when we reveal/scan
         if (State == FogState.Scanning || State == FogState.Visible)
         {

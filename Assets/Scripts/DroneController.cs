@@ -600,7 +600,7 @@ public class DroneController : MonoBehaviour
                 // Now trigger scan / reveal
                 var arrivedTile = fog?.GetTile(CurrentRoom);
                 if (arrivedTile != null)
-                    arrivedTile.OnDroneArrived();
+                    arrivedTile.OnDroneArrived(Model.CanScan);
             }
             return;
         }
@@ -638,7 +638,7 @@ public class DroneController : MonoBehaviour
 
                 // No scan needed — trigger immediately
                 if (arrivedTile != null)
-                    arrivedTile.OnDroneArrived();
+                    arrivedTile.OnDroneArrived(Model.CanScan);
             }
 
             if (path.Count > 0)

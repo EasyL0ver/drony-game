@@ -61,14 +61,15 @@ public class RoomModel
 
     /// <summary>
     /// A drone physically arrives in this room.
-    /// Unknown rooms begin scanning; Discovered rooms go to Visible.
+    /// Unknown rooms begin scanning only if canScan is true; Discovered rooms go to Visible.
     /// Returns true if scanning started.
     /// </summary>
-    public bool OnDroneArrived()
+    public bool OnDroneArrived(bool canScan = true)
     {
         switch (State)
         {
             case FogState.Unknown:
+                if (!canScan) return false;
                 ScanElapsed = 0f;
                 SetState(FogState.Scanning);
                 return true;
