@@ -193,121 +193,12 @@ public class SelectionManager : MonoBehaviour
 
     List<Vector2Int> FindPath(Vector2Int from, Vector2Int to)
     {
-        if (from == to) return null;
-
-        // Determine which rooms are traversable based on fog state.
-        // Known = Visible, Discovered, or Scanning.
-        // Unknown rooms are traversable only if connected to 2+ known rooms
-        // (their existence can be inferred). The destination is always allowed.
         var fog = gm.fog;
-        var knownRooms = new HashSet<Vector2Int>();
-        var unknownRooms = new HashSet<Vector2Int>();
-
-        foreach (var room in gm.hexMap.RoomList)
+        return gm.hexMap.Model.FindPath(from, to, coord =>
         {
-            var tile = fog.GetTile(room);
-            if (tile != null && tile.State != FogState.Unknown)
-                knownRooms.Add(room);
-            else
-                unknownRooms.Add(room);
-        }
-
-        var traversable = new HashSet<Vector2Int>(knownRooms);
-
-        // Inferred rooms: unknown but connected to 2+ known rooms
-        foreach (var room in unknownRooms)
-        {
-            int knownNeighbors = 0;
-            foreach (var (a, b, _) in gm.hexMap.ConnectionList)
-            {
-                if (a == room && knownRooms.Contains(b)) knownNeighbors++;
-                else if (b == room && knownRooms.Contains(a)) knownNeighbors++;
-                if (knownNeighbors >= 2) break;
-            }
-            if (knownNeighbors >= 2)
-                traversable.Add(room);
-        }
-
-        // Destination is always allowed (so you can send a drone to scout)
-        traversable.Add(to);
-
-        // Build adjacency (only traversable rooms)
-        var adj = new Dictionary<Vector2Int, List<(Vector2Int neighbor, float cost)>>();
-        foreach (var room in traversable)
-            adj[room] = new List<(Vector2Int, float)>();
-
-        foreach (var (a, b, type) in gm.hexMap.ConnectionList)
-        {
-            if (!traversable.Contains(a) || !traversable.Contains(b)) continue;
-            float cost = TravelTime(type);
-            adj[a].Add((b, cost));
-            adj[b].Add((a, cost));
-        }
-
-        // Dijkstra — simple list PQ (fine for <50 rooms)
-        var dist    = new Dictionary<Vector2Int, float>();
-        var prev    = new Dictionary<Vector2Int, Vector2Int?>();
-        var visited = new HashSet<Vector2Int>();
-        var open    = new List<(float cost, Vector2Int room)>();
-
-        foreach (var room in traversable)
-        {
-            dist[room] = float.MaxValue;
-            prev[room] = null;
-        }
-
-        dist[from] = 0f;
-        open.Add((0f, from));
-
-        while (open.Count > 0)
-        {
-            int minIdx = 0;
-            for (int i = 1; i < open.Count; i++)
-                if (open[i].cost < open[minIdx].cost) minIdx = i;
-
-            var (curCost, cur) = open[minIdx];
-            open.RemoveAt(minIdx);
-
-            if (visited.Contains(cur)) continue;
-            visited.Add(cur);
-            if (cur == to) break;
-
-            if (!adj.ContainsKey(cur)) continue;
-            foreach (var (neighbor, edgeCost) in adj[cur])
-            {
-                if (visited.Contains(neighbor)) continue;
-                float nd = curCost + edgeCost;
-                if (nd < dist[neighbor])
-                {
-                    dist[neighbor] = nd;
-                    prev[neighbor] = cur;
-                    open.Add((nd, neighbor));
-                }
-            }
-        }
-
-        if (!prev.ContainsKey(to) || prev[to] == null) return null; // unreachable
-
-        var result = new List<Vector2Int>();
-        var step = to;
-        while (step != from)
-        {
-            result.Add(step);
-            step = prev[step].Value;
-        }
-        result.Reverse();
-        return result;
-    }
-
-    float TravelTime(HexMapGenerator.PassageType type)
-    {
-        switch (type)
-        {
-            case HexMapGenerator.PassageType.Corridor: return 2f;
-            case HexMapGenerator.PassageType.Duct:     return 4f;
-            case HexMapGenerator.PassageType.Vent:     return 6f;
-            default: return 2f;
-        }
+            var tile = fog.GetTile(coord);
+            return tile != null ? tile.State : FogState.Unknown;
+        });
     }
 
     // ── selection box GUI ────────────────────

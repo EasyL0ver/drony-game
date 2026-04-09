@@ -8,8 +8,13 @@ using System.Collections.Generic;
 /// </summary>
 public class HexMapGenerator : MonoBehaviour
 {
-    public enum PassageType { Corridor, Duct, Vent }
-    public enum RoomSize    { Large, Medium, Small }
+    // Enums now in GameEnums.cs — aliased for backward compatibility in existing code
+    public static readonly PassageType PassageType_Corridor = PassageType.Corridor;
+    public static readonly PassageType PassageType_Duct = PassageType.Duct;
+    public static readonly PassageType PassageType_Vent = PassageType.Vent;
+    public static readonly RoomSize RoomSize_Large = RoomSize.Large;
+    public static readonly RoomSize RoomSize_Medium = RoomSize.Medium;
+    public static readonly RoomSize RoomSize_Small = RoomSize.Small;
 
     [Header("Map Layout")]
     [SerializeField] int roomCount = 18;
@@ -30,8 +35,10 @@ public class HexMapGenerator : MonoBehaviour
     [SerializeField] float ventPipeRadius = 0.22f;
 
     // Public layout data — populated after Generate()
-    public List<Vector2Int> RoomList { get; private set; }
-    public Dictionary<Vector2Int, RoomSize> RoomSizeMap { get; private set; }
+    // These delegate to MapModel for backward compatibility
+    public MapModel Model { get; private set; }
+    public List<Vector2Int> RoomList => Model.RoomList;
+    public Dictionary<Vector2Int, RoomSize> RoomSizeMap => Model.RoomSizes;
     public List<(Vector2Int a, Vector2Int b, PassageType type)> ConnectionList { get; private set; }
     public float WallHeight => wallHeight;
     public float HexRadiusValue => hexRadius;
@@ -72,18 +79,19 @@ public class HexMapGenerator : MonoBehaviour
         while (transform.childCount > 0)
             DestroyImmediate(transform.GetChild(0).gameObject);
 
-        var rng = new System.Random(seed);
+        // --- 1. Layout via MapModel ---
+        Model = new MapModel(roomCount, seed, hexRadius, gridScale, mediumScale, smallScale,
+                             wallHeight, corridorWidth, ductWidth, ventPipeRadius);
+        Model.GenerateLayout();
 
-        // --- 1. Layout ---
-        HashSet<Vector2Int> rooms;
-        Dictionary<Vector2Int, RoomSize> roomSizes;
-        List<(Vector2Int a, Vector2Int b, PassageType type)> connections;
-        BuildLayout(rng, out rooms, out roomSizes, out connections);
+        // Build tuple list for backward compatibility
+        ConnectionList = new List<(Vector2Int, Vector2Int, PassageType)>();
+        foreach (var c in Model.Connections)
+            ConnectionList.Add((c.roomA, c.roomB, c.type));
 
-        // Store for external systems (fog of war, pathfinding, etc.)
-        RoomList = new List<Vector2Int>(rooms);
-        RoomSizeMap = roomSizes;
-        ConnectionList = connections;
+        var rooms = RoomList;
+        var roomSizes = RoomSizeMap;
+        var connections = ConnectionList;
 
         // --- 2. Open edges per room ---
         var openEdges = new Dictionary<Vector2Int, Dictionary<int, PassageInfo>>();

@@ -3,21 +3,28 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 
 /// <summary>
-/// Per-drone component: tracks current room, travel path, selection state.
-/// Movement is graph-based — drone hops room-to-room with visual lerp.
+/// Per-drone view component. Delegates game state to DroneModel,
+/// handles movement animation, path visualization, and UI overlays.
 /// </summary>
 public class DroneController : MonoBehaviour
 {
+    // ── Model (pure game logic) ──────────────
+    public DroneModel Model { get; private set; }
+
     public Vector2Int CurrentRoom { get; private set; }
     public bool IsSelected { get; set; }
     public bool IsMoving => path.Count > 0 || travelProgress < 1f || isCentering;
 
     public string DroneName { get; private set; } = "Drone";
 
-    // Discrete energy — each segment is one unit
-    public int MaxEnergy { get; private set; } = 10;
-    public int CurrentEnergy { get; set; } = 10;
-    public float EnergyFraction => MaxEnergy > 0 ? (float)CurrentEnergy / MaxEnergy : 0f;
+    // Discrete energy — delegates to model
+    public int MaxEnergy => Model != null ? Model.MaxEnergy : 10;
+    public int CurrentEnergy
+    {
+        get => Model != null ? Model.CurrentEnergy : 10;
+        set { if (Model != null) Model.CurrentEnergy = value; }
+    }
+    public float EnergyFraction => Model != null ? Model.EnergyFraction : 1f;
 
     /// <summary>True when the preview path costs more energy than available.</summary>
     public bool PreviewExceedsEnergy =>
@@ -231,13 +238,13 @@ public class DroneController : MonoBehaviour
         }
     }
 
-    static int StepEnergyCost(HexMapGenerator.PassageType type)
+    static int StepEnergyCost(PassageType type)
     {
         switch (type)
         {
-            case HexMapGenerator.PassageType.Corridor: return 1;
-            case HexMapGenerator.PassageType.Duct:     return 2;
-            case HexMapGenerator.PassageType.Vent:     return 3;
+            case PassageType.Corridor: return 1;
+            case PassageType.Duct:     return 2;
+            case PassageType.Vent:     return 3;
             default: return 1;
         }
     }
@@ -269,13 +276,24 @@ public class DroneController : MonoBehaviour
     {
         map = mapGen;
         fog = fogOfWar;
+
+        // Create game-logic model
+        Model = new DroneModel
+        {
+            Name = droneName,
+            MaxEnergy = 10,
+            CurrentEnergy = 10,
+            CurrentRoom = startRoom,
+            FromRoom = startRoom,
+            ToRoom = startRoom,
+            TravelProgress = 1f,
+        };
+
         CurrentRoom = startRoom;
         fromRoom = startRoom;
         toRoom = startRoom;
         travelProgress = 1f;
         DroneName = droneName;
-        MaxEnergy = 10;
-        CurrentEnergy = MaxEnergy;
         CreateSelectionRing();
         idlePhase = Random.Range(0f, Mathf.PI * 2f);
 
@@ -284,6 +302,7 @@ public class DroneController : MonoBehaviour
         float sDist  = Random.Range(0.1f, 0.35f);
         swarmOffset = new Vector3(Mathf.Cos(sAngle) * sDist, 0f, Mathf.Sin(sAngle) * sDist);
         speedJitter = Random.Range(0.8f, 1.2f);
+        Model.SpeedJitter = speedJitter;
 
         transform.position = RoomWorldPos(startRoom) + swarmOffset;
 
@@ -836,30 +855,30 @@ public class DroneController : MonoBehaviour
             {
                 switch (type)
                 {
-                    case HexMapGenerator.PassageType.Corridor: return 2f;
-                    case HexMapGenerator.PassageType.Duct:     return 4f;
-                    case HexMapGenerator.PassageType.Vent:     return 6f;
+                    case PassageType.Corridor: return 2f;
+                    case PassageType.Duct:     return 4f;
+                    case PassageType.Vent:     return 6f;
                 }
             }
         }
         return 2f;
     }
 
-    HexMapGenerator.PassageType GetPassageType(Vector2Int a, Vector2Int b)
+    PassageType GetPassageType(Vector2Int a, Vector2Int b)
     {
         foreach (var (ca, cb, type) in map.ConnectionList)
             if ((ca == a && cb == b) || (ca == b && cb == a))
                 return type;
-        return HexMapGenerator.PassageType.Corridor;
+        return PassageType.Corridor;
     }
 
-    static string PassageLabel(HexMapGenerator.PassageType type)
+    static string PassageLabel(PassageType type)
     {
         switch (type)
         {
-            case HexMapGenerator.PassageType.Corridor: return "CORRIDOR";
-            case HexMapGenerator.PassageType.Duct:     return "DUCT";
-            case HexMapGenerator.PassageType.Vent:     return "VENT";
+            case PassageType.Corridor: return "CORRIDOR";
+            case PassageType.Duct:     return "DUCT";
+            case PassageType.Vent:     return "VENT";
             default:                                    return "TRAVEL";
         }
     }

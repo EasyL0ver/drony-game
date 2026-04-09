@@ -1,8 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-public enum FogState { Unknown, Scanning, Discovered, Visible }
-
 /// <summary>
 /// A connection from this tile to a neighbor, through a specific passage type.
 /// Future: hazards, items, blockages in the passage.
@@ -11,33 +9,33 @@ public enum FogState { Unknown, Scanning, Discovered, Visible }
 public class TileConnection
 {
     public RoomTile neighbor;
-    public HexMapGenerator.PassageType passageType;
+    public PassageType passageType;
     public int edgeIndex; // which hex edge (0-5) this neighbor is on
 }
 
 /// <summary>
-/// Self-contained room tile. Owns its fog state, fog/outline visuals,
-/// and connections to neighbors. Reveals itself when a drone enters.
+/// Self-contained room tile view. Delegates game state to RoomModel,
+/// owns fog/outline visuals and interaction meshes.
 /// </summary>
 public class RoomTile : MonoBehaviour
 {
-    public Vector2Int Coord { get; private set; }
-    public HexMapGenerator.RoomSize Size { get; private set; }
-    public FogState State { get; private set; } = FogState.Unknown;
-    public float ScanProgress => scanProgress;
-    public float ScanTimeLeft => State == FogState.Scanning
-        ? scanDuration * (1f - scanProgress) : 0f;
-    public float ScanElapsed => scanDuration * scanProgress;
-    public float ScanTotalTime => scanDuration;
+    // ── Model (pure game logic) ──────────────
+    public RoomModel RModel { get; private set; }
+
+    // Convenience accessors that delegate to model
+    public Vector2Int Coord => RModel.Coord;
+    public RoomSize Size => RModel.Size;
+    public FogState State => RModel.State;
+    public float ScanProgress => RModel.ScanProgress;
+    public float ScanTimeLeft => RModel.ScanTimeLeft;
+    public float ScanElapsed => RModel.ScanElapsed;
+    public float ScanTotalTime => RModel.ScanDuration;
 
     public List<TileConnection> Connections { get; private set; } = new List<TileConnection>();
 
-    // Drone tracking
-    int droneCount;
-
     // Visuals
     MeshRenderer fogRenderer;
-    GameObject[] outlineEdges = new GameObject[6]; // one quad per hex edge
+    GameObject[] outlineEdges = new GameObject[6];
     bool outlineShown;
     Material matUnknown, matDiscovered, matOutline, matOutlineHover;
 
@@ -52,26 +50,22 @@ public class RoomTile : MonoBehaviour
     const float flashDuration = 0.5f;
     float fogMeshY;
 
-    // Scanning
-    float scanDuration = 3f;
-    float scanProgress;
-
     // Config (set once by builder)
     float fogElevation;
     float outlineRadius;
 
     // ── setup (called by builder) ────────────
 
-    public void Init(Vector2Int coord, HexMapGenerator.RoomSize size,
+    public void Init(Vector2Int coord, RoomSize size,
                      HexMapGenerator map, float fogElev, float outlineR,
                      Material unknown, Material discovered, Material outline,
                      float scanDur = 3f)
     {
-        Coord = coord;
-        Size = size;
+        RModel = new RoomModel(coord, size, scanDur);
+        RModel.OnStateChanged += OnModelStateChanged;
+
         fogElevation = fogElev;
         outlineRadius = outlineR;
-        scanDuration = scanDur;
         matUnknown = unknown;
         matDiscovered = discovered;
         matOutline = outline;
@@ -97,53 +91,30 @@ public class RoomTile : MonoBehaviour
 
     // ── drone interaction ────────────────────
 
-    /// <summary>
-    /// Call when a drone enters this room.
-    /// Reveals this tile and shows outlines on unknown neighbors.
-    /// </summary>
+    // ── drone interaction (delegates to model) ──
+
     public void OnDroneEnter()
     {
-        droneCount++;
+        RModel.OnDroneEnter();
     }
 
-    /// <summary>
-    /// Call when a drone physically arrives in this room (not just heading toward it).
-    /// Unknown rooms begin scanning; Discovered rooms go straight to Visible.
-    /// </summary>
     public void OnDroneArrived()
     {
-        switch (State)
+        bool scanStarted = RModel.OnDroneArrived();
+        // Show outlines on unknown neighbors when we reveal/scan
+        if (State == FogState.Scanning || State == FogState.Visible)
         {
-            case FogState.Unknown:
-                scanProgress = 0f;
-                SetState(FogState.Scanning);
-                foreach (var conn in Connections)
-                {
-                    if (conn.neighbor.State == FogState.Unknown)
-                        conn.neighbor.ShowOutline(true);
-                }
-                break;
-            case FogState.Scanning:
-                // Already scanning — additional drone helps (resumes if paused)
-                break;
-            case FogState.Discovered:
-                SetState(FogState.Visible);
-                foreach (var conn in Connections)
-                {
-                    if (conn.neighbor.State == FogState.Unknown)
-                        conn.neighbor.ShowOutline(true);
-                }
-                break;
+            foreach (var conn in Connections)
+            {
+                if (conn.neighbor.State == FogState.Unknown)
+                    conn.neighbor.ShowOutline(true);
+            }
         }
     }
 
-    /// <summary>
-    /// Instantly reveal this tile — used for the starting base room.
-    /// </summary>
     public void RevealImmediate()
     {
-        scanProgress = 1f;
-        SetState(FogState.Visible);
+        RModel.RevealImmediate();
         foreach (var conn in Connections)
         {
             if (conn.neighbor.State == FogState.Unknown)
@@ -151,22 +122,15 @@ public class RoomTile : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Call when a drone leaves this room.
-    /// Only demotes to Discovered when the last drone leaves.
-    /// </summary>
     public void OnDroneExit()
     {
-        droneCount = Mathf.Max(0, droneCount - 1);
-        if (droneCount == 0 && State == FogState.Visible)
-            SetState(FogState.Discovered);
+        RModel.OnDroneExit();
     }
 
-    // ── state management ─────────────────────
+    // ── model state change callback ──────────
 
-    void SetState(FogState newState)
+    void OnModelStateChanged(FogState oldState, FogState newState)
     {
-        State = newState;
         ApplyVisuals();
     }
 
@@ -310,19 +274,10 @@ public class RoomTile : MonoBehaviour
                 moveFlash.SetActive(false);
         }
 
-        // Scanning progress
+        // Scanning progress — delegate to model
         if (State == FogState.Scanning)
         {
-            if (droneCount > 0)
-            {
-                scanProgress += Time.deltaTime / scanDuration;
-                if (scanProgress >= 1f)
-                {
-                    scanProgress = 1f;
-                    SetState(FogState.Visible);
-                    return;
-                }
-            }
+            RModel.AdvanceScan(Time.deltaTime);
         }
     }
 
