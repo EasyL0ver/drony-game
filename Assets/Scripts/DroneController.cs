@@ -303,6 +303,7 @@ public class DroneController : MonoBehaviour
         swarmOffset = new Vector3(Mathf.Cos(sAngle) * sDist, 0f, Mathf.Sin(sAngle) * sDist);
         speedJitter = Random.Range(0.8f, 1.2f);
         Model.SpeedJitter = speedJitter;
+        Model.InitSlots();
 
         transform.position = RoomWorldPos(startRoom) + swarmOffset;
 
@@ -322,9 +323,9 @@ public class DroneController : MonoBehaviour
             cost += StepEnergyCost(GetPassageType(prev, room));
             prev = room;
         }
-        // Add scan cost if final room is unknown
+        // Add scan cost if final room is unknown and drone can scan
         var checkTile = fog?.GetTile(newPath[newPath.Count - 1]);
-        if (checkTile != null && checkTile.State == FogState.Unknown)
+        if (checkTile != null && checkTile.State == FogState.Unknown && Model.CanScan)
             cost += scanEnergyCost;
 
         int available = CurrentEnergy - JourneyEnergyCost;
@@ -371,9 +372,9 @@ public class DroneController : MonoBehaviour
                 prev = room;
             }
 
-            // If final room needs scanning, add a SCAN step
+            // If final room needs scanning and drone has Scanner, add a SCAN step
             var finalTile = fog?.GetTile(newPath[newPath.Count - 1]);
-            if (finalTile != null && finalTile.State == FogState.Unknown)
+            if (finalTile != null && finalTile.State == FogState.Unknown && Model.CanScan)
             {
                 journeyPlan.Add(new JourneyStep
                 {
@@ -450,7 +451,7 @@ public class DroneController : MonoBehaviour
         }
 
         var finalTile = fog?.GetTile(previewPath[previewPath.Count - 1]);
-        if (finalTile != null && finalTile.State == FogState.Unknown)
+        if (finalTile != null && finalTile.State == FogState.Unknown && Model.CanScan)
         {
             previewPlan.Add(new JourneyStep
             {
@@ -623,9 +624,9 @@ public class DroneController : MonoBehaviour
                     journeyIdx++;
                 }
 
-                // If room needs scanning and this is the last hop, center first
+                // If room needs scanning and drone has Scanner and this is the last hop, center first
                 var arrivedTile = fog?.GetTile(CurrentRoom);
-                bool needsScan = arrivedTile != null && arrivedTile.State == FogState.Unknown;
+                bool needsScan = arrivedTile != null && arrivedTile.State == FogState.Unknown && Model.CanScan;
                 if (needsScan && path.Count == 0)
                 {
                     centerFrom = transform.position;
@@ -683,8 +684,8 @@ public class DroneController : MonoBehaviour
 
     void UpdateJourney()
     {
-        // Auto-create a 1-step journey if scanning without a move order
-        if (journeyPlan.Count == 0 && !IsMoving)
+        // Auto-create a 1-step journey if scanning without a move order (only if drone has Scanner)
+        if (journeyPlan.Count == 0 && !IsMoving && Model.CanScan)
         {
             var tile = fog?.GetTile(CurrentRoom);
             if (tile != null && tile.State == FogState.Scanning)

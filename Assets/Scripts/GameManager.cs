@@ -18,7 +18,11 @@ public class GameManager : MonoBehaviour
     [SerializeField] int startingDrones = 3;
     [SerializeField] string[] droneNames = { "Hornet-1", "Hornet-2", "Hornet-3", "Hornet-4", "Hornet-5" };
 
+    [Header("Economy")]
+    [SerializeField] int startingPoints = 5;
+
     public List<DroneController> Drones { get; private set; } = new List<DroneController>();
+    public PlayerModel Player { get; private set; }
 
     void Start()
     {
@@ -49,6 +53,14 @@ public class GameManager : MonoBehaviour
         fog.Init(hexMap);
         fog.Reveal(Vector2Int.zero);
 
+        // ── mark starting room as refitting station ──
+        var stationTile = fog.GetTile(Vector2Int.zero);
+        if (stationTile != null)
+            stationTile.RModel.IsRefittingStation = true;
+
+        // ── player economy ──
+        Player = new PlayerModel(startingPoints);
+
         // ── drones ──
         Drones = new List<DroneController>();
         for (int i = 0; i < startingDrones; i++)
@@ -60,6 +72,10 @@ public class GameManager : MonoBehaviour
 
             var controller = droneGO.AddComponent<DroneController>();
             controller.Init(hexMap, fog, Vector2Int.zero, droneName);
+
+            // Hornet-1 starts with a free Scanner
+            if (i == 0)
+                controller.Model.Equip(GearCatalog.Scanner);
 
             var modelGO = new GameObject("Model");
             modelGO.transform.SetParent(droneGO.transform, false);
@@ -96,6 +112,6 @@ public class GameManager : MonoBehaviour
         var uiGO = new GameObject("DroneStatusUI");
         uiGO.transform.SetParent(transform, false);
         var statusUI = uiGO.AddComponent<DroneStatusUI>();
-        statusUI.Init(Drones);
+        statusUI.Init(this);
     }
 }

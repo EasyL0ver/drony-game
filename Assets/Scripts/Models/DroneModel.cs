@@ -12,6 +12,52 @@ public class DroneModel
 
     public string Name { get; set; } = "Drone";
 
+    // ── Equipment ────────────────────────────
+
+    public int MaxSlots { get; set; } = 2;
+    public GearItem[] Equipment { get; private set; }
+
+    public void InitSlots()
+    {
+        Equipment = new GearItem[MaxSlots];
+    }
+
+    /// <summary>True if gear of the given type is equipped in any slot.</summary>
+    public bool HasGear(GearType type)
+    {
+        if (Equipment == null) return false;
+        for (int i = 0; i < Equipment.Length; i++)
+            if (Equipment[i] != null && Equipment[i].Type == type) return true;
+        return false;
+    }
+
+    /// <summary>Equip gear into the first empty slot. Returns slot index or -1 if full.</summary>
+    public int Equip(GearItem item)
+    {
+        if (Equipment == null) InitSlots();
+        for (int i = 0; i < Equipment.Length; i++)
+        {
+            if (Equipment[i] == null)
+            {
+                Equipment[i] = item;
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>Unequip gear from a slot. Returns the item removed, or null.</summary>
+    public GearItem Unequip(int slot)
+    {
+        if (Equipment == null || slot < 0 || slot >= Equipment.Length) return null;
+        var item = Equipment[slot];
+        Equipment[slot] = null;
+        return item;
+    }
+
+    /// <summary>True if the drone has a Scanner and can scan rooms.</summary>
+    public bool CanScan => HasGear(GearType.Scanner);
+
     // ── Energy ───────────────────────────────
 
     public int MaxEnergy { get; set; } = 10;
@@ -165,7 +211,7 @@ public class DroneModel
 
         var destState = getRoomState(newPath[newPath.Count - 1]);
         float scanDur = 0f;
-        if (destState == FogState.Unknown)
+        if (destState == FogState.Unknown && CanScan)
         {
             cost += MapModel.ScanEnergyCost;
             scanDur = scanDurationForRoom(newPath[newPath.Count - 1]);
@@ -211,7 +257,7 @@ public class DroneModel
                 prev = room;
             }
 
-            if (destState == FogState.Unknown)
+            if (destState == FogState.Unknown && CanScan)
             {
                 JourneyPlan.Add(new JourneyStep
                 {
@@ -252,7 +298,7 @@ public class DroneModel
         }
 
         var destState = getRoomState(previewPath[previewPath.Count - 1]);
-        if (destState == FogState.Unknown)
+        if (destState == FogState.Unknown && CanScan)
         {
             PreviewPlan.Add(new JourneyStep
             {

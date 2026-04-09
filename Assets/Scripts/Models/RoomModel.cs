@@ -13,6 +13,9 @@ public class RoomModel
     public RoomSize Size { get; private set; }
     public FogState State { get; private set; } = FogState.Unknown;
 
+    /// <summary>True if this room is a refitting station where drones can equip gear.</summary>
+    public bool IsRefittingStation { get; set; }
+
     // Scanning
     public float ScanDuration { get; set; } = 3f;
     public float ScanElapsed { get; private set; }

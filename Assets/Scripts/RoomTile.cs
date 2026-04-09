@@ -38,6 +38,7 @@ public class RoomTile : MonoBehaviour
     GameObject[] outlineEdges = new GameObject[6];
     bool outlineShown;
     Material matUnknown, matDiscovered, matOutline, matOutlineHover;
+    Material matStationOutline;
 
     // Interaction
     GameObject hoverHighlight;
@@ -152,13 +153,30 @@ public class RoomTile : MonoBehaviour
             case FogState.Discovered:
                 fogRenderer.enabled = true;
                 fogRenderer.sharedMaterial = matDiscovered;
-                ShowOutline(false);
+                ShowOutline(RModel.IsRefittingStation);
                 break;
             case FogState.Visible:
                 fogRenderer.enabled = false;
-                ShowOutline(false);
+                ShowOutline(RModel.IsRefittingStation);
                 break;
         }
+
+        // Station gets a bright teal outline
+        if (RModel.IsRefittingStation && matStationOutline == null)
+        {
+            matStationOutline = new Material(matOutline);
+            Color sc = new Color(0.2f, 1f, 0.8f, 0.6f);
+            matStationOutline.color = sc;
+            matStationOutline.SetColor("_BaseColor", sc);
+            if (matStationOutline.HasProperty("_EmissionColor"))
+            {
+                matStationOutline.EnableKeyword("_EMISSION");
+                matStationOutline.SetColor("_EmissionColor", sc * 1.5f);
+            }
+        }
+
+        if (RModel.IsRefittingStation && outlineShown)
+            ApplyOutlineMaterial(matStationOutline);
     }
 
     public void ShowOutline(bool show)
@@ -237,12 +255,21 @@ public class RoomTile : MonoBehaviour
         // Brighten outline edges on hover
         if (outlineShown)
         {
-            Material mat = hovered ? matOutlineHover : matOutline;
-            for (int i = 0; i < 6; i++)
-            {
-                if (outlineEdges[i] != null)
-                    outlineEdges[i].GetComponent<MeshRenderer>().sharedMaterial = mat;
-            }
+            Material mat;
+            if (RModel.IsRefittingStation && matStationOutline != null)
+                mat = matStationOutline;
+            else
+                mat = hovered ? matOutlineHover : matOutline;
+            ApplyOutlineMaterial(mat);
+        }
+    }
+
+    void ApplyOutlineMaterial(Material mat)
+    {
+        for (int i = 0; i < 6; i++)
+        {
+            if (outlineEdges[i] != null)
+                outlineEdges[i].GetComponent<MeshRenderer>().sharedMaterial = mat;
         }
     }
 

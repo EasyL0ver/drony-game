@@ -1,0 +1,47 @@
+/// <summary>
+/// A piece of gear that can be equipped to a drone slot.
+/// Immutable data object — create via GearCatalog.
+/// </summary>
+public class GearItem
+{
+    public GearType Type { get; }
+    public string Name { get; }
+    public string Description { get; }
+    public int Cost { get; }
+    public string Icon { get; }
+
+    public GearItem(GearType type, string name, string description, int cost, string icon = "⚙")
+    {
+        Type = type;
+        Name = name;
+        Description = description;
+        Cost = cost;
+        Icon = icon;
+    }
+}
+
+/// <summary>
+/// Static registry of all gear definitions available in the game.
+/// </summary>
+public static class GearCatalog
+{
+    public static readonly GearItem Scanner = new GearItem(
+        GearType.Scanner,
+        "Scanner",
+        "Allows the drone to scan and reveal unknown rooms.",
+        2,
+        "\uD83D\uDCE1" // 📡
+    );
+
+    public static GearItem[] All = new GearItem[]
+    {
+        Scanner,
+    };
+
+    public static GearItem Get(GearType type)
+    {
+        foreach (var g in All)
+            if (g.Type == type) return g;
+        return null;
+    }
+}

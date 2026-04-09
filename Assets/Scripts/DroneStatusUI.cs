@@ -31,6 +31,10 @@ public class DroneStatusUI : MonoBehaviour
         // Discrete energy segments
         public RectTransform energyContainer;
         public List<Image> energySegments;
+        // Equipment slots
+        public List<Image> slotBgs;
+        public List<Text> slotLabels;
+        public List<Button> slotButtons;
         // Total journey progress bar
         public Image journeyBarBg;
         public Image journeyBarFill;
@@ -43,6 +47,7 @@ public class DroneStatusUI : MonoBehaviour
 
     readonly List<DroneCard> cards = new List<DroneCard>();
     List<DroneController> allDrones;
+    GameManager gm;
 
     // Palette (matches hex-map sci-fi theme)
     static readonly Color panelColor      = new Color(0.02f, 0.02f, 0.04f, 0.80f);
@@ -72,12 +77,27 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color segEmptyCol    = new Color(0.10f, 0.10f, 0.12f, 0.5f);
     static readonly Color segPreviewCol  = new Color(1f, 0.55f, 0f, 0.7f);
 
+    // Equipment slot colors
+    static readonly Color slotEmptyCol    = new Color(0.06f, 0.06f, 0.09f, 0.8f);
+    static readonly Color slotFilledCol   = new Color(0.04f, 0.14f, 0.20f, 0.9f);
+    static readonly Color slotLockedCol   = new Color(0.04f, 0.04f, 0.06f, 0.5f);
+    static readonly Color slotTextCol     = new Color(0.55f, 0.60f, 0.65f, 1f);
+    static readonly Color slotGearCol     = new Color(0f, 0.85f, 1f, 0.95f);
+    static readonly Color slotHoverCol    = new Color(0.08f, 0.18f, 0.25f, 0.9f);
+
+    // Shop popup colors
+    static readonly Color shopBgCol       = new Color(0.02f, 0.02f, 0.04f, 0.95f);
+    static readonly Color shopItemCol     = new Color(0.06f, 0.06f, 0.09f, 0.9f);
+    static readonly Color shopItemHoverCol= new Color(0.04f, 0.14f, 0.20f, 0.95f);
+    static readonly Color pointsCol       = new Color(1f, 0.85f, 0.2f, 1f);
+
     // Journey total bar colors
     static readonly Color journeyBarBgCol   = new Color(0.06f, 0.06f, 0.08f, 0.9f);
     static readonly Color journeyBarFillCol = new Color(0f, 0.65f, 0.85f, 0.75f);
     static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
 
-    const float baseCardH = 48f;
+    const float baseCardH = 68f;  // increased to fit gear slots
+    const float slotRowH  = 14f;
     const float journeyBarH = 12f;
     const float stepRowH  = 16f;
     const float stepGap   = 2f;
@@ -89,16 +109,29 @@ public class DroneStatusUI : MonoBehaviour
     Text hoverTooltipText;
     Image hoverTooltipBg;
 
+    // Points display (top of panel)
+    Text pointsText;
+
+    // Gear shop popup
+    GameObject shopPopupGO;
+    Transform shopItemsParent;
+    Text shopTitleText;
+    Text shopPointsText;
+    DroneController shopTargetDrone;
+    int shopTargetSlot;
+    Canvas statusCanvas;
+
     // ── public API ───────────────────────────
 
-    public void Init(List<DroneController> drones)
+    public void Init(GameManager gameManager)
     {
-        allDrones = drones;
+        gm = gameManager;
+        allDrones = gameManager.Drones;
         uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (uiFont == null)
             uiFont = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        BuildCanvas(drones);
+        BuildCanvas(allDrones);
     }
 
     // ── build ────────────────────────────────
@@ -112,6 +145,7 @@ public class DroneStatusUI : MonoBehaviour
         var canvas = canvasGO.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 10;
+        statusCanvas = canvas;
 
         var scaler = canvasGO.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -160,6 +194,19 @@ public class DroneStatusUI : MonoBehaviour
         var titleLE = titleGO.AddComponent<LayoutElement>();
         titleLE.preferredHeight = 18;
 
+        // Points display
+        var ptsGO = new GameObject("Points");
+        ptsGO.transform.SetParent(panel.transform, false);
+        pointsText = ptsGO.AddComponent<Text>();
+        pointsText.text = "";
+        pointsText.font = uiFont;
+        pointsText.fontSize = 11;
+        pointsText.color = pointsCol;
+        pointsText.alignment = TextAnchor.MiddleCenter;
+        pointsText.fontStyle = FontStyle.Bold;
+        var ptsLE = ptsGO.AddComponent<LayoutElement>();
+        ptsLE.preferredHeight = 16;
+
         // Drone cards
         foreach (var drone in drones)
             cards.Add(CreateCard(panel.transform, drone));
@@ -195,19 +242,59 @@ public class DroneStatusUI : MonoBehaviour
         var nameRT = nameGO.GetComponent<RectTransform>();
         nameRT.anchorMin = new Vector2(0, 1);
         nameRT.anchorMax = new Vector2(1, 1);
-        nameRT.offsetMin = new Vector2(8, -24);
+        nameRT.offsetMin = new Vector2(8, -22);
         nameRT.offsetMax = new Vector2(-8, -2);
 
-        // ── Row 2: discrete energy segments + text ──
+        // ── Row 2: equipment slots ──
+        int maxSlots = drone.Model != null ? drone.Model.MaxSlots : 2;
+        var slotBgs = new List<Image>();
+        var slotLabels = new List<Text>();
+        var slotButtons = new List<Button>();
+
+        float slotY0 = -24f;
+        float slotY1 = slotY0 - slotRowH;
+        float slotWidth = 1f / maxSlots;
+        for (int s = 0; s < maxSlots; s++)
+        {
+            var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
+            var slotRT = slotGO.GetComponent<RectTransform>();
+            slotRT.anchorMin = new Vector2(slotWidth * s, 1);
+            slotRT.anchorMax = new Vector2(slotWidth * (s + 1), 1);
+            slotRT.offsetMin = new Vector2(s == 0 ? 8 : 2, slotY1);
+            slotRT.offsetMax = new Vector2(s == maxSlots - 1 ? -8 : -2, slotY0);
+
+            var slotTxtGO = MakeText(slotGO.transform, "SlotText", "EMPTY", 9, slotTextCol,
+                                     TextAnchor.MiddleCenter);
+            var slotTxtRT = slotTxtGO.GetComponent<RectTransform>();
+            slotTxtRT.anchorMin = Vector2.zero;
+            slotTxtRT.anchorMax = Vector2.one;
+            slotTxtRT.offsetMin = new Vector2(2, 0);
+            slotTxtRT.offsetMax = new Vector2(-2, 0);
+
+            var slotBtn = slotGO.AddComponent<Button>();
+            var slotNav = slotBtn.navigation;
+            slotNav.mode = Navigation.Mode.None;
+            slotBtn.navigation = slotNav;
+            slotBtn.transition = Selectable.Transition.None;
+            int slotIdx = s;
+            slotBtn.onClick.AddListener(() => OnSlotClicked(capturedDrone, slotIdx));
+
+            slotBgs.Add(slotGO.GetComponent<Image>());
+            slotLabels.Add(slotTxtGO.GetComponent<Text>());
+            slotButtons.Add(slotBtn);
+        }
+
+        // ── Row 3: discrete energy segments + text ──
+        float eY0 = -40f;
+        float eY1 = -58f;
         var energyContGO = new GameObject("EnergyBar");
         energyContGO.transform.SetParent(cardGO.transform, false);
         var energyContRT = energyContGO.AddComponent<RectTransform>();
         energyContRT.anchorMin = new Vector2(0, 1);
         energyContRT.anchorMax = new Vector2(1, 1);
-        energyContRT.offsetMin = new Vector2(8, -44);
-        energyContRT.offsetMax = new Vector2(-42, -26);
+        energyContRT.offsetMin = new Vector2(8, eY1);
+        energyContRT.offsetMax = new Vector2(-42, eY0);
 
-        // Create individual segment images
         int maxE = drone.MaxEnergy;
         var segments = new List<Image>();
         float segGap = 1.5f;
@@ -230,10 +317,10 @@ public class DroneStatusUI : MonoBehaviour
         var pctRT = pctGO.GetComponent<RectTransform>();
         pctRT.anchorMin = new Vector2(1, 1);
         pctRT.anchorMax = new Vector2(1, 1);
-        pctRT.offsetMin = new Vector2(-40, -44);
-        pctRT.offsetMax = new Vector2(-8, -26);
+        pctRT.offsetMin = new Vector2(-40, eY1);
+        pctRT.offsetMax = new Vector2(-8, eY0);
 
-        // ── Row 3: total journey progress bar ──
+        // ── Row 4: total journey progress bar ──
         var jBarGO = MakeImage(cardGO.transform, "JourneyBar", journeyBarBgCol);
         var jBarRT = jBarGO.GetComponent<RectTransform>();
         jBarRT.anchorMin = new Vector2(0, 1);
@@ -255,7 +342,6 @@ public class DroneStatusUI : MonoBehaviour
         jTextRT.offsetMin = Vector2.zero;
         jTextRT.offsetMax = Vector2.zero;
 
-        // Initially hidden
         jBarGO.SetActive(false);
 
         // ── Steps container — below journey bar, populated dynamically ──
@@ -278,6 +364,9 @@ public class DroneStatusUI : MonoBehaviour
             cardOutline = outline,
             energyContainer = energyContRT,
             energySegments = segments,
+            slotBgs = slotBgs,
+            slotLabels = slotLabels,
+            slotButtons = slotButtons,
             journeyBarBg = jBarGO.GetComponent<Image>(),
             journeyBarFill = jFillGO.GetComponent<Image>(),
             journeyText = jTextGO.GetComponent<Text>(),
@@ -360,6 +449,33 @@ public class DroneStatusUI : MonoBehaviour
             c.nameLabel.color = sel ? nameSelectedCol : accentColor;
             c.cardOutline.enabled = sel;
 
+            // ── Equipment slots ──
+            bool atStation = c.drone.Model != null
+                && !c.drone.IsMoving
+                && c.drone.CurrentRoom == Vector2Int.zero
+                && gm != null && gm.fog != null
+                && gm.fog.GetTile(Vector2Int.zero) != null
+                && gm.fog.GetTile(Vector2Int.zero).RModel.IsRefittingStation;
+
+            for (int s = 0; s < c.slotBgs.Count; s++)
+            {
+                var equip = c.drone.Model != null && c.drone.Model.Equipment != null
+                    ? c.drone.Model.Equipment[s] : null;
+
+                if (equip != null)
+                {
+                    c.slotLabels[s].text = equip.Icon + " " + equip.Name.ToUpper();
+                    c.slotLabels[s].color = slotGearCol;
+                    c.slotBgs[s].color = atStation ? slotFilledCol : slotFilledCol * 0.7f;
+                }
+                else
+                {
+                    c.slotLabels[s].text = atStation ? "+ EQUIP" : "EMPTY";
+                    c.slotLabels[s].color = atStation ? accentColor : slotTextCol;
+                    c.slotBgs[s].color = atStation ? slotEmptyCol : slotLockedCol;
+                }
+            }
+
             // ── Journey step rows ──
             var journey = c.drone.Journey;
             int stepCount = journey.Count;
@@ -427,6 +543,10 @@ public class DroneStatusUI : MonoBehaviour
                 c.journeyText.text = $"{jElapsed:F1}s / {jTotal:F1}s  ⚡{c.drone.JourneyEnergyCost}";
             }
         }
+
+        // ── Points display ──
+        if (pointsText != null && gm != null && gm.Player != null)
+            pointsText.text = $"⬡ {gm.Player.Points} POINTS";
 
         // ── Bottom hover tooltip ──
         UpdateHoverTooltip();
@@ -514,6 +634,202 @@ public class DroneStatusUI : MonoBehaviour
         }
 
         drone.IsSelected = !drone.IsSelected || !additive;
+    }
+
+    // ── equipment slot click ─────────────────
+
+    void OnSlotClicked(DroneController drone, int slotIdx)
+    {
+        if (drone.Model == null || drone.Model.Equipment == null) return;
+
+        // Must be at the refitting station and idle
+        bool atStation = !drone.IsMoving
+            && drone.CurrentRoom == Vector2Int.zero
+            && gm != null && gm.fog != null
+            && gm.fog.GetTile(Vector2Int.zero) != null
+            && gm.fog.GetTile(Vector2Int.zero).RModel.IsRefittingStation;
+        if (!atStation) return;
+
+        var equipped = drone.Model.Equipment[slotIdx];
+        if (equipped != null)
+        {
+            // Unequip — refund points
+            drone.Model.Unequip(slotIdx);
+            gm.Player.Refund(equipped);
+        }
+        else
+        {
+            // Open shop popup for this slot
+            OpenShop(drone, slotIdx);
+        }
+    }
+
+    // ── gear shop popup ─────────────────────
+
+    void OpenShop(DroneController drone, int slotIdx)
+    {
+        shopTargetDrone = drone;
+        shopTargetSlot = slotIdx;
+
+        if (shopPopupGO != null)
+            Destroy(shopPopupGO);
+
+        if (statusCanvas == null) return;
+
+        // Full-screen overlay to catch outside clicks
+        shopPopupGO = new GameObject("ShopOverlay");
+        shopPopupGO.transform.SetParent(statusCanvas.transform, false);
+        var overlayRT = shopPopupGO.AddComponent<RectTransform>();
+        overlayRT.anchorMin = Vector2.zero;
+        overlayRT.anchorMax = Vector2.one;
+        overlayRT.offsetMin = Vector2.zero;
+        overlayRT.offsetMax = Vector2.zero;
+
+        // Dim background — click to close
+        var dimImg = shopPopupGO.AddComponent<Image>();
+        dimImg.color = new Color(0, 0, 0, 0.4f);
+        var dimBtn = shopPopupGO.AddComponent<Button>();
+        dimBtn.transition = Selectable.Transition.None;
+        var dimNav = dimBtn.navigation;
+        dimNav.mode = Navigation.Mode.None;
+        dimBtn.navigation = dimNav;
+        dimBtn.onClick.AddListener(CloseShop);
+
+        // Shop panel — centered
+        var panelGO = MakeImage(shopPopupGO.transform, "ShopPanel", shopBgCol);
+        var panelRT = panelGO.GetComponent<RectTransform>();
+        panelRT.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRT.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRT.pivot = new Vector2(0.5f, 0.5f);
+        float panelW = 260f;
+        float itemH = 44f;
+        float headerH = 50f;
+        float panelH = headerH + GearCatalog.All.Length * (itemH + 4) + 12;
+        panelRT.sizeDelta = new Vector2(panelW, panelH);
+
+        // Stop clicks on panel from closing
+        var panelBtn = panelGO.AddComponent<Button>();
+        panelBtn.transition = Selectable.Transition.None;
+        var pNav = panelBtn.navigation;
+        pNav.mode = Navigation.Mode.None;
+        panelBtn.navigation = pNav;
+
+        var panelOutl = panelGO.AddComponent<Outline>();
+        panelOutl.effectColor = new Color(0f, 0.85f, 1f, 0.4f);
+        panelOutl.effectDistance = new Vector2(2, -2);
+
+        // Header
+        var titleGO = MakeText(panelGO.transform, "Title", $"EQUIP {drone.DroneName}", 14, accentColor,
+                               TextAnchor.MiddleCenter);
+        titleGO.GetComponent<Text>().fontStyle = FontStyle.Bold;
+        var titleRT = titleGO.GetComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0, 1);
+        titleRT.anchorMax = new Vector2(1, 1);
+        titleRT.offsetMin = new Vector2(8, -28);
+        titleRT.offsetMax = new Vector2(-8, -4);
+
+        var ptsGO = MakeText(panelGO.transform, "Points", $"⬡ {gm.Player.Points} POINTS", 12,
+                             pointsCol, TextAnchor.MiddleCenter);
+        ptsGO.GetComponent<Text>().fontStyle = FontStyle.Bold;
+        shopPointsText = ptsGO.GetComponent<Text>();
+        var ptsRT = ptsGO.GetComponent<RectTransform>();
+        ptsRT.anchorMin = new Vector2(0, 1);
+        ptsRT.anchorMax = new Vector2(1, 1);
+        ptsRT.offsetMin = new Vector2(8, -48);
+        ptsRT.offsetMax = new Vector2(-8, -28);
+
+        // Gear items
+        for (int g = 0; g < GearCatalog.All.Length; g++)
+        {
+            var gear = GearCatalog.All[g];
+            float yTop = -(headerH + g * (itemH + 4));
+            float yBot = yTop - itemH;
+
+            bool alreadyEquipped = drone.Model.HasGear(gear.Type);
+            bool canAfford = gm.Player.Points >= gear.Cost;
+            bool canBuy = canAfford && !alreadyEquipped;
+
+            var itemGO = MakeImage(panelGO.transform, "Item_" + gear.Name,
+                                   canBuy ? shopItemCol : shopItemCol * 0.5f);
+            var itemRT = itemGO.GetComponent<RectTransform>();
+            itemRT.anchorMin = new Vector2(0, 1);
+            itemRT.anchorMax = new Vector2(1, 1);
+            itemRT.offsetMin = new Vector2(8, yBot);
+            itemRT.offsetMax = new Vector2(-8, yTop);
+
+            // Gear name + icon
+            var nameTxt = MakeText(itemGO.transform, "Name", $"{gear.Icon} {gear.Name}", 12,
+                                   canBuy ? accentColor : dimTextColor, TextAnchor.MiddleLeft);
+            var nameRT2 = nameTxt.GetComponent<RectTransform>();
+            nameRT2.anchorMin = Vector2.zero;
+            nameRT2.anchorMax = new Vector2(0.6f, 0.55f);
+            nameRT2.offsetMin = new Vector2(8, 0);
+            nameRT2.offsetMax = new Vector2(0, 0);
+
+            // Description
+            var descTxt = MakeText(itemGO.transform, "Desc", gear.Description, 9,
+                                   dimTextColor, TextAnchor.UpperLeft);
+            var descRT = descTxt.GetComponent<RectTransform>();
+            descRT.anchorMin = new Vector2(0, 0.55f);
+            descRT.anchorMax = Vector2.one;
+            descRT.offsetMin = new Vector2(8, 0);
+            descRT.offsetMax = new Vector2(-8, -2);
+
+            // Cost + buy button
+            string costStr = alreadyEquipped ? "EQUIPPED" : $"⬡ {gear.Cost}";
+            Color costColor = alreadyEquipped ? dimTextColor : (canAfford ? pointsCol : energyLowCol);
+            var costTxt = MakeText(itemGO.transform, "Cost", costStr, 11,
+                                   costColor, TextAnchor.MiddleRight);
+            costTxt.GetComponent<Text>().fontStyle = FontStyle.Bold;
+            var costRT = costTxt.GetComponent<RectTransform>();
+            costRT.anchorMin = new Vector2(0.6f, 0);
+            costRT.anchorMax = new Vector2(1, 0.55f);
+            costRT.offsetMin = new Vector2(0, 0);
+            costRT.offsetMax = new Vector2(-8, 0);
+
+            if (canBuy)
+            {
+                var itemBtn = itemGO.AddComponent<Button>();
+                itemBtn.transition = Selectable.Transition.ColorTint;
+                var colors = itemBtn.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(0.6f, 1f, 1f, 1f);
+                colors.pressedColor = new Color(0.4f, 0.8f, 0.8f, 1f);
+                itemBtn.colors = colors;
+                var iNav = itemBtn.navigation;
+                iNav.mode = Navigation.Mode.None;
+                itemBtn.navigation = iNav;
+
+                var capturedGear = gear;
+                itemBtn.onClick.AddListener(() => OnBuyGear(capturedGear));
+            }
+        }
+    }
+
+    void OnBuyGear(GearItem gear)
+    {
+        if (shopTargetDrone == null || shopTargetDrone.Model == null) return;
+        if (gm == null || gm.Player == null) return;
+
+        if (!gm.Player.TryPurchase(gear)) return;
+
+        int result = shopTargetDrone.Model.Equip(gear);
+        if (result < 0)
+        {
+            // Slots full — refund
+            gm.Player.Refund(gear);
+            return;
+        }
+
+        CloseShop();
+    }
+
+    void CloseShop()
+    {
+        if (shopPopupGO != null)
+            Destroy(shopPopupGO);
+        shopPopupGO = null;
+        shopTargetDrone = null;
     }
 
     // ── UI helpers ───────────────────────────
