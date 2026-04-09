@@ -24,11 +24,13 @@ public class DroneStatusUI : MonoBehaviour
     {
         public DroneController drone;
         public Text nameLabel;
-        public Image energyFill;
         public Text energyText;
         public Image cardBg;
         public LayoutElement layoutElem;
         public Outline cardOutline;
+        // Discrete energy segments
+        public RectTransform energyContainer;
+        public List<Image> energySegments;
         // Journey step rows
         public RectTransform stepsContainer;
         public List<StepRow> stepRows;
@@ -58,6 +60,13 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color stepFutureBarCol  = new Color(0.10f, 0.10f, 0.12f, 0.40f);
     static readonly Color stepTextActiveCol = new Color(1f, 1f, 1f, 0.95f);
     static readonly Color stepTextDimCol    = new Color(0.45f, 0.48f, 0.50f, 0.65f);
+
+    // Energy segment colors
+    static readonly Color segFullCol     = new Color(0f, 0.85f, 1f, 0.9f);
+    static readonly Color segMidCol      = new Color(1f, 0.75f, 0f, 0.9f);
+    static readonly Color segLowCol      = new Color(1f, 0.25f, 0.10f, 0.9f);
+    static readonly Color segEmptyCol    = new Color(0.10f, 0.10f, 0.12f, 0.5f);
+    static readonly Color segPreviewCol  = new Color(1f, 0.55f, 0f, 0.7f);
 
     const float baseCardH = 48f;
     const float stepRowH  = 16f;
@@ -174,23 +183,34 @@ public class DroneStatusUI : MonoBehaviour
         nameRT.offsetMin = new Vector2(8, -24);
         nameRT.offsetMax = new Vector2(-8, -2);
 
-        // ── Row 2: energy bar + percentage — below name ──
-        var barBg = MakeImage(cardGO.transform, "BarBg", barBgColor);
-        var barBgRT = barBg.GetComponent<RectTransform>();
-        barBgRT.anchorMin = new Vector2(0, 1);
-        barBgRT.anchorMax = new Vector2(1, 1);
-        barBgRT.offsetMin = new Vector2(8, -44);
-        barBgRT.offsetMax = new Vector2(-42, -26);
+        // ── Row 2: discrete energy segments + text ──
+        var energyContGO = new GameObject("EnergyBar");
+        energyContGO.transform.SetParent(cardGO.transform, false);
+        var energyContRT = energyContGO.AddComponent<RectTransform>();
+        energyContRT.anchorMin = new Vector2(0, 1);
+        energyContRT.anchorMax = new Vector2(1, 1);
+        energyContRT.offsetMin = new Vector2(8, -44);
+        energyContRT.offsetMax = new Vector2(-42, -26);
 
-        var fill = MakeImage(barBg.transform, "Fill", energyFullCol);
-        var fillRT = fill.GetComponent<RectTransform>();
-        fillRT.anchorMin = Vector2.zero;
-        fillRT.anchorMax = Vector2.one;
-        fillRT.offsetMin = new Vector2(1, 1);
-        fillRT.offsetMax = new Vector2(-1, -1);
-        var fillImg = fill.GetComponent<Image>();
+        // Create individual segment images
+        int maxE = drone.MaxEnergy;
+        var segments = new List<Image>();
+        float segGap = 1.5f;
+        for (int s = 0; s < maxE; s++)
+        {
+            var segGO = MakeImage(energyContGO.transform, $"Seg_{s}", segFullCol);
+            var segRT = segGO.GetComponent<RectTransform>();
+            float xMin = (float)s / maxE;
+            float xMax = (float)(s + 1) / maxE;
+            segRT.anchorMin = new Vector2(xMin, 0);
+            segRT.anchorMax = new Vector2(xMax, 1);
+            float halfGap = segGap * 0.5f;
+            segRT.offsetMin = new Vector2(s == 0 ? 0 : halfGap, 1);
+            segRT.offsetMax = new Vector2(s == maxE - 1 ? 0 : -halfGap, -1);
+            segments.Add(segGO.GetComponent<Image>());
+        }
 
-        var pctGO = MakeText(cardGO.transform, "Pct", "100%", 11, accentColor,
+        var pctGO = MakeText(cardGO.transform, "Pct", $"{maxE}/{maxE}", 11, accentColor,
                              TextAnchor.MiddleRight);
         var pctRT = pctGO.GetComponent<RectTransform>();
         pctRT.anchorMin = new Vector2(1, 1);
@@ -212,11 +232,12 @@ public class DroneStatusUI : MonoBehaviour
         {
             drone = drone,
             nameLabel = nameGO.GetComponent<Text>(),
-            energyFill = fillImg,
             energyText = pctGO.GetComponent<Text>(),
             cardBg = cardImg,
             layoutElem = le,
             cardOutline = outline,
+            energyContainer = energyContRT,
+            energySegments = segments,
             stepsContainer = stepsRT,
             stepRows = new List<StepRow>(),
             lastStepCount = 0,
@@ -232,13 +253,44 @@ public class DroneStatusUI : MonoBehaviour
             var c = cards[i];
             if (c.drone == null) continue;
 
-            float e = Mathf.Clamp01(c.drone.Energy);
+            int curE = c.drone.CurrentEnergy;
+            int maxE = c.drone.MaxEnergy;
 
-            // Energy fill
-            var fillRT = c.energyFill.rectTransform;
-            fillRT.anchorMax = new Vector2(e, 1);
-            c.energyFill.color = Color.Lerp(energyLowCol, energyFullCol, e);
-            c.energyText.text = Mathf.RoundToInt(e * 100f) + "%";
+            // Determine how many segments are "threatened" by journey or preview
+            int journeyCost = c.drone.JourneyEnergyCost;
+            int previewCost = c.drone.PreviewEnergyCost;
+            // Total cost to highlight: active journey + preview
+            int totalPending = journeyCost + previewCost;
+
+            // Update discrete energy segments
+            for (int s = 0; s < c.energySegments.Count && s < maxE; s++)
+            {
+                Color col;
+                if (s >= curE)
+                {
+                    // Empty segment
+                    col = segEmptyCol;
+                }
+                else if (s >= curE - totalPending)
+                {
+                    // This segment will be consumed — highlight it
+                    if (previewCost > 0 && s >= curE - previewCost)
+                        col = segPreviewCol; // preview (hover) cost — orange
+                    else
+                        col = segPreviewCol * 0.7f; // committed journey cost — dimmer orange
+                }
+                else
+                {
+                    // Safe segment — color based on fill level
+                    float frac = (float)curE / maxE;
+                    if (frac > 0.5f) col = segFullCol;
+                    else if (frac > 0.25f) col = segMidCol;
+                    else col = segLowCol;
+                }
+                c.energySegments[s].color = col;
+            }
+
+            c.energyText.text = $"{curE}/{maxE}";
 
             // Selection highlight
             bool sel = c.drone.IsSelected;
@@ -295,8 +347,9 @@ public class DroneStatusUI : MonoBehaviour
                     row.time.color = stepTextDimCol;
                 }
 
+                string costTag = step.energyCost > 0 ? $" ⚡{step.energyCost}" : "";
                 string prefix = isActive ? "\u25B8 " : isCompleted ? "\u2713 " : "  ";
-                row.label.text = prefix + step.label;
+                row.label.text = prefix + step.label + costTag;
                 row.time.text = $"{elapsed:F1}s / {step.duration:F1}s";
             }
         }

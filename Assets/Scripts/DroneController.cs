@@ -13,7 +13,11 @@ public class DroneController : MonoBehaviour
     public bool IsMoving => path.Count > 0 || travelProgress < 1f || isCentering;
 
     public string DroneName { get; private set; } = "Drone";
-    public float Energy { get; set; } = 1f;
+
+    // Discrete energy — each segment is one unit
+    public int MaxEnergy { get; private set; } = 10;
+    public int CurrentEnergy { get; set; } = 10;
+    public float EnergyFraction => MaxEnergy > 0 ? (float)CurrentEnergy / MaxEnergy : 0f;
 
     public string CurrentAction
     {
@@ -111,6 +115,7 @@ public class DroneController : MonoBehaviour
         public string label;
         public float duration;
         public bool isScan;
+        public int energyCost;
     }
 
     readonly List<JourneyStep> journeyPlan = new List<JourneyStep>();
@@ -162,6 +167,43 @@ public class DroneController : MonoBehaviour
 
     public IReadOnlyList<JourneyStep> Journey => journeyPlan;
     public int JourneyCurrentIndex => journeyIdx;
+    public IReadOnlyList<JourneyStep> PreviewJourney => previewPlan;
+
+    /// <summary>Total energy cost of remaining journey steps (current + future).</summary>
+    public int JourneyEnergyCost
+    {
+        get
+        {
+            int total = 0;
+            for (int i = Mathf.Max(0, journeyIdx); i < journeyPlan.Count; i++)
+                total += journeyPlan[i].energyCost;
+            return total;
+        }
+    }
+
+    /// <summary>Total energy cost of the preview journey.</summary>
+    public int PreviewEnergyCost
+    {
+        get
+        {
+            int total = 0;
+            foreach (var s in previewPlan) total += s.energyCost;
+            return total;
+        }
+    }
+
+    static int StepEnergyCost(HexMapGenerator.PassageType type)
+    {
+        switch (type)
+        {
+            case HexMapGenerator.PassageType.Corridor: return 1;
+            case HexMapGenerator.PassageType.Duct:     return 2;
+            case HexMapGenerator.PassageType.Vent:     return 3;
+            default: return 1;
+        }
+    }
+
+    const int scanEnergyCost = 2;
 
     public float GetJourneyStepProgress(int i)
     {
@@ -193,7 +235,8 @@ public class DroneController : MonoBehaviour
         toRoom = startRoom;
         travelProgress = 1f;
         DroneName = droneName;
-        Energy = 1f;
+        MaxEnergy = 10;
+        CurrentEnergy = MaxEnergy;
         CreateSelectionRing();
         idlePhase = Random.Range(0f, Mathf.PI * 2f);
 
@@ -249,6 +292,7 @@ public class DroneController : MonoBehaviour
                     label = PassageLabel(ptype),
                     duration = dur,
                     isScan = false,
+                    energyCost = StepEnergyCost(ptype),
                 });
                 prev = room;
             }
@@ -262,6 +306,7 @@ public class DroneController : MonoBehaviour
                     label = "SCAN",
                     duration = finalTile.ScanTotalTime,
                     isScan = true,
+                    energyCost = scanEnergyCost,
                 });
             }
         }
@@ -326,6 +371,7 @@ public class DroneController : MonoBehaviour
                 label = PassageLabel(ptype),
                 duration = dur,
                 isScan = false,
+                energyCost = StepEnergyCost(ptype),
             });
             prev = room;
         }
@@ -338,6 +384,7 @@ public class DroneController : MonoBehaviour
                 label = "SCAN",
                 duration = finalTile.ScanTotalTime,
                 isScan = true,
+                energyCost = scanEnergyCost,
             });
         }
 
@@ -492,10 +539,13 @@ public class DroneController : MonoBehaviour
 
                 CurrentRoom = toRoom;
 
-                // Advance journey (travel step complete)
+                // Advance journey (travel step complete) and consume energy
                 if (journeyIdx >= 0 && journeyIdx < journeyPlan.Count
                     && !journeyPlan[journeyIdx].isScan)
+                {
+                    CurrentEnergy = Mathf.Max(0, CurrentEnergy - journeyPlan[journeyIdx].energyCost);
                     journeyIdx++;
+                }
 
                 // If room needs scanning and this is the last hop, center first
                 var arrivedTile = fog?.GetTile(CurrentRoom);
@@ -568,6 +618,7 @@ public class DroneController : MonoBehaviour
                     label = "SCAN",
                     duration = tile.ScanTotalTime,
                     isScan = true,
+                    energyCost = scanEnergyCost,
                 });
                 journeyIdx = 0;
 
@@ -584,7 +635,10 @@ public class DroneController : MonoBehaviour
         {
             var tile = fog?.GetTile(CurrentRoom);
             if (tile != null && tile.State != FogState.Scanning && tile.State != FogState.Unknown)
+            {
+                CurrentEnergy = Mathf.Max(0, CurrentEnergy - journeyPlan[journeyIdx].energyCost);
                 journeyIdx++;
+            }
         }
 
         // Clear finished journey
@@ -1134,10 +1188,12 @@ public class DroneController : MonoBehaviour
                     ? new Color(0.02f, 0.04f, 0.08f, 0.88f)
                     : new Color(0.02f, 0.04f, 0.08f, 0.55f);
 
-            // Label
+            // Label with energy cost
             if (bar.labelText != null)
             {
-                bar.labelText.text = isDone ? $"✓ {lbl}" : lbl;
+                int cost = journeyPlan[i].energyCost;
+                string costTag = cost > 0 ? $" ⚡{cost}" : "";
+                bar.labelText.text = isDone ? $"✓ {lbl}" : $"{lbl}{costTag}";
                 bar.labelText.color = labelCol;
             }
 
@@ -1274,7 +1330,9 @@ public class DroneController : MonoBehaviour
         // Set text content from preview plan
         if (idx < previewPlan.Count)
         {
-            bar.labelText.text = previewPlan[idx].label;
+            int cost = previewPlan[idx].energyCost;
+            string costTag = cost > 0 ? $" ⚡{cost}" : "";
+            bar.labelText.text = $"{previewPlan[idx].label}{costTag}";
             bar.timeText.text = $"{previewPlan[idx].duration:F1}s";
         }
 
