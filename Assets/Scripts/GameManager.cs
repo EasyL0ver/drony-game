@@ -24,6 +24,11 @@ public class GameManager : MonoBehaviour
     public List<DroneController> Drones { get; private set; } = new List<DroneController>();
     public PlayerModel Player { get; private set; }
 
+    // Rubble barrier GOs keyed by ConnKey for cleanup when interaction completes
+    readonly Dictionary<long, GameObject> rubbleBarriers = new Dictionary<long, GameObject>();
+    // Per-rubble glow strip renderers (swapped to corridor color on clear)
+    readonly Dictionary<long, Renderer> rubbleGlowRenderers = new Dictionary<long, Renderer>();
+
     void Start()
     {
         if (Application.isPlaying)
@@ -58,6 +63,13 @@ public class GameManager : MonoBehaviour
         {
             SpawnPassage(a, b, type);
             SpawnPassage(b, a, type);
+        }
+
+        // ── spawn rubble barriers for blocked connections ──
+        foreach (var (a, b, type) in hexMap.ConnectionList)
+        {
+            if (hexMap.Model.GetWallInteraction(a, b).HasValue)
+                SpawnRubbleBarrier(a, b);
         }
 
         // ── mark starting room as refitting station ──
@@ -115,6 +127,9 @@ public class GameManager : MonoBehaviour
             modelGO.AddComponent<LowPolyDrone>();
 
             Drones.Add(controller);
+
+            // Listen for wall interaction completion (rubble clear, etc.)
+            controller.OnWallInteractionCompleted += OnWallInteractionCompleted;
         }
 
         // ── selection manager ──
@@ -215,5 +230,181 @@ public class GameManager : MonoBehaviour
 
         var passage = go.AddComponent<Passage>();
         passage.Init(room, neighbor, edge, type);
+
+        // Invisible trigger collider so passage is clickable
+        float passW = hexMap.Model.PassageWidth(type);
+        var col = go.AddComponent<BoxCollider>();
+        col.size = new Vector3(passW, 2f, 1f);
+        col.center = new Vector3(0f, 1f, -0.5f);
+    }
+
+    void SpawnRubbleBarrier(Vector2Int roomA, Vector2Int roomB)
+    {
+        var (midA, midB) = hexMap.Model.PassageEndpoints(roomA, roomB);
+        Vector3 center = (midA + midB) * 0.5f;
+        float passW = hexMap.Model.PassageWidth(PassageType.Rubble);
+        float passH = hexMap.Model.PassageWallHeight(PassageType.Rubble);
+
+        Vector3 along = (midB - midA).normalized;
+        Vector3 across = Vector3.Cross(Vector3.up, along).normalized;
+
+        var barrier = new GameObject($"RubbleBarrier_{roomA}_{roomB}");
+        barrier.transform.position = center;
+        barrier.transform.SetParent(transform, true);
+
+        // Build rubble mesh: dense wall of rocks filling the passage floor to ceiling
+        var verts = new List<Vector3>();
+        var tris = new List<int>();
+        var rng = new System.Random(roomA.GetHashCode() ^ roomB.GetHashCode());
+
+        float halfLen = Vector3.Distance(midA, midB) * 0.35f;
+        float halfW = passW * 0.45f;
+
+        // Pack rocks densely across width, depth, and height
+        int layers = 4;
+        for (int layer = 0; layer < layers; layer++)
+        {
+            float yBase = (layer / (float)layers) * passH;
+            float yTop  = ((layer + 1) / (float)layers) * passH;
+            int count = 6 + rng.Next(4);
+            for (int c = 0; c < count; c++)
+            {
+                float rx = (float)(rng.NextDouble() * 2 - 1) * halfLen;
+                float rz = (float)(rng.NextDouble() * 2 - 1) * halfW;
+                float ry = yBase + (float)rng.NextDouble() * (yTop - yBase);
+                Vector3 rockPos = along * rx + across * rz + Vector3.up * ry;
+
+                // Rocks sized to overlap and fill gaps
+                float size = 0.2f + (float)rng.NextDouble() * 0.35f;
+                AddRock(verts, tris, rockPos, size, rng);
+            }
+        }
+
+        // Extra large boulders to seal gaps
+        int boulderCount = 3 + rng.Next(3);
+        for (int b = 0; b < boulderCount; b++)
+        {
+            float rx = (float)(rng.NextDouble() * 2 - 1) * halfLen * 0.5f;
+            float rz = (float)(rng.NextDouble() * 2 - 1) * halfW * 0.4f;
+            float ry = (float)rng.NextDouble() * passH * 0.8f;
+            Vector3 rockPos = along * rx + across * rz + Vector3.up * ry;
+            float size = 0.4f + (float)rng.NextDouble() * 0.4f;
+            AddRock(verts, tris, rockPos, size, rng);
+        }
+
+        var mesh = new Mesh { name = "RubbleMesh" };
+        if (verts.Count > 65535)
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.SetVertices(verts);
+        mesh.SetTriangles(tris, 0);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+
+        var meshGO = new GameObject("RubbleMesh");
+        meshGO.transform.SetParent(barrier.transform, false);
+        meshGO.AddComponent<MeshFilter>().sharedMesh = mesh;
+
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.color = new Color(0.18f, 0.16f, 0.14f);
+        mat.SetColor("_BaseColor", new Color(0.18f, 0.16f, 0.14f));
+        mat.SetFloat("_Metallic", 0.05f);
+        mat.SetFloat("_Smoothness", 0.15f);
+        meshGO.AddComponent<MeshRenderer>().sharedMaterial = mat;
+
+        // Per-passage glow strip (not baked, so we can swap on clear)
+        Mesh glowMesh = hexMap.BuildPassageGlowMesh(roomA, roomB, PassageType.Rubble);
+        if (glowMesh.vertexCount > 0)
+        {
+            var glowGO = new GameObject("RubbleGlow");
+            glowGO.transform.SetParent(transform, false);
+            glowGO.AddComponent<MeshFilter>().sharedMesh = glowMesh;
+            var glowMat = hexMap.MakeEmissive(Palette.ImpassableGlow, 4f);
+            var rend = glowGO.AddComponent<MeshRenderer>();
+            rend.sharedMaterial = glowMat;
+
+            long key = MapModel.ConnKey(roomA, roomB);
+            rubbleGlowRenderers[key] = rend;
+        }
+
+        long barrierKey = MapModel.ConnKey(roomA, roomB);
+        rubbleBarriers[barrierKey] = barrier;
+    }
+
+    static void AddRock(List<Vector3> verts, List<int> tris, Vector3 pos, float size, System.Random rng)
+    {
+        // Angular rock — heavily deformed octahedron with non-uniform axes
+        int baseIdx = verts.Count;
+        float J() => 0.6f + (float)rng.NextDouble() * 0.8f;
+
+        // Random stretch per axis for slab/column/chunky variety
+        float sx = size * J();
+        float sy = size * J();
+        float sz = size * J();
+
+        Vector3 top    = pos + Vector3.up    * sy;
+        Vector3 bottom = pos - Vector3.up    * sy * (0.3f + (float)rng.NextDouble() * 0.5f);
+        Vector3 front  = pos + Vector3.forward * sz;
+        Vector3 back   = pos - Vector3.forward * sz;
+        Vector3 left   = pos - Vector3.right   * sx;
+        Vector3 right  = pos + Vector3.right   * sx;
+
+        // Extra jitter to break symmetry
+        for (int j = 0; j < 3; j++)
+        {
+            float dx = ((float)rng.NextDouble() - 0.5f) * size * 0.3f;
+            float dz = ((float)rng.NextDouble() - 0.5f) * size * 0.3f;
+            top    += new Vector3(dx, 0, dz);
+            bottom += new Vector3(-dx, 0, -dz);
+        }
+
+        verts.Add(top);    // 0
+        verts.Add(bottom); // 1
+        verts.Add(front);  // 2
+        verts.Add(back);   // 3
+        verts.Add(left);   // 4
+        verts.Add(right);  // 5
+
+        int T = baseIdx;
+        tris.AddRange(new[] {
+            T+0, T+2, T+5,  T+0, T+5, T+3,
+            T+0, T+3, T+4,  T+0, T+4, T+2,
+            T+1, T+5, T+2,  T+1, T+3, T+5,
+            T+1, T+4, T+3,  T+1, T+2, T+4,
+        });
+    }
+
+    void OnWallInteractionCompleted(Vector2Int roomA, Vector2Int roomB)
+    {
+        long key = MapModel.ConnKey(roomA, roomB);
+
+        // Destroy barrier GO
+        if (rubbleBarriers.TryGetValue(key, out var barrier))
+        {
+            Destroy(barrier);
+            rubbleBarriers.Remove(key);
+        }
+
+        // Swap glow from impassable red → corridor cyan
+        if (rubbleGlowRenderers.TryGetValue(key, out var rend))
+        {
+            var newType = hexMap.Model.GetPassageType(roomA, roomB);
+            Color glowColor = newType == PassageType.Duct ? Palette.DuctGlow : Palette.CorridorGlow;
+            rend.sharedMaterial = hexMap.MakeEmissive(glowColor, 4f);
+            rubbleGlowRenderers.Remove(key);
+        }
+
+        // Update both Passage entities to reflect the new type
+        var type = hexMap.Model.GetPassageType(roomA, roomB);
+        UpdatePassageType(roomA, roomB, type);
+        UpdatePassageType(roomB, roomA, type);
+    }
+
+    void UpdatePassageType(Vector2Int room, Vector2Int neighbor, PassageType newType)
+    {
+        var tile = fog.GetTile(room);
+        if (tile == null) return;
+        var passage = tile.GetPassage(neighbor);
+        if (passage != null)
+            passage.UpdateType(newType);
     }
 }

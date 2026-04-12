@@ -16,6 +16,8 @@ public static class Palette
     public static readonly Color CorridorGlow    = Hex("00D4AA");
     public static readonly Color DuctGlow        = Hex("FF8C00");
     public static readonly Color VentGlow        = Hex("33FF4D");
+    public static readonly Color RubbleGlow      = Hex("8B5E3C");
+    public static readonly Color ImpassableGlow  = Hex("CC2222");
 
     // ── stations ──
     public static readonly Color ChargingGlow    = Hex("FFB800");

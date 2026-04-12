@@ -41,6 +41,7 @@ public class HexMapGenerator : MonoBehaviour
     public Dictionary<Vector2Int, RoomSize> RoomSizeMap => Model.RoomSizes;
     public List<(Vector2Int a, Vector2Int b, PassageType type)> ConnectionList { get; private set; }
     public float WallHeight => wallHeight;
+    public float WallThickness => wallThickness;
     public float HexRadiusValue => hexRadius;
     public float GridScaleValue => gridScale;
 
@@ -103,8 +104,9 @@ public class HexMapGenerator : MonoBehaviour
             if (type == PassageType.Vent) continue;
             int ea = EdgeToward(a, b);
             float gapW = PassageWidth(type);
-            openEdges[a][ea]           = new PassageInfo { width = gapW, type = type };
-            openEdges[b][(ea + 3) % 6] = new PassageInfo { width = gapW, type = type };
+            var info = new PassageInfo { width = gapW, type = type };
+            openEdges[a][ea]           = info;
+            openEdges[b][(ea + 3) % 6] = info;
         }
 
         // --- 3. Mesh builders ---
@@ -138,7 +140,10 @@ public class HexMapGenerator : MonoBehaviour
             {
                 float w  = PassageWidth(type);
                 float wh = PassageWallHeight(type);
-                MB glow  = type == PassageType.Corridor ? corrGlowMB : ductGlowMB;
+                // Rubble glow is handled per-connection by GameManager (not baked)
+                MB glow  = type == PassageType.Rubble ? null
+                         : type == PassageType.Duct   ? ductGlowMB
+                                                      : corrGlowMB;
                 EmitPassage(floorMB, wallMB, glow, a, b, w, wh, type,
                             roomSizes[a], roomSizes[b]);
             }
@@ -196,6 +201,7 @@ public class HexMapGenerator : MonoBehaviour
         switch (t)
         {
             case PassageType.Corridor: return corridorWidth;
+            case PassageType.Rubble:   return corridorWidth;
             case PassageType.Duct:     return ductWidth;
             case PassageType.Vent:     return ventPipeRadius * 2f;
             default:                   return corridorWidth;
@@ -207,10 +213,56 @@ public class HexMapGenerator : MonoBehaviour
         switch (t)
         {
             case PassageType.Corridor: return wallHeight * 0.88f;
+            case PassageType.Rubble:   return wallHeight * 0.88f;
             case PassageType.Duct:     return wallHeight * 0.38f;
-            case PassageType.Vent:     return wallHeight * 0.65f; // pipe center height
+            case PassageType.Vent:     return wallHeight * 0.65f;
             default:                   return wallHeight;
         }
+    }
+
+    /// <summary>
+    /// Build glow geometry (wall trims + floor edge strips) for a single passage.
+    /// Used by GameManager for per-rubble glow GOs that can be individually swapped.
+    /// </summary>
+    public Mesh BuildPassageGlowMesh(Vector2Int roomA, Vector2Int roomB, PassageType type)
+    {
+        int eA = EdgeToward(roomA, roomB);
+        RoomSize sA = Model.RoomSizes[roomA];
+        RoomSize sB = Model.RoomSizes[roomB];
+
+        Vector3 cA = HexCenter(roomA);
+        Vector3 cB = HexCenter(roomB);
+        float rA = RoomRadius(sA);
+        float rB = RoomRadius(sB);
+        Vector3 midA = (Corner(cA, eA, rA) + Corner(cA, (eA + 1) % 6, rA)) * 0.5f;
+        int eB = (eA + 3) % 6;
+        Vector3 midB = (Corner(cB, eB, rB) + Corner(cB, (eB + 1) % 6, rB)) * 0.5f;
+
+        float w = PassageWidth(type);
+        float wh = PassageWallHeight(type);
+        float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wh;
+
+        Vector3 corrDir  = (midB - midA).normalized;
+        Vector3 corrPerp = Vector3.Cross(Vector3.up, corrDir).normalized;
+        float hw = w * 0.5f;
+        Vector3 off = corrPerp * hw;
+
+        var mb = new MB();
+        EmitWallTrim(mb, midA - off, midB - off, sideH);
+        EmitWallTrim(mb, midB + off, midA + off, sideH);
+
+        float sw = 0.05f;
+        Vector3 up = Vector3.up * 0.005f;
+        mb.Quad(midA + off + up,
+                midA + off - corrPerp * sw + up,
+                midB + off - corrPerp * sw + up,
+                midB + off + up);
+        mb.Quad(midA - off + corrPerp * sw + up,
+                midA - off + up,
+                midB - off + up,
+                midB - off + corrPerp * sw + up);
+
+        return mb.ToMesh($"PassageGlow_{roomA}_{roomB}");
     }
 
     /// <summary>Returns the top Y of a passage type (for fog overlay positioning).</summary>
@@ -651,24 +703,26 @@ public class HexMapGenerator : MonoBehaviour
             wallMB.Quad(fC + upV, bC + upV, bD + upV, fD + upV);
         }
 
-        // Trim
-        EmitWallTrim(glowMB, midA - off, midB - off, sideH);
-        EmitWallTrim(glowMB, midB + off, midA + off, sideH);
+        // Trim + floor glow strips (skip if no glow MB, e.g. rubble)
+        if (glowMB != null)
+        {
+            EmitWallTrim(glowMB, midA - off, midB - off, sideH);
+            EmitWallTrim(glowMB, midB + off, midA + off, sideH);
 
-        // Floor glow edge strips (at floor edge)
-        float sw = 0.05f;
-        Vector3 up = Vector3.up * 0.005f;
-        glowMB.Quad(midA + off + up,
-                    midA + off - corrPerp * sw + up,
-                    midB + off - corrPerp * sw + up,
-                    midB + off + up);
-        glowMB.Quad(midA - off + corrPerp * sw + up,
-                    midA - off + up,
-                    midB - off + up,
-                    midB - off + corrPerp * sw + up);
+            float sw = 0.05f;
+            Vector3 up = Vector3.up * 0.005f;
+            glowMB.Quad(midA + off + up,
+                        midA + off - corrPerp * sw + up,
+                        midB + off - corrPerp * sw + up,
+                        midB + off + up);
+            glowMB.Quad(midA - off + corrPerp * sw + up,
+                        midA - off + up,
+                        midB - off + up,
+                        midB - off + corrPerp * sw + up);
+        }
 
-        // Ceiling slab for enclosed passages (duct + vent)
-        if (type != PassageType.Corridor)
+        // Ceiling slab for enclosed passages (duct + vent, not corridor/rubble)
+        if (type != PassageType.Corridor && type != PassageType.Rubble)
         {
             Vector3 ceilY = Vector3.up * wHeight;
             float ceilT = wallThickness * 0.5f;
@@ -834,7 +888,7 @@ public class HexMapGenerator : MonoBehaviour
         return m;
     }
 
-    Material MakeEmissive(Color c, float intensity)
+    public Material MakeEmissive(Color c, float intensity)
     {
         var m = MakeMat(c * 0.30f, 0.20f, 0.80f);
         m.EnableKeyword("_EMISSION");

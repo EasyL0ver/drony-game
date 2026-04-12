@@ -13,6 +13,9 @@ public class SelectionManager : MonoBehaviour
     GameManager gm;
     Camera cam;
     StationType hoveredStation;
+    // Tracked wall interaction target (when hovering a passage with an interaction)
+    Vector2Int hoveredConnA, hoveredConnB;
+    bool hoveredHasWallInteraction;
 
     // Drag state
     bool isDragging;
@@ -68,7 +71,10 @@ public class SelectionManager : MonoBehaviour
             if (needRefresh)
             {
                 ClearAllPreviews();
-                ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
+                if (hoveredHasWallInteraction)
+                    ShowWallInteractionPreviews();
+                else
+                    ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
             }
         }
 
@@ -159,8 +165,9 @@ public class SelectionManager : MonoBehaviour
 
     void UpdateHover(Vector2 screenPos)
     {
-        var (tile, station) = RaycastTileWithEdge(screenPos);
-        if (tile != hoveredTile || station != hoveredStation)
+        var (tile, station, hasWI, connA, connB) = RaycastTileWithEdge(screenPos);
+        if (tile != hoveredTile || station != hoveredStation
+            || hasWI != hoveredHasWallInteraction)
         {
             // Clear old previews
             ClearAllPreviews();
@@ -169,10 +176,16 @@ public class SelectionManager : MonoBehaviour
                 hoveredTile.SetHovered(false);
             hoveredTile = tile;
             hoveredStation = station;
+            hoveredHasWallInteraction = hasWI;
+            hoveredConnA = connA;
+            hoveredConnB = connB;
             if (hoveredTile != null)
             {
                 hoveredTile.SetHovered(true, hoveredStation);
-                ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
+                if (hoveredHasWallInteraction)
+                    ShowWallInteractionPreviews();
+                else
+                    ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
             }
         }
     }
@@ -195,6 +208,33 @@ public class SelectionManager : MonoBehaviour
         }
     }
 
+    void ShowWallInteractionPreviews()
+    {
+        // For wall interactions, path to the approach room (the side the drone can reach)
+        foreach (var d in gm.Drones)
+        {
+            if (!d.IsSelected) continue;
+            if (!d.Model.CanClearRubble) { d.ClearPreviewPath(); continue; }
+
+            // Try to path to either side of the blocked connection
+            var pA = FindPath(d.CurrentRoom, hoveredConnA);
+            var pB = FindPath(d.CurrentRoom, hoveredConnB);
+
+            List<Vector2Int> best = null;
+            if (pA != null && pB != null)
+                best = pA.Count <= pB.Count ? pA : pB;
+            else
+                best = pA ?? pB;
+
+            if (best != null && best.Count > 0)
+                d.ShowPreviewPath(best);
+            else if (d.CurrentRoom == hoveredConnA || d.CurrentRoom == hoveredConnB)
+                d.ShowPreviewPath(new List<Vector2Int>()); // already there
+            else
+                d.ClearPreviewPath();
+        }
+    }
+
     void ClearAllPreviews()
     {
         foreach (var d in gm.Drones)
@@ -211,7 +251,8 @@ public class SelectionManager : MonoBehaviour
     /// which hex edge the cursor is nearest. Looks up wall station data on the model.
     /// No need to raycast individual station meshes.
     /// </summary>
-    (RoomTile tile, StationType station) RaycastTileWithEdge(Vector2 screenPos)
+    (RoomTile tile, StationType station, bool hasWallInteraction, Vector2Int connA, Vector2Int connB)
+    RaycastTileWithEdge(Vector2 screenPos)
     {
         Ray ray = cam.ScreenPointToRay(screenPos);
         var hits = Physics.RaycastAll(ray, 500f);
@@ -231,37 +272,70 @@ public class SelectionManager : MonoBehaviour
             }
         }
 
-        if (tile == null) return (null, StationType.None);
+        if (tile == null) return (null, StationType.None, false, default, default);
 
         int edge = gm.hexMap.Model.NearestEdge(hitPoint, tile.Coord);
         StationType wallStation = tile.RModel.GetWallStation(edge);
 
-        // If the edge has a passage (not a station), resolve to the neighbor tile
+        // If the edge has a passage (not a station), check for wall interaction
         if (wallStation == StationType.None)
         {
-            foreach (var conn in tile.RModel.Connections)
+            foreach (var conn in tile.Connections)
             {
                 if (conn.edgeIndex == edge)
                 {
-                    var neighborTile = gm.fog.GetTile(conn.neighbor.Coord);
+                    var wi = gm.hexMap.Model.GetWallInteraction(tile.Coord, conn.neighbor.Coord);
+                    if (wi.HasValue)
+                        return (tile, StationType.None, true, tile.Coord, conn.neighbor.Coord);
+
+                    // No interaction — resolve to neighbor tile as before
+                    var neighborTile = conn.neighbor;
                     if (neighborTile != null)
-                        return (neighborTile, StationType.None);
+                        return (neighborTile, StationType.None, false, default, default);
                     break;
                 }
             }
         }
 
-        return (tile, wallStation);
+        return (tile, wallStation, false, default, default);
     }
 
     // ── move orders ──────────────────────────
 
     void IssueMoveOrder(Vector2 screenPos)
     {
-        var (tile, clickedStation) = RaycastTileWithEdge(screenPos);
+        var (tile, clickedStation, hasWI, connA, connB) = RaycastTileWithEdge(screenPos);
         if (tile == null) return;
 
         ClearAllPreviews();
+
+        // Wall interaction click (rubble, etc.)
+        if (hasWI)
+        {
+            foreach (var d in gm.Drones)
+            {
+                if (!d.IsSelected) continue;
+                if (d.IsPerformingStationAction) continue;
+                if (!d.Model.CanClearRubble) continue;
+
+                // Path to whichever side is reachable (prefer shorter)
+                var pA = FindPath(d.CurrentRoom, connA);
+                var pB = FindPath(d.CurrentRoom, connB);
+                List<Vector2Int> best = null;
+                if (pA != null && pB != null)
+                    best = pA.Count <= pB.Count ? pA : pB;
+                else
+                    best = pA ?? pB;
+
+                if (best == null) best = new List<Vector2Int>();
+
+                d.SetPathToWallInteraction(
+                    best.Count > 0 ? best : null,
+                    connA, connB);
+            }
+            return;
+        }
+
         tile.FlashMoveTarget();
         Vector2Int target = tile.Coord;
 

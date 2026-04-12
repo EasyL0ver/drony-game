@@ -111,18 +111,25 @@ public class DroneController : MonoBehaviour
         public bool isScan;
         public bool isCharge;
         public bool isRefit;
+        public bool isWallAction;
         public int energyCost;
     }
 
     readonly List<JourneyStep> journeyPlan = new List<JourneyStep>();
     int journeyIdx = -1;
 
-    // Station action timer (charge/refit)
+    // Timed action timer (charge/refit/wall interaction)
     float stationActionElapsed;
     float stationActionDuration;
 
+    // Connection being cleared (for wall interaction completion)
+    Vector2Int wallActionRoomA, wallActionRoomB;
+
     /// <summary>True after completing a REFIT action, until a new move is issued.</summary>
     public bool IsRefitting { get; private set; }
+
+    /// <summary>Fired when a wall interaction completes (roomA, roomB).</summary>
+    public event System.Action<Vector2Int, Vector2Int> OnWallInteractionCompleted;
 
     // All route visualization delegated to RoutePreview
     RoutePreview preview;
@@ -195,7 +202,7 @@ public class DroneController : MonoBehaviour
             var tile = fog?.GetTile(CurrentRoom);
             return tile != null ? tile.ScanProgress : 0f;
         }
-        if (journeyPlan[i].isCharge || journeyPlan[i].isRefit)
+        if (journeyPlan[i].isCharge || journeyPlan[i].isRefit || journeyPlan[i].isWallAction)
             return stationActionDuration > 0 ? Mathf.Clamp01(stationActionElapsed / stationActionDuration) : 0f;
         // Travel step — compute from waypoint progress
         float totalDist = 0f, doneDist = 0f;
@@ -254,10 +261,10 @@ public class DroneController : MonoBehaviour
             tile.OnDroneEnter(this);
     }
 
-    /// <summary>True when the drone is executing a station action (charge/refit).</summary>
+    /// <summary>True when the drone is executing a timed action (charge/refit/wall interaction).</summary>
     public bool IsPerformingStationAction =>
         journeyIdx >= 0 && journeyIdx < journeyPlan.Count
-        && (journeyPlan[journeyIdx].isCharge || journeyPlan[journeyIdx].isRefit);
+        && (journeyPlan[journeyIdx].isCharge || journeyPlan[journeyIdx].isRefit || journeyPlan[journeyIdx].isWallAction);
 
     /// <summary>
     /// Start a station action (charge/refit) when the drone is already on a station tile.
@@ -519,6 +526,189 @@ public class DroneController : MonoBehaviour
         preview?.ClearPreview();
     }
 
+    /// <summary>
+    /// Send drone along a path to clear a wall interaction (rubble, etc).
+    /// The drone travels to approachRoom (adjacent to the blocked passage),
+    /// then approaches the passage wall and performs the timed interaction.
+    /// If newPath is empty, the drone is assumed to already be at the approach room.
+    /// </summary>
+    public void SetPathToWallInteraction(List<Vector2Int> newPath,
+                                          Vector2Int connRoomA, Vector2Int connRoomB)
+    {
+        var wi = map?.Model?.GetWallInteraction(connRoomA, connRoomB);
+        if (!wi.HasValue) return;
+
+        // Determine approach room
+        Vector2Int approachRoom;
+        if (newPath != null && newPath.Count > 0)
+            approachRoom = newPath[newPath.Count - 1];
+        else
+            approachRoom = (CurrentRoom == connRoomA) ? connRoomA : connRoomB;
+
+        // Calculate total cost: travel + interaction energy
+        int cost = 0;
+        Vector2Int prev = CurrentRoom;
+        if (newPath != null)
+        {
+            foreach (var room in newPath)
+            {
+                var passage = fog?.GetTile(prev)?.GetPassage(room);
+                var ptype = passage != null ? passage.Type : PassageType.Corridor;
+                cost += MapModel.StepEnergyCost(ptype);
+                prev = room;
+            }
+        }
+        cost += wi.Value.energyCost;
+
+        int available = CurrentEnergy - JourneyEnergyCost;
+        if (cost > available) return;
+
+        IsRefitting = false;
+        moveWaypoints.Clear();
+        moveSegIdx = 0;
+        moveSegT = 0f;
+        stationActionElapsed = 0f;
+        stationActionDuration = 0f;
+        journeyPlan.Clear();
+        journeyIdx = 0;
+
+        // Store which connection we're clearing
+        wallActionRoomA = connRoomA;
+        wallActionRoomB = connRoomB;
+
+        prev = CurrentRoom;
+        int stepIdx = 0;
+        Vector3 roomCenter = RoomWorldPos(CurrentRoom);
+
+        float distToCenter = Vector3.Distance(transform.position, roomCenter);
+        if (distToCenter > 0.2f)
+        {
+            moveWaypoints.Add(new MoveWP
+            {
+                pos = transform.position,
+                kind = WaypointKind.Normal,
+                room = CurrentRoom,
+                journeyStep = -1,
+                durationToNext = 0.4f
+            });
+        }
+
+        bool hasTravel = newPath != null && newPath.Count > 0;
+
+        moveWaypoints.Add(new MoveWP
+        {
+            pos = roomCenter,
+            kind = WaypointKind.Normal,
+            room = CurrentRoom,
+            journeyStep = hasTravel ? 0 : -1,
+            durationToNext = 0f
+        });
+
+        // Build travel waypoints
+        if (hasTravel)
+        {
+            foreach (var room in newPath)
+            {
+            var passage = fog?.GetTile(prev)?.GetPassage(room);
+            var ptype = passage != null ? passage.Type : PassageType.Corridor;
+            float hopDur = MapModel.TravelTime(ptype);
+            journeyPlan.Add(new JourneyStep
+            {
+                label = MapModel.PassageLabel(ptype),
+                duration = hopDur,
+                isScan = false,
+                energyCost = MapModel.StepEnergyCost(ptype),
+            });
+
+            Vector3 pA = PassagePoint(prev, room, hoverY);
+            Vector3 pB = PassagePoint(room, prev, hoverY);
+            Vector3 destCenter = RoomWorldPos(room);
+
+            Vector3 fromPos = moveWaypoints[moveWaypoints.Count - 1].pos;
+            float d1 = Vector3.Distance(fromPos, pA);
+            float d2 = Vector3.Distance(pA, pB);
+            float d3 = Vector3.Distance(pB, destCenter);
+            float dTotal = d1 + d2 + d3;
+            float dur1 = dTotal > 0.001f ? hopDur * d1 / dTotal : hopDur / 3f;
+            float dur2 = dTotal > 0.001f ? hopDur * d2 / dTotal : hopDur / 3f;
+            float dur3 = dTotal > 0.001f ? hopDur * d3 / dTotal : hopDur / 3f;
+
+            var lastWP = moveWaypoints[moveWaypoints.Count - 1];
+            lastWP.durationToNext = dur1;
+            moveWaypoints[moveWaypoints.Count - 1] = lastWP;
+
+            moveWaypoints.Add(new MoveWP
+            {
+                pos = pA,
+                kind = WaypointKind.Normal,
+                room = prev,
+                journeyStep = stepIdx,
+                durationToNext = dur2
+            });
+            moveWaypoints.Add(new MoveWP
+            {
+                pos = pB,
+                kind = WaypointKind.CorridorExit,
+                room = room,
+                journeyStep = stepIdx,
+                durationToNext = dur3
+            });
+            moveWaypoints.Add(new MoveWP
+            {
+                pos = destCenter,
+                kind = WaypointKind.RoomCenter,
+                room = room,
+                journeyStep = stepIdx,
+                durationToNext = 0f
+            });
+
+            prev = room;
+            stepIdx++;
+        }
+        } // end if (newPath != null)
+
+        // Append the wall interaction step
+        journeyPlan.Add(new JourneyStep
+        {
+            label = wi.Value.label,
+            duration = wi.Value.duration,
+            isWallAction = true,
+            energyCost = wi.Value.energyCost,
+        });
+
+        // Add waypoint to approach the passage wall
+        Vector2Int otherRoom = (approachRoom == connRoomA) ? connRoomB : connRoomA;
+        Vector3 parkPos = PassagePoint(approachRoom, otherRoom, hoverY);
+        {
+            var lastWP = moveWaypoints[moveWaypoints.Count - 1];
+            lastWP.durationToNext = 0.4f;
+            moveWaypoints[moveWaypoints.Count - 1] = lastWP;
+        }
+        moveWaypoints.Add(new MoveWP
+        {
+            pos = parkPos,
+            kind = WaypointKind.StationWall,
+            room = approachRoom,
+            journeyStep = -1,
+            durationToNext = 0f
+        });
+
+        // Smooth pass-through room centers
+        for (int wi2 = 1; wi2 < moveWaypoints.Count - 1; wi2++)
+        {
+            var wp = moveWaypoints[wi2];
+            if (wp.kind != WaypointKind.RoomCenter) continue;
+            Vector3 prev3 = moveWaypoints[wi2 - 1].pos;
+            Vector3 next3 = moveWaypoints[wi2 + 1].pos;
+            Vector3 mid = (prev3 + next3) * 0.5f;
+            wp.pos = Vector3.Lerp(wp.pos, mid, 0.7f);
+            moveWaypoints[wi2] = wp;
+        }
+
+        preview?.SetJourney(newPath ?? new List<Vector2Int>(), StationType.None);
+        preview?.ClearPreview();
+    }
+
     public void ShowPreviewPath(List<Vector2Int> previewPath, StationType stationAction = StationType.None)
         => preview?.ShowPath(previewPath, stationAction);
 
@@ -676,7 +866,8 @@ public class DroneController : MonoBehaviour
                 if (step >= 0 && step < journeyPlan.Count
                     && !journeyPlan[step].isScan
                     && !journeyPlan[step].isCharge
-                    && !journeyPlan[step].isRefit)
+                    && !journeyPlan[step].isRefit
+                    && !journeyPlan[step].isWallAction)
                 {
                     CurrentEnergy = Mathf.Max(0, CurrentEnergy - journeyPlan[step].energyCost);
                     journeyIdx = step + 1;
@@ -759,6 +950,32 @@ public class DroneController : MonoBehaviour
                 // Refit: enable gear management until drone moves again
                 if (journeyPlan[journeyIdx].isRefit)
                     IsRefitting = true;
+
+                stationActionElapsed = 0f;
+                stationActionDuration = 0f;
+                journeyIdx++;
+            }
+        }
+
+        // Advance wall interaction step (same timed pattern)
+        if (journeyIdx >= 0 && journeyIdx < journeyPlan.Count
+            && journeyPlan[journeyIdx].isWallAction)
+        {
+            if (IsMoving) return;
+
+            if (stationActionElapsed == 0f && stationActionDuration == 0f)
+            {
+                stationActionDuration = journeyPlan[journeyIdx].duration;
+                stationActionElapsed = 0f;
+            }
+
+            stationActionElapsed += Time.deltaTime;
+
+            if (stationActionElapsed >= stationActionDuration)
+            {
+                CurrentEnergy = Mathf.Max(0, CurrentEnergy - journeyPlan[journeyIdx].energyCost);
+                map?.Model?.CompleteWallInteraction(wallActionRoomA, wallActionRoomB);
+                OnWallInteractionCompleted?.Invoke(wallActionRoomA, wallActionRoomB);
 
                 stationActionElapsed = 0f;
                 stationActionDuration = 0f;

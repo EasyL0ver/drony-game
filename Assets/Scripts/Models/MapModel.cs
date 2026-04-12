@@ -28,6 +28,9 @@ public class MapModel
         = new Dictionary<Vector2Int, RoomSize>();
     public List<Connection> Connections { get; private set; } = new List<Connection>();
 
+    // Wall interactions (rubble, etc.) — keyed by ConnKey
+    readonly Dictionary<long, WallInteraction> wallInteractions = new Dictionary<long, WallInteraction>();
+
     /// <summary>One directional passage between two rooms.</summary>
     public struct Connection
     {
@@ -119,6 +122,30 @@ public class MapModel
         RoomList = new List<Vector2Int>(rooms);
         RoomSizes = roomSizes;
         Connections = connections;
+
+        // Randomly convert some corridors/ducts to rubble
+        wallInteractions.Clear();
+        for (int i = 0; i < Connections.Count; i++)
+        {
+            var c = Connections[i];
+            if (c.type == PassageType.Vent) continue;
+            if (c.roomA == Vector2Int.zero || c.roomB == Vector2Int.zero) continue;
+            if (rng.NextDouble() < 0.25)
+            {
+                var originalType = c.type;
+                c.type = PassageType.Rubble;
+                Connections[i] = c;
+                wallInteractions[ConnKey(c.roomA, c.roomB)] = new WallInteraction
+                {
+                    requiredGear = GearType.RubbleClearer,
+                    duration = 5f,
+                    energyCost = 2,
+                    label = "CLEAR RUBBLE",
+                    blocksPassage = true,
+                    resultingPassageType = originalType,
+                };
+            }
+        }
     }
 
     static RoomSize RandomRoomSize(System.Random rng)
@@ -236,6 +263,7 @@ public class MapModel
         switch (t)
         {
             case PassageType.Corridor: return CorridorWidth;
+            case PassageType.Rubble:   return CorridorWidth;
             case PassageType.Duct:     return DuctWidth;
             case PassageType.Vent:     return VentPipeRadius * 2f;
             default:                   return CorridorWidth;
@@ -247,6 +275,7 @@ public class MapModel
         switch (t)
         {
             case PassageType.Corridor: return WallHeight * 0.88f;
+            case PassageType.Rubble:   return WallHeight * 0.88f;
             case PassageType.Duct:     return WallHeight * 0.38f;
             case PassageType.Vent:     return WallHeight * 0.65f;
             default:                   return WallHeight;
@@ -291,6 +320,43 @@ public class MapModel
         return PassageType.Corridor;
     }
 
+    public bool IsBlocked(Vector2Int a, Vector2Int b)
+    {
+        long key = ConnKey(a, b);
+        return wallInteractions.TryGetValue(key, out var wi) && wi.blocksPassage;
+    }
+
+    public WallInteraction? GetWallInteraction(Vector2Int a, Vector2Int b)
+    {
+        long key = ConnKey(a, b);
+        return wallInteractions.TryGetValue(key, out var wi) ? (WallInteraction?)wi : null;
+    }
+
+    /// <summary>
+    /// Complete a wall interaction: remove it and apply its resulting passage type.
+    /// Returns true if an interaction was found and completed.
+    /// </summary>
+    public bool CompleteWallInteraction(Vector2Int a, Vector2Int b)
+    {
+        long key = ConnKey(a, b);
+        if (!wallInteractions.TryGetValue(key, out var wi)) return false;
+
+        wallInteractions.Remove(key);
+
+        // Update connection type to the result
+        for (int i = 0; i < Connections.Count; i++)
+        {
+            if (ConnKey(Connections[i].roomA, Connections[i].roomB) == key)
+            {
+                var c = Connections[i];
+                c.type = wi.resultingPassageType;
+                Connections[i] = c;
+                break;
+            }
+        }
+        return true;
+    }
+
     // ── Travel / energy costs ────────────────
 
     public static float TravelTime(PassageType type)
@@ -298,6 +364,7 @@ public class MapModel
         switch (type)
         {
             case PassageType.Corridor: return 2f;
+            case PassageType.Rubble:   return 2f;
             case PassageType.Duct:     return 4f;
             case PassageType.Vent:     return 6f;
             default: return 2f;
@@ -309,6 +376,7 @@ public class MapModel
         switch (type)
         {
             case PassageType.Corridor: return 1;
+            case PassageType.Rubble:   return 1;
             case PassageType.Duct:     return 2;
             case PassageType.Vent:     return 3;
             default: return 1;
@@ -320,6 +388,7 @@ public class MapModel
         switch (type)
         {
             case PassageType.Corridor: return "CORRIDOR";
+            case PassageType.Rubble:   return "RUBBLE";
             case PassageType.Duct:     return "DUCT";
             case PassageType.Vent:     return "VENT";
             default:                   return "TRAVEL";
@@ -406,6 +475,7 @@ public class MapModel
         foreach (var c in Connections)
         {
             if (!traversable.Contains(c.roomA) || !traversable.Contains(c.roomB)) continue;
+            if (IsBlocked(c.roomA, c.roomB)) continue;
             float cost = TravelTime(c.type);
             adj[c.roomA].Add((c.roomB, cost));
             adj[c.roomB].Add((c.roomA, cost));

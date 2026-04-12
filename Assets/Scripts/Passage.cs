@@ -21,4 +21,9 @@ public class Passage : WallEntity
         Edge = edge;
         Type = type;
     }
+
+    public void UpdateType(PassageType newType)
+    {
+        Type = newType;
+    }
 }

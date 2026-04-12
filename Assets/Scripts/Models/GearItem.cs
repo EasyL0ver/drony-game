@@ -33,9 +33,18 @@ public static class GearCatalog
         "\uD83D\uDCE1" // 📡
     );
 
+    public static readonly GearItem RubbleClearer = new GearItem(
+        GearType.RubbleClearer,
+        "Rubble Clearer",
+        "Allows the drone to clear rubble-blocked passages.",
+        3,
+        "\uD83D\uDCA5" // 💥
+    );
+
     public static GearItem[] All = new GearItem[]
     {
         Scanner,
+        RubbleClearer,
     };
 
     public static GearItem Get(GearType type)

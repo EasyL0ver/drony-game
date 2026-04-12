@@ -58,6 +58,9 @@ public class DroneModel
     /// <summary>True if the drone has a Scanner and can scan rooms.</summary>
     public bool CanScan => HasGear(GearType.Scanner);
 
+    /// <summary>True if the drone has a RubbleClearer and can clear blocked passages.</summary>
+    public bool CanClearRubble => HasGear(GearType.RubbleClearer);
+
     // ── Energy ───────────────────────────────
 
     public int MaxEnergy { get; set; } = 10;
@@ -95,6 +98,7 @@ public class DroneModel
         public bool isScan;
         public bool isCharge;
         public bool isRefit;
+        public bool isWallAction;
         public int energyCost;
     }
 
@@ -183,7 +187,7 @@ public class DroneModel
         // Active step
         if (JourneyPlan[i].isScan)
             return GetScanProgress?.Invoke() ?? 0f;
-        if (JourneyPlan[i].isCharge || JourneyPlan[i].isRefit)
+        if (JourneyPlan[i].isCharge || JourneyPlan[i].isRefit || JourneyPlan[i].isWallAction)
             return GetStationActionProgress?.Invoke() ?? 0f;
         return TravelProgress;
     }
