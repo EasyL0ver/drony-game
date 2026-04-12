@@ -45,11 +45,11 @@ public class HexMapGenerator : MonoBehaviour
     public float GridScaleValue => gridScale;
 
     [Header("Colors")]
-    [SerializeField] Color floorColor      = new Color(0.05f, 0.05f, 0.07f);
-    [SerializeField] Color wallColor       = new Color(0.10f, 0.10f, 0.14f);
-    [SerializeField] Color corridorGlow    = new Color(0f, 0.85f, 1f);
-    [SerializeField] Color ductGlow        = new Color(1f, 0.55f, 0f);
-    [SerializeField] Color ventGlow        = new Color(0.2f, 1f, 0.3f);
+    Color floorColor      = Palette.FloorColor;
+    Color wallColor       = Palette.WallColor;
+    Color corridorGlow    = Palette.CorridorGlow;
+    Color ductGlow        = Palette.DuctGlow;
+    Color ventGlow        = Palette.VentGlow;
     [SerializeField] float glowIntensity   = 4f;
 
     // Flat-top hex: 6 axial neighbor directions

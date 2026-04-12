@@ -500,7 +500,7 @@ public class RoomTile : MonoBehaviour
         droneLabelText.characterSize = 0.12f;
         droneLabelText.anchor = TextAnchor.MiddleCenter;
         droneLabelText.alignment = TextAlignment.Center;
-        droneLabelText.color = new Color(0f, 0.85f, 1f, 0.9f);
+        droneLabelText.color = Palette.WithAlpha(Palette.DroneIdle, 0.9f);
         droneLabelText.text = "";
         droneLabel.SetActive(false);
     }

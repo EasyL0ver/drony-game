@@ -23,10 +23,10 @@ public class ChargingStation : WallEntity
             DestroyImmediate(transform.GetChild(0).gameObject);
 
         InitMaterials(
-            new Color(0.10f, 0.08f, 0.05f),  // base
-            new Color(0.12f, 0.10f, 0.06f),  // body (pylon)
-            new Color(0.20f, 0.16f, 0.08f),  // accent
-            new Color(1f, 0.75f, 0.1f)       // glow (amber)
+            new Color(0.10f, 0.08f, 0.05f),
+            new Color(0.12f, 0.10f, 0.06f),
+            new Color(0.20f, 0.16f, 0.08f),
+            Palette.ChargingGlow
         );
 
         // All geometry in local space: Z+ = into room, Z- = into wall, Y+ = up

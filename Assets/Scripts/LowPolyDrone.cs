@@ -13,9 +13,9 @@ public class LowPolyDrone : MonoBehaviour
     [SerializeField] float rotorSpeed = 2800f;
 
     [Header("Colors")]
-    [SerializeField] Color hullColor  = new Color(0.12f, 0.12f, 0.15f);
-    [SerializeField] Color armColor   = new Color(0.08f, 0.08f, 0.10f);
-    [SerializeField] Color glowColor  = new Color(0f, 0.85f, 1f);
+    Color hullColor  = new Color(0.12f, 0.12f, 0.15f);
+    Color armColor   = new Color(0.08f, 0.08f, 0.10f);
+    Color glowColor  = Palette.DroneIdle;
     [SerializeField] float glowIntensity = 4f;
 
     Transform[] rotors;

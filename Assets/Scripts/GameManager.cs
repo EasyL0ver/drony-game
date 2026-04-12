@@ -139,7 +139,7 @@ public class GameManager : MonoBehaviour
         rtsCamera.Init(Vector3.zero, 20f, 56f);
 
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.01f, 0.01f, 0.02f, 1f);
+        cam.backgroundColor = Palette.CameraBg;
 
         // ── overlay manager ──
         var overlayGO = new GameObject("OverlayManager");

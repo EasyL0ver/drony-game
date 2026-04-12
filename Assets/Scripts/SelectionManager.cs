@@ -23,8 +23,8 @@ public class SelectionManager : MonoBehaviour
     RoomTile hoveredTile;
 
     // Box visuals
-    [SerializeField] Color boxColor       = new Color(0f, 0.85f, 1f, 0.15f);
-    [SerializeField] Color boxBorderColor = new Color(0f, 0.85f, 1f, 0.8f);
+    Color boxColor       = Palette.SelectionBoxFill;
+    Color boxBorderColor = Palette.SelectionBoxBorder;
     Texture2D boxTex;
     Texture2D borderTex;
 

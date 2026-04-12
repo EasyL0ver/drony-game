@@ -53,17 +53,17 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color panelColor      = new Color(0.02f, 0.02f, 0.04f, 0.80f);
     static readonly Color cardColor       = new Color(0.05f, 0.05f, 0.08f, 0.90f);
     static readonly Color cardSelectedCol = new Color(0.04f, 0.12f, 0.18f, 0.95f);
-    static readonly Color cardSelectedBorderCol = new Color(0f, 0.85f, 1f, 0.6f);
-    static readonly Color nameSelectedCol = new Color(0.3f, 1f, 1f, 1f);
-    static readonly Color accentColor     = new Color(0f, 0.85f, 1f, 1f);
+    static readonly Color cardSelectedBorderCol = Palette.WithAlpha(Palette.SelectionRing, 0.6f);
+    static readonly Color nameSelectedCol = Color.white;
+    static readonly Color accentColor     = Palette.DroneIdle;
     static readonly Color dimTextColor    = new Color(0.45f, 0.50f, 0.55f, 1f);
     static readonly Color barBgColor      = new Color(0.08f, 0.08f, 0.10f, 1f);
-    static readonly Color energyFullCol   = new Color(0f, 0.85f, 1f, 1f);
-    static readonly Color energyLowCol    = new Color(1f, 0.30f, 0.10f, 1f);
+    static readonly Color energyFullCol   = Palette.DroneMoving;
+    static readonly Color energyLowCol    = Palette.DroneDepleted;
 
     // Journey step colors
     static readonly Color stepBarBgCol      = new Color(0.06f, 0.06f, 0.08f, 1f);
-    static readonly Color stepTravelCol     = new Color(0f, 0.65f, 0.85f, 0.85f);
+    static readonly Color stepTravelCol     = Palette.WithAlpha(Palette.DroneMoving, 0.85f);
     static readonly Color stepScanCol       = new Color(0.10f, 0.75f, 0.45f, 0.85f);
     static readonly Color stepCompletedCol  = new Color(0.15f, 0.35f, 0.25f, 0.55f);
     static readonly Color stepFutureBarCol  = new Color(0.10f, 0.10f, 0.12f, 0.40f);
@@ -71,9 +71,9 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color stepTextDimCol    = new Color(0.45f, 0.48f, 0.50f, 0.65f);
 
     // Energy segment colors
-    static readonly Color segFullCol     = new Color(0f, 0.85f, 1f, 0.9f);
+    static readonly Color segFullCol     = Palette.WithAlpha(Palette.DroneMoving, 0.9f);
     static readonly Color segMidCol      = new Color(1f, 0.75f, 0f, 0.9f);
-    static readonly Color segLowCol      = new Color(1f, 0.25f, 0.10f, 0.9f);
+    static readonly Color segLowCol      = Palette.WithAlpha(Palette.DroneDepleted, 0.9f);
     static readonly Color segEmptyCol    = new Color(0.10f, 0.10f, 0.12f, 0.5f);
     static readonly Color segPreviewCol  = new Color(1f, 0.55f, 0f, 0.7f);
 
@@ -82,7 +82,7 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color slotFilledCol   = new Color(0.04f, 0.14f, 0.20f, 0.9f);
     static readonly Color slotLockedCol   = new Color(0.04f, 0.04f, 0.06f, 0.5f);
     static readonly Color slotTextCol     = new Color(0.55f, 0.60f, 0.65f, 1f);
-    static readonly Color slotGearCol     = new Color(0f, 0.85f, 1f, 0.95f);
+    static readonly Color slotGearCol     = Palette.DroneIdle;
     static readonly Color slotHoverCol    = new Color(0.08f, 0.18f, 0.25f, 0.9f);
 
     // Shop popup colors
@@ -93,7 +93,7 @@ public class DroneStatusUI : MonoBehaviour
 
     // Journey total bar colors
     static readonly Color journeyBarBgCol   = new Color(0.06f, 0.06f, 0.08f, 0.9f);
-    static readonly Color journeyBarFillCol = new Color(0f, 0.65f, 0.85f, 0.75f);
+    static readonly Color journeyBarFillCol = Palette.WithAlpha(Palette.DroneMoving, 0.75f);
     static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
 
     const float baseCardH = 68f;  // increased to fit gear slots
@@ -705,7 +705,7 @@ public class DroneStatusUI : MonoBehaviour
         panelBtn.navigation = pNav;
 
         var panelOutl = panelGO.AddComponent<Outline>();
-        panelOutl.effectColor = new Color(0f, 0.85f, 1f, 0.4f);
+        panelOutl.effectColor = Palette.WithAlpha(Palette.DroneIdle, 0.4f);
         panelOutl.effectDistance = new Vector2(2, -2);
 
         // Header
@@ -845,7 +845,7 @@ public class DroneStatusUI : MonoBehaviour
         hoverTooltipBg.color = new Color(0.03f, 0.03f, 0.06f, 0.88f);
 
         var outl = hoverTooltipGO.AddComponent<Outline>();
-        outl.effectColor = new Color(0f, 0.85f, 1f, 0.3f);
+        outl.effectColor = Palette.WithAlpha(Palette.DroneIdle, 0.3f);
         outl.effectDistance = new Vector2(1, -1);
 
         var txtGO = MakeText(hoverTooltipGO.transform, "Text", "", 14, Color.white, TextAnchor.MiddleCenter);

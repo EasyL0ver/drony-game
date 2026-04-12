@@ -249,9 +249,9 @@ public class OverlayManager : MonoBehaviour
             group.label.text = first.label;
             group.label.color = first.isPreview
                 ? (first.overBudget
-                    ? new Color(1f, 0.30f, 0.25f, 1f)
-                    : new Color(1f, 0.85f, 0.3f, 1f))
-                : new Color(0f, 0.85f, 1f, 1f);
+                    ? Palette.OverBudgetLabel
+                    : Palette.PreviewLabel)
+                : Palette.ActiveLabel;
 
             for (int bi = 0; bi < items.Count; bi++)
             {
@@ -310,26 +310,26 @@ public class OverlayManager : MonoBehaviour
         if (step.isPreview)
         {
             fillCol = step.overBudget
-                ? new Color(1f, 0.15f, 0.10f, 0.5f)
-                : new Color(1f, 0.75f, 0f, 0.45f);
+                ? Palette.WithAlpha(Palette.OverBudgetFill, 0.5f)
+                : Palette.WithAlpha(Palette.PreviewBarFill, 0.45f);
             bgCol = step.overBudget
-                ? new Color(0.12f, 0.02f, 0.02f, 0.80f)
-                : new Color(0.08f, 0.06f, 0.01f, 0.75f);
+                ? Palette.OverBudgetBg
+                : Palette.PreviewBarBg;
             infoCol = step.overBudget
-                ? new Color(1f, 0.30f, 0.25f, 0.8f)
-                : new Color(1f, 0.7f, 0.3f, 0.8f);
+                ? Palette.OverBudgetInfo
+                : Palette.PreviewBarInfo;
         }
         else if (step.isActive)
         {
-            fillCol = new Color(0f, 0.85f, 1f, 0.9f);
-            bgCol = new Color(0.02f, 0.04f, 0.08f, 0.88f);
-            infoCol = new Color(0f, 0.85f, 1f, 1f);
+            fillCol = Palette.WithAlpha(Palette.ActiveBarFill, 0.9f);
+            bgCol = Palette.ActiveBarBg;
+            infoCol = Palette.ActiveBarInfo;
         }
         else
         {
-            fillCol = new Color(0.25f, 0.35f, 0.45f, 0.55f);
-            bgCol = new Color(0.02f, 0.04f, 0.08f, 0.55f);
-            infoCol = new Color(0.5f, 0.6f, 0.7f, 0.6f);
+            fillCol = Palette.InactiveBarFill;
+            bgCol = Palette.InactiveBarBg;
+            infoCol = Palette.InactiveBarInfo;
         }
 
         bar.fillImage.color = fillCol;
@@ -428,7 +428,7 @@ public class OverlayManager : MonoBehaviour
         var bgGO = new GameObject("Bg");
         bgGO.transform.SetParent(rowGO.transform, false);
         bar.bgImage = bgGO.AddComponent<Image>();
-        bar.bgImage.color = new Color(0.02f, 0.04f, 0.08f, 0.88f);
+        bar.bgImage.color = Palette.ActiveBarBg;
         var bgRT = bgGO.GetComponent<RectTransform>();
         bgRT.anchorMin = new Vector2(0, 0);
         bgRT.anchorMax = new Vector2(0, 1);
@@ -440,7 +440,7 @@ public class OverlayManager : MonoBehaviour
         var fillGO = new GameObject("Fill");
         fillGO.transform.SetParent(bgGO.transform, false);
         bar.fillImage = fillGO.AddComponent<Image>();
-        bar.fillImage.color = new Color(0f, 0.85f, 1f, 0.9f);
+        bar.fillImage.color = Palette.WithAlpha(Palette.ActiveBarFill, 0.9f);
         bar.fillRect = fillGO.GetComponent<RectTransform>();
         bar.fillRect.anchorMin = new Vector2(0, 0);
         bar.fillRect.anchorMax = new Vector2(0, 1);
@@ -464,7 +464,7 @@ public class OverlayManager : MonoBehaviour
         timeRT.offsetMin = Vector2.zero;
         timeRT.offsetMax = Vector2.zero;
 
-        bgGO.AddComponent<Outline>().effectColor = new Color(0f, 0.6f, 0.9f, 0.3f);
+        bgGO.AddComponent<Outline>().effectColor = Palette.WithAlpha(Palette.ActiveBarFill, 0.3f);
 
         return bar;
     }

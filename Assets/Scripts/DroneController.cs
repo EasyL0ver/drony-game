@@ -536,7 +536,7 @@ public class DroneController : MonoBehaviour
             if (IsSelected && ringMat != null)
             {
                 float pulse = 0.6f + 0.4f * Mathf.Sin(Time.time * 4f);
-                Color col = new Color(0f, 0.85f, 1f, pulse);
+                Color col = Palette.WithAlpha(Palette.SelectionRing, pulse);
                 ringMat.color = col;
                 ringMat.SetColor("_BaseColor", col);
             }
@@ -851,7 +851,7 @@ public class DroneController : MonoBehaviour
         Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
         if (sh == null) sh = Shader.Find("Unlit/Color");
         ringMat = new Material(sh);
-        Color col = new Color(0f, 0.85f, 1f, 0.8f);
+        Color col = Palette.WithAlpha(Palette.SelectionRing, 0.8f);
         ringMat.color = col;
         ringMat.SetColor("_BaseColor", col);
         ringMat.SetFloat("_Surface", 1f);

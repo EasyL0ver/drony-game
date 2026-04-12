@@ -23,10 +23,10 @@ public class RefittingStation : WallEntity
             DestroyImmediate(transform.GetChild(0).gameObject);
 
         InitMaterials(
-            new Color(0.08f, 0.08f, 0.10f),  // base
-            new Color(0.10f, 0.12f, 0.14f),  // body (tower)
-            new Color(0.15f, 0.18f, 0.20f),  // accent
-            new Color(0.2f, 1f, 0.8f)        // glow (teal)
+            new Color(0.08f, 0.08f, 0.10f),
+            new Color(0.10f, 0.12f, 0.14f),
+            new Color(0.15f, 0.18f, 0.20f),
+            Palette.RefittingGlow
         );
 
         // All geometry in local space: Z+ = into room, Z- = into wall, Y+ = up

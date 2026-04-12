@@ -261,8 +261,8 @@ public class RoutePreview
         previewLineGO.SetActive(true);
         bool overBudget = ExceedsEnergy;
         Color col = overBudget
-            ? new Color(1f, 0.15f, 0.10f, 0.5f)
-            : new Color(1f, 0.75f, 0f, 0.4f);
+            ? Palette.WithAlpha(Palette.OverBudgetLine, 0.5f)
+            : Palette.WithAlpha(Palette.PreviewLine, 0.4f);
         previewMat.color = col;
         previewMat.SetColor("_BaseColor", col);
         DroneController.BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
@@ -353,7 +353,7 @@ public class RoutePreview
 
         EnsurePreviewLine();
         previewLineGO.SetActive(true);
-        Color col = new Color(1f, 0.75f, 0f, 0.4f);
+        Color col = Palette.WithAlpha(Palette.PreviewLine, 0.4f);
         previewMat.color = col;
         previewMat.SetColor("_BaseColor", col);
         DroneController.BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
@@ -405,7 +405,7 @@ public class RoutePreview
         pathLineGO.SetActive(true);
 
         float alpha = drone.IsSelected ? 0.55f : 0.2f;
-        Color col = new Color(0f, 0.85f, 1f, alpha);
+        Color col = Palette.WithAlpha(Palette.JourneyLine, alpha);
         pathMat.color = col;
         pathMat.SetColor("_BaseColor", col);
 
@@ -435,7 +435,7 @@ public class RoutePreview
         Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
         if (sh == null) sh = Shader.Find("Unlit/Color");
         pathMat = new Material(sh);
-        Color col = new Color(0f, 0.85f, 1f, 0.3f);
+        Color col = Palette.WithAlpha(Palette.JourneyLine, 0.3f);
         pathMat.color = col;
         pathMat.SetColor("_BaseColor", col);
         pathMat.SetFloat("_Surface", 1f);
@@ -466,7 +466,7 @@ public class RoutePreview
         Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
         if (sh == null) sh = Shader.Find("Unlit/Color");
         previewMat = new Material(sh);
-        Color col = new Color(1f, 0.75f, 0f, 0.4f);
+        Color col = Palette.WithAlpha(Palette.PreviewLine, 0.4f);
         previewMat.color = col;
         previewMat.SetColor("_BaseColor", col);
         previewMat.SetFloat("_Surface", 1f);

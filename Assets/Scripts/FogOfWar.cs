@@ -9,9 +9,9 @@ public class FogOfWar : MonoBehaviour
 {
     [Header("Appearance")]
     [SerializeField] float fogElevation   = 0.25f;
-    [SerializeField] Color unknownColor   = new Color(0.01f, 0.01f, 0.02f, 1.0f);
-    [SerializeField] Color discoveredColor = new Color(0.02f, 0.02f, 0.04f, 0.50f);
-    [SerializeField] Color outlineColor   = new Color(0f, 0.85f, 1f, 0.35f);
+    Color unknownColor   = Palette.FogUnknown;
+    Color discoveredColor = Palette.FogDiscovered;
+    Color outlineColor   = Palette.FogOutline;
 
     [Header("Scanning")]
     [SerializeField] float scanDuration = 3f;
