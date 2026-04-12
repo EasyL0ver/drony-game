@@ -13,8 +13,32 @@ public class RoomModel
     public RoomSize Size { get; private set; }
     public FogState State { get; private set; } = FogState.Unknown;
 
-    /// <summary>True if this room is a refitting station where drones can equip gear.</summary>
-    public bool IsRefittingStation { get; set; }
+    /// <summary>The type of station in this room, if any.</summary>
+    public StationType Station { get; private set; } = StationType.None;
+
+    /// <summary>Which edge (0-5) the station sits on. -1 if no station.</summary>
+    public int StationEdge { get; private set; } = -1;
+
+    /// <summary>What occupies each hex wall (6 edges). Passages tracked separately in Connections.</summary>
+    StationType[] wallStations = new StationType[6];
+
+    /// <summary>Place a station on a specific edge.</summary>
+    public void SetWallStation(int edge, StationType type)
+    {
+        wallStations[edge] = type;
+        Station = type;
+        StationEdge = edge;
+    }
+
+    /// <summary>Get the station type on a specific edge.</summary>
+    public StationType GetWallStation(int edge) => wallStations[edge];
+
+    /// <summary>Convenience: true if this room has any station.</summary>
+    public bool IsStation => Station != StationType.None;
+
+    /// <summary>Legacy convenience accessor.</summary>
+    public bool IsRefittingStation => Station == StationType.Refitting;
+    public bool IsChargingStation => Station == StationType.Charging;
 
     // Scanning
     public float ScanDuration { get; set; } = 3f;

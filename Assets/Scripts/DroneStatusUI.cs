@@ -450,12 +450,7 @@ public class DroneStatusUI : MonoBehaviour
             c.cardOutline.enabled = sel;
 
             // ── Equipment slots ──
-            bool atStation = c.drone.Model != null
-                && !c.drone.IsMoving
-                && c.drone.CurrentRoom == Vector2Int.zero
-                && gm != null && gm.fog != null
-                && gm.fog.GetTile(Vector2Int.zero) != null
-                && gm.fog.GetTile(Vector2Int.zero).RModel.IsRefittingStation;
+            bool atRefitStation = c.drone.IsRefitting;
 
             for (int s = 0; s < c.slotBgs.Count; s++)
             {
@@ -466,13 +461,13 @@ public class DroneStatusUI : MonoBehaviour
                 {
                     c.slotLabels[s].text = equip.Icon + " " + equip.Name.ToUpper();
                     c.slotLabels[s].color = slotGearCol;
-                    c.slotBgs[s].color = atStation ? slotFilledCol : slotFilledCol * 0.7f;
+                    c.slotBgs[s].color = atRefitStation ? slotFilledCol : slotFilledCol * 0.7f;
                 }
                 else
                 {
-                    c.slotLabels[s].text = atStation ? "+ EQUIP" : "EMPTY";
-                    c.slotLabels[s].color = atStation ? accentColor : slotTextCol;
-                    c.slotBgs[s].color = atStation ? slotEmptyCol : slotLockedCol;
+                    c.slotLabels[s].text = atRefitStation ? "+ EQUIP" : "EMPTY";
+                    c.slotLabels[s].color = atRefitStation ? accentColor : slotTextCol;
+                    c.slotBgs[s].color = atRefitStation ? slotEmptyCol : slotLockedCol;
                 }
             }
 
@@ -642,13 +637,8 @@ public class DroneStatusUI : MonoBehaviour
     {
         if (drone.Model == null || drone.Model.Equipment == null) return;
 
-        // Must be at the refitting station and idle
-        bool atStation = !drone.IsMoving
-            && drone.CurrentRoom == Vector2Int.zero
-            && gm != null && gm.fog != null
-            && gm.fog.GetTile(Vector2Int.zero) != null
-            && gm.fog.GetTile(Vector2Int.zero).RModel.IsRefittingStation;
-        if (!atStation) return;
+        // Must have completed a refit action
+        if (!drone.IsRefitting) return;
 
         var equipped = drone.Model.Equipment[slotIdx];
         if (equipped != null)

@@ -93,6 +93,8 @@ public class DroneModel
         public string label;
         public float duration;
         public bool isScan;
+        public bool isCharge;
+        public bool isRefit;
         public int energyCost;
     }
 
@@ -170,6 +172,9 @@ public class DroneModel
     /// <summary>Per-step scan progress callback. Set by the controller to query room scan state.</summary>
     public System.Func<float> GetScanProgress { get; set; }
 
+    /// <summary>Per-step charge/refit progress callback. Set by the controller.</summary>
+    public System.Func<float> GetStationActionProgress { get; set; }
+
     public float GetStepProgress(int i)
     {
         if (JourneyIdx < 0 || i < 0 || i >= JourneyPlan.Count) return 0f;
@@ -178,6 +183,8 @@ public class DroneModel
         // Active step
         if (JourneyPlan[i].isScan)
             return GetScanProgress?.Invoke() ?? 0f;
+        if (JourneyPlan[i].isCharge || JourneyPlan[i].isRefit)
+            return GetStationActionProgress?.Invoke() ?? 0f;
         return TravelProgress;
     }
 
@@ -198,7 +205,8 @@ public class DroneModel
     /// <param name="scanDurationForRoom">Returns scan duration for a room coord, or 0 if not needed.</param>
     public bool TryBuildJourney(List<Vector2Int> newPath, MapModel map,
                                 System.Func<Vector2Int, FogState> getRoomState,
-                                System.Func<Vector2Int, float> scanDurationForRoom)
+                                System.Func<Vector2Int, float> scanDurationForRoom,
+                                System.Func<Vector2Int, StationType> getStationType = null)
     {
         // Calculate total energy cost before committing
         int cost = 0;
@@ -209,12 +217,14 @@ public class DroneModel
             prev = room;
         }
 
-        var destState = getRoomState(newPath[newPath.Count - 1]);
+        var dest = newPath[newPath.Count - 1];
+        var destState = getRoomState(dest);
+        var destStation = getStationType != null ? getStationType(dest) : StationType.None;
         float scanDur = 0f;
         if (destState == FogState.Unknown && CanScan)
         {
             cost += MapModel.ScanEnergyCost;
-            scanDur = scanDurationForRoom(newPath[newPath.Count - 1]);
+            scanDur = scanDurationForRoom(dest);
         }
 
         int available = CurrentEnergy - JourneyEnergyCost;
@@ -277,7 +287,8 @@ public class DroneModel
     /// </summary>
     public void BuildPreviewPlan(List<Vector2Int> previewPath, MapModel map,
                                  System.Func<Vector2Int, FogState> getRoomState,
-                                 System.Func<Vector2Int, float> scanDurationForRoom)
+                                 System.Func<Vector2Int, float> scanDurationForRoom,
+                                 System.Func<Vector2Int, StationType> getStationType = null)
     {
         PreviewPlan.Clear();
         if (previewPath == null || previewPath.Count == 0) return;
@@ -297,13 +308,15 @@ public class DroneModel
             prev = room;
         }
 
-        var destState = getRoomState(previewPath[previewPath.Count - 1]);
+        var dest = previewPath[previewPath.Count - 1];
+        var destState = getRoomState(dest);
+        var destStation = getStationType != null ? getStationType(dest) : StationType.None;
         if (destState == FogState.Unknown && CanScan)
         {
             PreviewPlan.Add(new JourneyStep
             {
                 label = "SCAN",
-                duration = scanDurationForRoom(previewPath[previewPath.Count - 1]),
+                duration = scanDurationForRoom(dest),
                 isScan = true,
                 energyCost = MapModel.ScanEnergyCost,
             });
@@ -319,14 +332,5 @@ public class DroneModel
 
     // ── Helpers ──────────────────────────────
 
-    public static string PassageLabel(PassageType type)
-    {
-        switch (type)
-        {
-            case PassageType.Corridor: return "CORRIDOR";
-            case PassageType.Duct:     return "DUCT";
-            case PassageType.Vent:     return "VENT";
-            default:                   return "MOVE";
-        }
-    }
+    public static string PassageLabel(PassageType type) => MapModel.PassageLabel(type);
 }

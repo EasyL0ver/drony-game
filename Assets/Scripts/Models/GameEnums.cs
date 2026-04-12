@@ -9,3 +9,5 @@ public enum PassageType { Corridor, Duct, Vent }
 public enum RoomSize { Large, Medium, Small }
 
 public enum GearType { Scanner }
+
+public enum StationType { None, Refitting, Charging }

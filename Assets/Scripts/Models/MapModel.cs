@@ -183,6 +183,32 @@ public class MapModel
         return 0;
     }
 
+    /// <summary>
+    /// Returns the hex edge index (0-5) nearest to a world-space point
+    /// relative to a given hex cell. Uses angle from hex center.
+    /// </summary>
+    public int NearestEdge(Vector3 worldPoint, Vector2Int coord)
+    {
+        Vector3 center = HexCenter(coord);
+        float dx = worldPoint.x - center.x;
+        float dz = worldPoint.z - center.z;
+        float angle = Mathf.Atan2(dz, dx) * Mathf.Rad2Deg;
+        if (angle < 0f) angle += 360f;
+        return Mathf.FloorToInt(angle / 60f) % 6;
+    }
+
+    /// <summary>
+    /// Returns the world-space midpoint of a hex wall edge for a given room.
+    /// </summary>
+    public Vector3 WallMidpoint(Vector2Int coord, int edge, RoomSize size)
+    {
+        Vector3 center = HexCenter(coord);
+        float r = RoomRadius(size);
+        Vector3 c0 = Corner(center, edge, r);
+        Vector3 c1 = Corner(center, (edge + 1) % 6, r);
+        return (c0 + c1) * 0.5f;
+    }
+
     public float RoomRadius(RoomSize s)
     {
         switch (s)
@@ -289,7 +315,41 @@ public class MapModel
         }
     }
 
+    public static string PassageLabel(PassageType type)
+    {
+        switch (type)
+        {
+            case PassageType.Corridor: return "CORRIDOR";
+            case PassageType.Duct:     return "DUCT";
+            case PassageType.Vent:     return "VENT";
+            default:                   return "TRAVEL";
+        }
+    }
+
     public const int ScanEnergyCost = 2;
+    public const float ChargeDuration = 4f;
+    public const int ChargeEnergyGain = 5;
+    public const float RefitDuration = 2f;
+
+    public static string StationLabel(StationType type)
+    {
+        switch (type)
+        {
+            case StationType.Charging:  return "CHARGE";
+            case StationType.Refitting: return "REFIT";
+            default:                    return "";
+        }
+    }
+
+    public static float StationDuration(StationType type)
+    {
+        switch (type)
+        {
+            case StationType.Charging:  return ChargeDuration;
+            case StationType.Refitting: return RefitDuration;
+            default:                    return 0f;
+        }
+    }
 
     // ── Pathfinding (Dijkstra) ───────────────
 
@@ -333,6 +393,8 @@ public class MapModel
                 traversable.Add(room);
         }
 
+        // Start always traversable (drone is already there)
+        traversable.Add(from);
         // Destination always allowed (scouting)
         traversable.Add(to);
 

@@ -171,6 +171,15 @@ public class HexMapGenerator : MonoBehaviour
         }
     }
 
+    public Vector3 WallMidpoint(Vector2Int coord, int edge, RoomSize size)
+    {
+        Vector3 center = HexCenter(coord);
+        float r = RoomRadius(size);
+        Vector3 c0 = Corner(center, edge, r);
+        Vector3 c1 = Corner(center, (edge + 1) % 6, r);
+        return (c0 + c1) * 0.5f;
+    }
+
     public float RoomWallHeight(RoomSize s)
     {
         switch (s)

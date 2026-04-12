@@ -33,12 +33,42 @@ public class RoomTile : MonoBehaviour
 
     public List<TileConnection> Connections { get; private set; } = new List<TileConnection>();
 
+    /// <summary>
+    /// World-space point where a drone should park for the station in this room.
+    /// Returns null if no station exists.
+    /// </summary>
+    public Vector3? StationDroneParkPoint
+    {
+        get
+        {
+            var s = GetStation();
+            return s != null ? (Vector3?)s.DroneParkPoint : null;
+        }
+    }
+
+    /// <summary>Get the station WallEntity in this room, or null.</summary>
+    public WallEntity GetStation()
+    {
+        foreach (var w in GetComponentsInChildren<WallEntity>())
+            if (w.StationType != StationType.None) return w;
+        return null;
+    }
+
+    /// <summary>
+    /// Get the Passage wall entity for the given neighbor room, or null if none.
+    /// </summary>
+    public Passage GetPassage(Vector2Int neighbor)
+    {
+        foreach (var p in GetComponentsInChildren<Passage>())
+            if (p.Neighbor == neighbor) return p;
+        return null;
+    }
+
     // Visuals
     MeshRenderer fogRenderer;
     GameObject[] outlineEdges = new GameObject[6];
     bool outlineShown;
     Material matUnknown, matDiscovered, matOutline, matOutlineHover;
-    Material matStationOutline;
 
     // Interaction
     GameObject hoverHighlight;
@@ -50,6 +80,11 @@ public class RoomTile : MonoBehaviour
     float flashTimer;
     const float flashDuration = 0.5f;
     float fogMeshY;
+
+    // Drone presence indicator (shown on unknown tiles when a drone is inside)
+    HashSet<DroneController> dronesPresent = new HashSet<DroneController>();
+    GameObject droneLabel;
+    TextMesh droneLabelText;
 
     // Config (set once by builder)
     float fogElevation;
@@ -74,8 +109,8 @@ public class RoomTile : MonoBehaviour
         // Bright version of outline for hover
         matOutlineHover = new Material(outline);
         Color hc = outline.color;
-        hc = Color.Lerp(hc, Color.white, 0.35f);
-        hc.a = Mathf.Min(1f, outline.color.a * 2.2f);
+        hc = Color.Lerp(hc, Color.white, 0.15f);
+        hc.a = Mathf.Min(1f, outline.color.a * 1.4f);
         matOutlineHover.color = hc;
         matOutlineHover.SetColor("_BaseColor", hc);
 
@@ -94,9 +129,11 @@ public class RoomTile : MonoBehaviour
 
     // ── drone interaction (delegates to model) ──
 
-    public void OnDroneEnter()
+    public void OnDroneEnter(DroneController drone)
     {
         RModel.OnDroneEnter();
+        if (drone != null) dronesPresent.Add(drone);
+        RefreshDroneLabel();
     }
 
     public void OnDroneArrived(bool canScan = true)
@@ -123,9 +160,11 @@ public class RoomTile : MonoBehaviour
         }
     }
 
-    public void OnDroneExit()
+    public void OnDroneExit(DroneController drone)
     {
         RModel.OnDroneExit();
+        if (drone != null) dronesPresent.Remove(drone);
+        RefreshDroneLabel();
     }
 
     // ── model state change callback ──────────
@@ -133,6 +172,7 @@ public class RoomTile : MonoBehaviour
     void OnModelStateChanged(FogState oldState, FogState newState)
     {
         ApplyVisuals();
+        RefreshDroneLabel();
     }
 
     void ApplyVisuals()
@@ -153,30 +193,15 @@ public class RoomTile : MonoBehaviour
             case FogState.Discovered:
                 fogRenderer.enabled = true;
                 fogRenderer.sharedMaterial = matDiscovered;
-                ShowOutline(RModel.IsRefittingStation);
+                ShowOutline(false);
                 break;
             case FogState.Visible:
                 fogRenderer.enabled = false;
-                ShowOutline(RModel.IsRefittingStation);
+                ShowOutline(false);
                 break;
         }
 
-        // Station gets a bright teal outline
-        if (RModel.IsRefittingStation && matStationOutline == null)
-        {
-            matStationOutline = new Material(matOutline);
-            Color sc = new Color(0.2f, 1f, 0.8f, 0.6f);
-            matStationOutline.color = sc;
-            matStationOutline.SetColor("_BaseColor", sc);
-            if (matStationOutline.HasProperty("_EmissionColor"))
-            {
-                matStationOutline.EnableKeyword("_EMISSION");
-                matStationOutline.SetColor("_EmissionColor", sc * 1.5f);
-            }
-        }
 
-        if (RModel.IsRefittingStation && outlineShown)
-            ApplyOutlineMaterial(matStationOutline);
     }
 
     public void ShowOutline(bool show)
@@ -237,7 +262,7 @@ public class RoomTile : MonoBehaviour
 
     // ── interaction ──────────────────────────
 
-    public void SetHovered(bool hovered)
+    public void SetHovered(bool hovered, StationType hoveredStationType = StationType.None)
     {
         isHovered = hovered;
         if (hoverHighlight != null)
@@ -245,9 +270,9 @@ public class RoomTile : MonoBehaviour
             hoverHighlight.SetActive(hovered);
             if (hovered)
             {
-                // Above fog when fog visible, at floor level when revealed
-                float yOff = (fogRenderer != null && fogRenderer.enabled)
-                    ? fogMeshY : 0f;
+                // Above fog for hidden tiles, at floor level for discovered/visible
+                bool opaqueHidden = State == FogState.Unknown || State == FogState.Scanning;
+                float yOff = opaqueHidden ? fogMeshY : 0f;
                 hoverHighlight.transform.localPosition = new Vector3(0f, yOff, 0f);
             }
         }
@@ -255,12 +280,15 @@ public class RoomTile : MonoBehaviour
         // Brighten outline edges on hover
         if (outlineShown)
         {
-            Material mat;
-            if (RModel.IsRefittingStation && matStationOutline != null)
-                mat = matStationOutline;
-            else
-                mat = hovered ? matOutlineHover : matOutline;
+            Material mat = hovered ? matOutlineHover : matOutline;
             ApplyOutlineMaterial(mat);
+        }
+
+        // Station structure glow
+        foreach (var w in GetComponentsInChildren<WallEntity>())
+        {
+            if (w.StationType == StationType.None) continue;
+            w.SetHoverGlow(hovered && hoveredStationType == w.StationType);
         }
     }
 
@@ -280,11 +308,30 @@ public class RoomTile : MonoBehaviour
             moveFlash.SetActive(true);
     }
 
+    void RefreshDroneLabel()
+    {
+        if (droneLabel == null) return;
+        bool show = dronesPresent.Count > 0 && State == FogState.Unknown;
+        droneLabel.SetActive(show);
+        if (show)
+        {
+            var names = new System.Text.StringBuilder();
+            foreach (var d in dronesPresent)
+            {
+                if (names.Length > 0) names.Append('\n');
+                names.Append(d.DroneName);
+            }
+            droneLabelText.text = names.ToString();
+        }
+    }
+
+    public IReadOnlyCollection<DroneController> DronesOnTile => dronesPresent;
+
     void Update()
     {
         if (isHovered && matHover != null)
         {
-            Color c = new Color(1f, 1f, 1f, 0.18f);
+            Color c = new Color(1f, 1f, 1f, 0.08f);
             matHover.color = c;
             matHover.SetColor("_BaseColor", c);
         }
@@ -425,7 +472,7 @@ public class RoomTile : MonoBehaviour
         var mf1 = hoverHighlight.AddComponent<MeshFilter>();
         hoverRenderer = hoverHighlight.AddComponent<MeshRenderer>();
         mf1.sharedMesh = hex;
-        matHover = MakeInteractionMat(new Color(1f, 1f, 1f, 0.18f));
+        matHover = MakeInteractionMat(new Color(1f, 1f, 1f, 0.08f));
         hoverRenderer.sharedMaterial = matHover;
         hoverRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         hoverRenderer.receiveShadows = false;
@@ -442,6 +489,20 @@ public class RoomTile : MonoBehaviour
         flashRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         flashRenderer.receiveShadows = false;
         moveFlash.SetActive(false);
+
+        // Drone name label (world-space text on top of fog)
+        droneLabel = new GameObject("DroneLabel");
+        droneLabel.transform.SetParent(transform, false);
+        droneLabel.transform.position = new Vector3(center.x, fogMeshY + 0.05f, center.z);
+        droneLabel.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        droneLabelText = droneLabel.AddComponent<TextMesh>();
+        droneLabelText.fontSize = 32;
+        droneLabelText.characterSize = 0.12f;
+        droneLabelText.anchor = TextAnchor.MiddleCenter;
+        droneLabelText.alignment = TextAlignment.Center;
+        droneLabelText.color = new Color(0f, 0.85f, 1f, 0.9f);
+        droneLabelText.text = "";
+        droneLabel.SetActive(false);
     }
 
     Mesh MakeFlatHex(Vector3 center, float r, float y)

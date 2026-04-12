@@ -12,6 +12,7 @@ public class SelectionManager : MonoBehaviour
 {
     GameManager gm;
     Camera cam;
+    StationType hoveredStation;
 
     // Drag state
     bool isDragging;
@@ -100,7 +101,18 @@ public class SelectionManager : MonoBehaviour
         }
 
         if (closest != null)
+        {
             closest.IsSelected = true;
+            return;
+        }
+
+        // No drone visible near click — select drones on the clicked tile (e.g. under fog)
+        RoomTile tile = RaycastTile(screenPos);
+        if (tile != null && tile.DronesOnTile.Count > 0)
+        {
+            foreach (var d in tile.DronesOnTile)
+                d.IsSelected = true;
+        }
     }
 
     void BoxSelect(Vector2 start, Vector2 end)
@@ -125,8 +137,8 @@ public class SelectionManager : MonoBehaviour
 
     void UpdateHover(Vector2 screenPos)
     {
-        RoomTile tile = RaycastTile(screenPos);
-        if (tile != hoveredTile)
+        var (tile, station) = RaycastTileWithEdge(screenPos);
+        if (tile != hoveredTile || station != hoveredStation)
         {
             // Clear old previews
             ClearAllPreviews();
@@ -134,22 +146,27 @@ public class SelectionManager : MonoBehaviour
             if (hoveredTile != null)
                 hoveredTile.SetHovered(false);
             hoveredTile = tile;
+            hoveredStation = station;
             if (hoveredTile != null)
             {
-                hoveredTile.SetHovered(true);
-                ShowPreviewsForTarget(hoveredTile.Coord);
+                hoveredTile.SetHovered(true, hoveredStation);
+                ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
             }
         }
     }
 
-    void ShowPreviewsForTarget(Vector2Int target)
+    void ShowPreviewsForTarget(Vector2Int target, StationType stationAction)
     {
+        var targetTile = gm.fog.GetTile(target);
         foreach (var d in gm.Drones)
         {
             if (!d.IsSelected) continue;
             var p = FindPath(d.CurrentRoom, target);
             if (p != null && p.Count > 0)
-                d.ShowPreviewPath(p);
+                d.ShowPreviewPath(p, stationAction);
+            else if (d.CurrentRoom == target && targetTile != null
+                     && stationAction != StationType.None)
+                d.ShowStationPreview(targetTile, stationAction);
             else
                 d.ClearPreviewPath();
         }
@@ -163,17 +180,62 @@ public class SelectionManager : MonoBehaviour
 
     RoomTile RaycastTile(Vector2 screenPos)
     {
+        return RaycastTileWithEdge(screenPos).tile;
+    }
+
+    /// <summary>
+    /// Raycast to find the hovered tile, then use angle-from-center to determine
+    /// which hex edge the cursor is nearest. Looks up wall station data on the model.
+    /// No need to raycast individual station meshes.
+    /// </summary>
+    (RoomTile tile, StationType station) RaycastTileWithEdge(Vector2 screenPos)
+    {
         Ray ray = cam.ScreenPointToRay(screenPos);
-        if (Physics.Raycast(ray, out RaycastHit hit, 500f))
-            return hit.collider.GetComponentInParent<RoomTile>();
-        return null;
+        var hits = Physics.RaycastAll(ray, 500f);
+
+        RoomTile tile = null;
+        float closestDist = float.MaxValue;
+        Vector3 hitPoint = Vector3.zero;
+
+        foreach (var hit in hits)
+        {
+            var t = hit.collider.GetComponentInParent<RoomTile>();
+            if (t != null && hit.distance < closestDist)
+            {
+                tile = t;
+                closestDist = hit.distance;
+                hitPoint = hit.point;
+            }
+        }
+
+        if (tile == null) return (null, StationType.None);
+
+        int edge = gm.hexMap.Model.NearestEdge(hitPoint, tile.Coord);
+        StationType wallStation = tile.RModel.GetWallStation(edge);
+
+        // If the edge has a passage (not a station), resolve to the neighbor tile
+        if (wallStation == StationType.None)
+        {
+            foreach (var conn in tile.RModel.Connections)
+            {
+                if (conn.edgeIndex == edge)
+                {
+                    var neighborTile = gm.fog.GetTile(conn.neighbor.Coord);
+                    if (neighborTile != null)
+                        return (neighborTile, StationType.None);
+                    break;
+                }
+            }
+        }
+
+        return (tile, wallStation);
     }
 
     // ── move orders ──────────────────────────
 
     void IssueMoveOrder(Vector2 screenPos)
     {
-        RoomTile tile = RaycastTile(screenPos);
+        var (tile, clickedStation) = RaycastTileWithEdge(screenPos);
         if (tile == null) return;
 
         ClearAllPreviews();
@@ -183,9 +245,18 @@ public class SelectionManager : MonoBehaviour
         foreach (var d in gm.Drones)
         {
             if (!d.IsSelected) continue;
+            if (d.IsPerformingStationAction) continue;
+
+            // Drone already on this tile — try station action if structure was clicked
+            if (d.CurrentRoom == target && clickedStation != StationType.None)
+            {
+                d.StartStationAction(tile, clickedStation);
+                continue;
+            }
+
             var p = FindPath(d.CurrentRoom, target);
             if (p != null && p.Count > 0)
-                d.SetPath(p);
+                d.SetPath(p, clickedStation);
         }
     }
 
