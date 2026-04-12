@@ -21,6 +21,7 @@ public class SelectionManager : MonoBehaviour
 
     // Hover
     RoomTile hoveredTile;
+    readonly Dictionary<int, Vector2Int> droneLastRoom = new Dictionary<int, Vector2Int>();
 
     // Box visuals
     Color boxColor       = Palette.SelectionBoxFill;
@@ -49,6 +50,27 @@ public class SelectionManager : MonoBehaviour
 
         // Hover tracking
         UpdateHover(mousePos);
+
+        // Refresh previews if a selected drone changed room mid-journey
+        if (hoveredTile != null)
+        {
+            bool needRefresh = false;
+            foreach (var d in gm.Drones)
+            {
+                if (!d.IsSelected) continue;
+                droneLastRoom.TryGetValue(d.DroneIndex, out var lastRoom);
+                if (lastRoom != d.CurrentRoom)
+                {
+                    droneLastRoom[d.DroneIndex] = d.CurrentRoom;
+                    needRefresh = true;
+                }
+            }
+            if (needRefresh)
+            {
+                ClearAllPreviews();
+                ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
+            }
+        }
 
         // Ignore input when clicking on UI
         bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
@@ -161,6 +183,7 @@ public class SelectionManager : MonoBehaviour
         foreach (var d in gm.Drones)
         {
             if (!d.IsSelected) continue;
+            droneLastRoom[d.DroneIndex] = d.CurrentRoom;
             var p = FindPath(d.CurrentRoom, target);
             if (p != null && p.Count > 0)
                 d.ShowPreviewPath(p, stationAction);

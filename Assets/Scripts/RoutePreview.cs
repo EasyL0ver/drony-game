@@ -229,7 +229,7 @@ public class RoutePreview
 
         previewWaypoints.Clear();
         previewCumulDist.Clear();
-        Vector3 origin = map.HexCenter(drone.CurrentRoom);
+        Vector3 origin = drone.transform.position;
         previewWaypoints.Add(new Vector3(origin.x, pathY, origin.z));
 
         prev = drone.CurrentRoom;
@@ -345,7 +345,7 @@ public class RoutePreview
 
         previewWaypoints.Clear();
         previewCumulDist.Clear();
-        Vector3 dronePos = map.HexCenter(drone.CurrentRoom);
+        Vector3 dronePos = drone.transform.position;
         previewWaypoints.Add(new Vector3(dronePos.x, pathY, dronePos.z));
         previewWaypoints.Add(new Vector3(rc.x, pathY, rc.z));
         previewCumulDist.Add(0f);

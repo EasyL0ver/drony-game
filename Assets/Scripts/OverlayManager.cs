@@ -37,6 +37,7 @@ public class OverlayManager : MonoBehaviour
     readonly Dictionary<GroupKey, int> keyToGroup = new Dictionary<GroupKey, int>();
     readonly List<List<StepEntry>> groups = new List<List<StepEntry>>();
     readonly List<Vector3> groupPositions = new List<Vector3>();
+    readonly HashSet<long> journeyAnchorKeys = new HashSet<long>();
     int activeGroupCount;
 
     // ── pooled UI ──
@@ -118,6 +119,7 @@ public class OverlayManager : MonoBehaviour
     void CollectEntries()
     {
         entries.Clear();
+        journeyAnchorKeys.Clear();
         foreach (var drone in drones)
         {
             if (drone == null) continue;
@@ -130,9 +132,17 @@ public class OverlayManager : MonoBehaviour
             {
                 for (int i = 0; i < journey.Count && i < anchors.Count; i++)
                 {
+                    var a = anchors[i];
+                    long ak = ((long)drone.DroneIndex << 48)
+                            | ((long)(a.roomA.x & 0xFFF) << 36)
+                            | ((long)(a.roomA.y & 0xFFF) << 24)
+                            | ((long)(a.roomB.x & 0xFFF) << 12)
+                            | (long)(a.roomB.y & 0xFFF);
+                    journeyAnchorKeys.Add(ak);
+
                     entries.Add(new StepEntry
                     {
-                        anchor = anchors[i],
+                        anchor = a,
                         label = journey[i].label,
                         energyCost = journey[i].energyCost,
                         stepIndex = i,
@@ -148,16 +158,24 @@ public class OverlayManager : MonoBehaviour
                 }
             }
 
-            // Hover preview steps
+            // Hover preview steps — skip if journey already covers this anchor
             var pvPlan = drone.PreviewJourney;
             var pvAnchors = drone.PreviewAnchors;
             if (drone.IsShowingPreview && pvPlan != null && pvAnchors != null)
             {
                 for (int i = 0; i < pvPlan.Count && i < pvAnchors.Count; i++)
                 {
+                    var a = pvAnchors[i];
+                    long ak = ((long)drone.DroneIndex << 48)
+                            | ((long)(a.roomA.x & 0xFFF) << 36)
+                            | ((long)(a.roomA.y & 0xFFF) << 24)
+                            | ((long)(a.roomB.x & 0xFFF) << 12)
+                            | (long)(a.roomB.y & 0xFFF);
+                    if (journeyAnchorKeys.Contains(ak)) continue;
+
                     entries.Add(new StepEntry
                     {
-                        anchor = pvAnchors[i],
+                        anchor = a,
                         label = pvPlan[i].label,
                         energyCost = pvPlan[i].energyCost,
                         stepIndex = i,

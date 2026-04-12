@@ -498,6 +498,22 @@ public class DroneController : MonoBehaviour
             }
         }
 
+        // Smooth pass-through room centers: pull toward the chord between
+        // the previous and next waypoints so the drone cuts a natural arc
+        // instead of detouring to dead center.
+        for (int wi = 1; wi < moveWaypoints.Count - 1; wi++)
+        {
+            var wp = moveWaypoints[wi];
+            if (wp.kind != WaypointKind.RoomCenter) continue;
+
+            Vector3 prev3 = moveWaypoints[wi - 1].pos;
+            Vector3 next3 = moveWaypoints[wi + 1].pos;
+            Vector3 mid = (prev3 + next3) * 0.5f;
+            // Blend 70% toward chord midpoint, keep 30% of original center
+            wp.pos = Vector3.Lerp(wp.pos, mid, 0.7f);
+            moveWaypoints[wi] = wp;
+        }
+
         // Build route visualization (path line + step bars)
         preview?.SetJourney(newPath, stationAction);
         preview?.ClearPreview();
@@ -542,20 +558,29 @@ public class DroneController : MonoBehaviour
             }
         }
 
-        // Drone glow: boost when selected
+        // Drone glow: color reflects state, boost when selected
         if (droneModel != null && droneModel.GlowMaterial != null)
         {
-            Color baseCol = droneModel.BaseGlowColor;
             float baseInt = droneModel.BaseGlowIntensity;
+            Color stateCol;
+            if (CurrentEnergy <= 0)
+                stateCol = Palette.DroneDepleted;
+            else if (moveWaypoints.Count >= 2)
+                stateCol = Palette.DroneMoving;
+            else if (IsSelected)
+                stateCol = Palette.DroneSelected;
+            else
+                stateCol = Palette.DroneIdle;
 
+            droneModel.GlowMaterial.color = stateCol;
             if (IsSelected)
             {
                 float boost = 1.5f + 0.5f * Mathf.Sin(Time.time * 3f);
-                droneModel.GlowMaterial.SetColor("_EmissionColor", baseCol * baseInt * boost);
+                droneModel.GlowMaterial.SetColor("_EmissionColor", stateCol * baseInt * boost);
             }
             else
             {
-                droneModel.GlowMaterial.SetColor("_EmissionColor", baseCol * baseInt);
+                droneModel.GlowMaterial.SetColor("_EmissionColor", stateCol * baseInt);
             }
         }
     }
@@ -578,22 +603,48 @@ public class DroneController : MonoBehaviour
         moveSegT += Time.deltaTime / dur;
         if (moveSegT >= 1f)
         {
+            float overflow = (moveSegT - 1f) * dur;
             moveSegT = 0f;
             moveSegIdx++;
             transform.position = moveWaypoints[moveSegIdx].pos;
             OnReachedWaypoint(moveSegIdx);
+
+            // Carry leftover time into next segment
+            if (moveSegIdx < moveWaypoints.Count - 1)
+            {
+                float nextDur = moveWaypoints[moveSegIdx].durationToNext;
+                if (nextDur > 0.001f)
+                    moveSegT = overflow / nextDur;
+            }
         }
         else
         {
-            Vector3 a = moveWaypoints[moveSegIdx].pos;
-            Vector3 b = moveWaypoints[moveSegIdx + 1].pos;
-            transform.position = Vector3.Lerp(a, b, SmoothStep(moveSegT));
+            int i = moveSegIdx;
+            int last = moveWaypoints.Count - 1;
 
-            // Face direction of travel
-            Vector3 dir = b - a;
-            dir.y = 0f;
-            if (dir.sqrMagnitude > 0.01f)
-                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 8f);
+            // Ease on endpoints only
+            bool isFirst = i == 0;
+            bool isLast  = i == last - 1;
+            float t;
+            if (isFirst && isLast) t = SmoothStep(moveSegT);
+            else if (isFirst)      t = EaseIn(moveSegT);
+            else if (isLast)       t = EaseOut(moveSegT);
+            else                   t = moveSegT;
+
+            // Catmull-Rom through waypoints for smooth curves
+            Vector3 p0 = moveWaypoints[Mathf.Max(i - 1, 0)].pos;
+            Vector3 p1 = moveWaypoints[i].pos;
+            Vector3 p2 = moveWaypoints[i + 1].pos;
+            Vector3 p3 = moveWaypoints[Mathf.Min(i + 2, last)].pos;
+            Vector3 pos = CatmullRom(p0, p1, p2, p3, t);
+            pos.y = Mathf.Lerp(p1.y, p2.y, t); // keep Y flat/linear
+            transform.position = pos;
+
+            // Face direction of travel (tangent of curve)
+            Vector3 tangent = CatmullRomTangent(p0, p1, p2, p3, t);
+            tangent.y = 0f;
+            if (tangent.sqrMagnitude > 0.001f)
+                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(tangent), Time.deltaTime * 8f);
         }
     }
 
@@ -750,6 +801,29 @@ public class DroneController : MonoBehaviour
     }
 
     float SmoothStep(float t) => t * t * (3f - 2f * t);
+    float EaseIn(float t)     => t * t;
+    float EaseOut(float t)    => 1f - (1f - t) * (1f - t);
+
+    static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+    {
+        float t2 = t * t, t3 = t2 * t;
+        return 0.5f * (
+            (2f * p1) +
+            (-p0 + p2) * t +
+            (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
+            (-p0 + 3f * p1 - 3f * p2 + p3) * t3
+        );
+    }
+
+    static Vector3 CatmullRomTangent(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+    {
+        float t2 = t * t;
+        return 0.5f * (
+            (-p0 + p2) +
+            (4f * p0 - 10f * p1 + 8f * p2 - 2f * p3) * t +
+            (-3f * p0 + 9f * p1 - 9f * p2 + 3f * p3) * t2
+        );
+    }
 
     // ── dashed ribbon mesh utility ──────────
 
