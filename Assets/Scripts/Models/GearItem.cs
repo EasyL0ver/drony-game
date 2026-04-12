@@ -30,7 +30,7 @@ public static class GearCatalog
         "Scanner",
         "Allows the drone to scan and reveal unknown rooms.",
         2,
-        "\uD83D\uDCE1" // 📡
+        "\u25CE" // ◎ bullseye — radar/scan
     );
 
     public static readonly GearItem RubbleClearer = new GearItem(
@@ -38,7 +38,7 @@ public static class GearCatalog
         "Rubble Clearer",
         "Allows the drone to clear rubble-blocked passages.",
         3,
-        "\uD83D\uDCA5" // 💥
+        "\u2692" // ⚒ hammer and pick
     );
 
     public static GearItem[] All = new GearItem[]

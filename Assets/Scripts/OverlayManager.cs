@@ -260,6 +260,25 @@ public class OverlayManager : MonoBehaviour
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 canvas.transform as RectTransform, screen, null, out var canvasPos);
             group.rect.localPosition = canvasPos;
+
+            // Check if all items in group are done (past flash) — hide entire group
+            bool allDone = true;
+            for (int bi = 0; bi < items.Count; bi++)
+            {
+                if (!items[bi].isDone)
+                {
+                    allDone = false;
+                    break;
+                }
+                long dk = ((long)items[bi].droneIndex << 32) | (uint)items[bi].stepIndex;
+                if (!completionTimes.TryGetValue(dk, out float dt) || Time.time - dt < doneFlashDuration)
+                {
+                    allDone = false;
+                    break;
+                }
+            }
+            if (allDone) { group.root.SetActive(false); continue; }
+
             group.root.SetActive(true);
 
             // Shared label from first item

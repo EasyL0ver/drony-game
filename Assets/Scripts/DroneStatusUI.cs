@@ -11,15 +11,6 @@ using System.Collections.Generic;
 /// </summary>
 public class DroneStatusUI : MonoBehaviour
 {
-    struct StepRow
-    {
-        public GameObject root;
-        public Text label;
-        public Image barBg;
-        public Image barFill;
-        public Text time;
-    }
-
     struct DroneCard
     {
         public DroneController drone;
@@ -31,18 +22,20 @@ public class DroneStatusUI : MonoBehaviour
         // Discrete energy segments
         public RectTransform energyContainer;
         public List<Image> energySegments;
-        // Equipment slots
+        // Equipment slots (rectangular icon boxes)
         public List<Image> slotBgs;
+        public List<Text> slotIcons;
         public List<Text> slotLabels;
         public List<Button> slotButtons;
-        // Total journey progress bar
+        // Journey display (step bar + overall bar)
+        public GameObject journeyRow;       // parent container
+        public Image stepBarBg;
+        public Image stepBarFill;
+        public Text stepLabel;
+        public Text stepTime;
         public Image journeyBarBg;
         public Image journeyBarFill;
-        public Text journeyText;
-        // Journey step rows
-        public RectTransform stepsContainer;
-        public List<StepRow> stepRows;
-        public int lastStepCount;
+        public Text journeyTime;
     }
 
     readonly List<DroneCard> cards = new List<DroneCard>();
@@ -60,15 +53,6 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color barBgColor      = new Color(0.08f, 0.08f, 0.10f, 1f);
     static readonly Color energyFullCol   = Palette.DroneMoving;
     static readonly Color energyLowCol    = Palette.DroneDepleted;
-
-    // Journey step colors
-    static readonly Color stepBarBgCol      = new Color(0.06f, 0.06f, 0.08f, 1f);
-    static readonly Color stepTravelCol     = Palette.WithAlpha(Palette.DroneMoving, 0.85f);
-    static readonly Color stepScanCol       = new Color(0.10f, 0.75f, 0.45f, 0.85f);
-    static readonly Color stepCompletedCol  = new Color(0.15f, 0.35f, 0.25f, 0.55f);
-    static readonly Color stepFutureBarCol  = new Color(0.10f, 0.10f, 0.12f, 0.40f);
-    static readonly Color stepTextActiveCol = new Color(1f, 1f, 1f, 0.95f);
-    static readonly Color stepTextDimCol    = new Color(0.45f, 0.48f, 0.50f, 0.65f);
 
     // Energy segment colors
     static readonly Color segFullCol     = Palette.WithAlpha(Palette.DroneMoving, 0.9f);
@@ -91,16 +75,16 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color shopItemHoverCol= new Color(0.04f, 0.14f, 0.20f, 0.95f);
     static readonly Color pointsCol       = new Color(1f, 0.85f, 0.2f, 1f);
 
-    // Journey total bar colors
+    // Journey bar colors
     static readonly Color journeyBarBgCol   = new Color(0.06f, 0.06f, 0.08f, 0.9f);
-    static readonly Color journeyBarFillCol = Palette.WithAlpha(Palette.DroneMoving, 0.75f);
+    static readonly Color stepBarFillCol    = Palette.WithAlpha(Palette.DroneMoving, 0.85f);
+    static readonly Color journeyBarFillCol = Palette.WithAlpha(Palette.DroneMoving, 0.45f);
     static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
 
-    const float baseCardH = 68f;  // increased to fit gear slots
-    const float slotRowH  = 14f;
-    const float journeyBarH = 12f;
-    const float stepRowH  = 16f;
-    const float stepGap   = 2f;
+    const float baseCardH = 58f;
+    const float slotSize  = 22f;
+    const float slotGap   = 3f;
+    const float cardPad   = 5f;
 
     Font uiFont;
 
@@ -169,7 +153,7 @@ public class DroneStatusUI : MonoBehaviour
         panelRT.anchorMax = new Vector2(1, 1);
         panelRT.pivot = new Vector2(1, 1);
         panelRT.anchoredPosition = new Vector2(-12, -12);
-        panelRT.sizeDelta = new Vector2(190, 0); // width fixed, height auto
+        panelRT.sizeDelta = new Vector2(200, 0);
 
         var layout = panel.AddComponent<VerticalLayoutGroup>();
         layout.padding = new RectOffset(6, 6, 6, 6);
@@ -236,64 +220,43 @@ public class DroneStatusUI : MonoBehaviour
         outline.effectDistance = new Vector2(1.5f, 1.5f);
         outline.enabled = false;
 
-        // ── Row 1: name — top-anchored, fixed 22px ──
-        var nameGO = MakeText(cardGO.transform, "Name", drone.DroneName, 13, accentColor,
+        // ════════════════════════════════════
+        //  VERTICAL LAYOUT (full width rows)
+        // ════════════════════════════════════
+        float L = cardPad, R = -cardPad; // left/right insets
+
+        // ── Row 1: Name + corridor-size dots ──
+        float nY0 = -2f, nY1 = -17f;
+
+        var nameGO = MakeText(cardGO.transform, "Name", drone.DroneName, 12, accentColor,
                               TextAnchor.MiddleLeft);
+        nameGO.GetComponent<Text>().fontStyle = FontStyle.Bold;
         var nameRT = nameGO.GetComponent<RectTransform>();
-        nameRT.anchorMin = new Vector2(0, 1);
-        nameRT.anchorMax = new Vector2(1, 1);
-        nameRT.offsetMin = new Vector2(8, -22);
-        nameRT.offsetMax = new Vector2(-8, -2);
+        nameRT.anchorMin = new Vector2(0, 1); nameRT.anchorMax = new Vector2(1, 1);
+        nameRT.offsetMin = new Vector2(L, nY1); nameRT.offsetMax = new Vector2(-40, nY0);
 
-        // ── Row 2: equipment slots ──
-        int maxSlots = drone.Model != null ? drone.Model.MaxSlots : 2;
-        var slotBgs = new List<Image>();
-        var slotLabels = new List<Text>();
-        var slotButtons = new List<Button>();
-
-        float slotY0 = -24f;
-        float slotY1 = slotY0 - slotRowH;
-        float slotWidth = 1f / maxSlots;
-        for (int s = 0; s < maxSlots; s++)
+        PassageType[] sizes = { PassageType.Corridor, PassageType.Duct, PassageType.Vent };
+        Color[] dotColors = { Palette.CorridorGlow, Palette.DuctGlow, Palette.VentGlow };
+        float dotSize = 5f, dotGap2 = 3f;
+        for (int d = 0; d < sizes.Length; d++)
         {
-            var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
-            var slotRT = slotGO.GetComponent<RectTransform>();
-            slotRT.anchorMin = new Vector2(slotWidth * s, 1);
-            slotRT.anchorMax = new Vector2(slotWidth * (s + 1), 1);
-            slotRT.offsetMin = new Vector2(s == 0 ? 8 : 2, slotY1);
-            slotRT.offsetMax = new Vector2(s == maxSlots - 1 ? -8 : -2, slotY0);
-
-            var slotTxtGO = MakeText(slotGO.transform, "SlotText", "EMPTY", 9, slotTextCol,
-                                     TextAnchor.MiddleCenter);
-            var slotTxtRT = slotTxtGO.GetComponent<RectTransform>();
-            slotTxtRT.anchorMin = Vector2.zero;
-            slotTxtRT.anchorMax = Vector2.one;
-            slotTxtRT.offsetMin = new Vector2(2, 0);
-            slotTxtRT.offsetMax = new Vector2(-2, 0);
-
-            var slotBtn = slotGO.AddComponent<Button>();
-            var slotNav = slotBtn.navigation;
-            slotNav.mode = Navigation.Mode.None;
-            slotBtn.navigation = slotNav;
-            slotBtn.transition = Selectable.Transition.None;
-            int slotIdx = s;
-            slotBtn.onClick.AddListener(() => OnSlotClicked(capturedDrone, slotIdx));
-
-            slotBgs.Add(slotGO.GetComponent<Image>());
-            slotLabels.Add(slotTxtGO.GetComponent<Text>());
-            slotButtons.Add(slotBtn);
+            var dotGO = MakeImage(cardGO.transform, $"Dot_{sizes[d]}", dotColors[d]);
+            var dotRT = dotGO.GetComponent<RectTransform>();
+            dotRT.anchorMin = new Vector2(1, 1); dotRT.anchorMax = new Vector2(1, 1);
+            dotRT.pivot = new Vector2(1, 0.5f);
+            float dx = -cardPad - (sizes.Length - 1 - d) * (dotSize + dotGap2);
+            dotRT.anchoredPosition = new Vector2(dx, (nY0 + nY1) * 0.5f);
+            dotRT.sizeDelta = new Vector2(dotSize, dotSize);
         }
 
-        // ── Row 3: discrete energy segments + text ──
-        float eY0 = -40f;
-        float eY1 = -58f;
+        // ── Row 2: Energy segments + count ──
+        float eY0 = -19f, eY1 = -32f;
+
         var energyContGO = new GameObject("EnergyBar");
         energyContGO.transform.SetParent(cardGO.transform, false);
         var energyContRT = energyContGO.AddComponent<RectTransform>();
-        energyContRT.anchorMin = new Vector2(0, 1);
-        energyContRT.anchorMax = new Vector2(1, 1);
-        energyContRT.offsetMin = new Vector2(8, eY1);
-        energyContRT.offsetMax = new Vector2(-42, eY0);
+        energyContRT.anchorMin = new Vector2(0, 1); energyContRT.anchorMax = new Vector2(1, 1);
+        energyContRT.offsetMin = new Vector2(L, eY1); energyContRT.offsetMax = new Vector2(-38, eY0);
 
         int maxE = drone.MaxEnergy;
         var segments = new List<Image>();
@@ -304,55 +267,118 @@ public class DroneStatusUI : MonoBehaviour
             var segRT = segGO.GetComponent<RectTransform>();
             float xMin = (float)s / maxE;
             float xMax = (float)(s + 1) / maxE;
-            segRT.anchorMin = new Vector2(xMin, 0);
-            segRT.anchorMax = new Vector2(xMax, 1);
+            segRT.anchorMin = new Vector2(xMin, 0); segRT.anchorMax = new Vector2(xMax, 1);
             float halfGap = segGap * 0.5f;
             segRT.offsetMin = new Vector2(s == 0 ? 0 : halfGap, 1);
             segRT.offsetMax = new Vector2(s == maxE - 1 ? 0 : -halfGap, -1);
             segments.Add(segGO.GetComponent<Image>());
         }
 
-        var pctGO = MakeText(cardGO.transform, "Pct", $"{maxE}/{maxE}", 11, accentColor,
+        var pctGO = MakeText(cardGO.transform, "Pct", $"{maxE}/{maxE}", 10, accentColor,
                              TextAnchor.MiddleRight);
         var pctRT = pctGO.GetComponent<RectTransform>();
-        pctRT.anchorMin = new Vector2(1, 1);
-        pctRT.anchorMax = new Vector2(1, 1);
-        pctRT.offsetMin = new Vector2(-40, eY1);
-        pctRT.offsetMax = new Vector2(-8, eY0);
+        pctRT.anchorMin = new Vector2(1, 1); pctRT.anchorMax = new Vector2(1, 1);
+        pctRT.offsetMin = new Vector2(-36, eY1); pctRT.offsetMax = new Vector2(R, eY0);
 
-        // ── Row 4: total journey progress bar ──
-        var jBarGO = MakeImage(cardGO.transform, "JourneyBar", journeyBarBgCol);
-        var jBarRT = jBarGO.GetComponent<RectTransform>();
-        jBarRT.anchorMin = new Vector2(0, 1);
-        jBarRT.anchorMax = new Vector2(1, 1);
-        jBarRT.offsetMin = new Vector2(8, -(baseCardH - 2 + journeyBarH));
-        jBarRT.offsetMax = new Vector2(-8, -(baseCardH - 2));
+        // ── Row 3: Equipment slots (inline) ──
+        float slY = -34f;
+        int maxSlots = drone.Model != null ? drone.Model.MaxSlots : 2;
+        var slotBgs = new List<Image>();
+        var slotIcons = new List<Text>();
+        var slotLabels = new List<Text>();
+        var slotButtons = new List<Button>();
 
-        var jFillGO = MakeImage(jBarGO.transform, "Fill", journeyBarFillCol);
-        var jFillRT = jFillGO.GetComponent<RectTransform>();
-        jFillRT.anchorMin = Vector2.zero;
-        jFillRT.anchorMax = new Vector2(0, 1);
-        jFillRT.offsetMin = Vector2.zero;
-        jFillRT.offsetMax = Vector2.zero;
+        for (int s = 0; s < maxSlots; s++)
+        {
+            float slotX = L + s * (slotSize + slotGap);
 
-        var jTextGO = MakeText(jBarGO.transform, "JText", "", 9, journeyTextCol, TextAnchor.MiddleCenter);
-        var jTextRT = jTextGO.GetComponent<RectTransform>();
-        jTextRT.anchorMin = Vector2.zero;
-        jTextRT.anchorMax = Vector2.one;
-        jTextRT.offsetMin = Vector2.zero;
-        jTextRT.offsetMax = Vector2.zero;
+            var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
+            var slotRT = slotGO.GetComponent<RectTransform>();
+            slotRT.anchorMin = new Vector2(0, 1); slotRT.anchorMax = new Vector2(0, 1);
+            slotRT.pivot = new Vector2(0, 1);
+            slotRT.anchoredPosition = new Vector2(slotX, slY);
+            slotRT.sizeDelta = new Vector2(slotSize, slotSize);
 
-        jBarGO.SetActive(false);
+            var slotOutline = slotGO.AddComponent<Outline>();
+            slotOutline.effectColor = new Color(0.25f, 0.35f, 0.40f, 0.6f);
+            slotOutline.effectDistance = new Vector2(1, -1);
 
-        // ── Steps container — below journey bar, populated dynamically ──
-        var stepsGO = new GameObject("Steps");
-        stepsGO.transform.SetParent(cardGO.transform, false);
-        var stepsRT = stepsGO.AddComponent<RectTransform>();
-        stepsRT.anchorMin = new Vector2(0, 1);
-        stepsRT.anchorMax = new Vector2(1, 1);
-        stepsRT.pivot = new Vector2(0.5f, 1f);
-        stepsRT.anchoredPosition = new Vector2(0, -baseCardH);
-        stepsRT.sizeDelta = new Vector2(0, 0);
+            var iconGO = MakeText(slotGO.transform, "Icon", "", 11, slotTextCol,
+                                  TextAnchor.MiddleCenter);
+            var iconRT = iconGO.GetComponent<RectTransform>();
+            iconRT.anchorMin = new Vector2(0, 0.30f); iconRT.anchorMax = Vector2.one;
+            iconRT.offsetMin = new Vector2(1, 0); iconRT.offsetMax = new Vector2(-1, -1);
+
+            var lblGO = MakeText(slotGO.transform, "Label", "EMPTY", 5, slotTextCol,
+                                 TextAnchor.MiddleCenter);
+            var lblRT = lblGO.GetComponent<RectTransform>();
+            lblRT.anchorMin = Vector2.zero; lblRT.anchorMax = new Vector2(1, 0.30f);
+            lblRT.offsetMin = new Vector2(1, 0); lblRT.offsetMax = new Vector2(-1, 0);
+
+            var slotBtn = slotGO.AddComponent<Button>();
+            var slotNav = slotBtn.navigation;
+            slotNav.mode = Navigation.Mode.None;
+            slotBtn.navigation = slotNav;
+            slotBtn.transition = Selectable.Transition.None;
+            int slotIdx = s;
+            slotBtn.onClick.AddListener(() => OnSlotClicked(capturedDrone, slotIdx));
+
+            slotBgs.Add(slotGO.GetComponent<Image>());
+            slotIcons.Add(iconGO.GetComponent<Text>());
+            slotLabels.Add(lblGO.GetComponent<Text>());
+            slotButtons.Add(slotBtn);
+        }
+
+        // ── Journey bars (below slots, full width) ──
+        float jBase = slY - slotSize - 2f;         // below slots
+        float barH = 10f, barGap = 2f;
+        float sBarY0 = jBase, sBarY1 = jBase - barH;
+        float oBarY0 = sBarY1 - barGap, oBarY1 = oBarY0 - barH;
+
+        var jContGO = new GameObject("JourneyContainer");
+        jContGO.transform.SetParent(cardGO.transform, false);
+        var jContRT = jContGO.AddComponent<RectTransform>();
+        jContRT.anchorMin = Vector2.zero; jContRT.anchorMax = Vector2.one;
+        jContRT.offsetMin = Vector2.zero; jContRT.offsetMax = Vector2.zero;
+
+        // Step bar
+        var sBgGO = MakeImage(jContGO.transform, "StepBg", journeyBarBgCol);
+        var sBgRT = sBgGO.GetComponent<RectTransform>();
+        sBgRT.anchorMin = new Vector2(0, 1); sBgRT.anchorMax = new Vector2(1, 1);
+        sBgRT.offsetMin = new Vector2(L, sBarY1); sBgRT.offsetMax = new Vector2(R, sBarY0);
+
+        var sFillGO = MakeImage(sBgGO.transform, "Fill", stepBarFillCol);
+        var sFillRT = sFillGO.GetComponent<RectTransform>();
+        sFillRT.anchorMin = Vector2.zero; sFillRT.anchorMax = new Vector2(0, 1);
+        sFillRT.offsetMin = Vector2.zero; sFillRT.offsetMax = Vector2.zero;
+
+        var sLabelGO = MakeText(sBgGO.transform, "SLabel", "", 7, journeyTextCol, TextAnchor.MiddleLeft);
+        var sLabelRT = sLabelGO.GetComponent<RectTransform>();
+        sLabelRT.anchorMin = Vector2.zero; sLabelRT.anchorMax = Vector2.one;
+        sLabelRT.offsetMin = new Vector2(3, 0); sLabelRT.offsetMax = new Vector2(-3, 0);
+
+        var sTimeGO = MakeText(sBgGO.transform, "STime", "", 7, journeyTextCol, TextAnchor.MiddleRight);
+        var sTimeRT = sTimeGO.GetComponent<RectTransform>();
+        sTimeRT.anchorMin = Vector2.zero; sTimeRT.anchorMax = Vector2.one;
+        sTimeRT.offsetMin = new Vector2(3, 0); sTimeRT.offsetMax = new Vector2(-3, 0);
+
+        // Overall journey bar
+        var oBgGO = MakeImage(jContGO.transform, "JourneyBg", journeyBarBgCol);
+        var oBgRT = oBgGO.GetComponent<RectTransform>();
+        oBgRT.anchorMin = new Vector2(0, 1); oBgRT.anchorMax = new Vector2(1, 1);
+        oBgRT.offsetMin = new Vector2(L, oBarY1); oBgRT.offsetMax = new Vector2(R, oBarY0);
+
+        var oFillGO = MakeImage(oBgGO.transform, "Fill", journeyBarFillCol);
+        var oFillRT = oFillGO.GetComponent<RectTransform>();
+        oFillRT.anchorMin = Vector2.zero; oFillRT.anchorMax = new Vector2(0, 1);
+        oFillRT.offsetMin = Vector2.zero; oFillRT.offsetMax = Vector2.zero;
+
+        var oTimeGO = MakeText(oBgGO.transform, "OTime", "", 7, journeyTextCol, TextAnchor.MiddleRight);
+        var oTimeRT = oTimeGO.GetComponent<RectTransform>();
+        oTimeRT.anchorMin = Vector2.zero; oTimeRT.anchorMax = Vector2.one;
+        oTimeRT.offsetMin = new Vector2(3, 0); oTimeRT.offsetMax = new Vector2(-3, 0);
+
+        jContGO.SetActive(false);
 
         return new DroneCard
         {
@@ -365,14 +391,17 @@ public class DroneStatusUI : MonoBehaviour
             energyContainer = energyContRT,
             energySegments = segments,
             slotBgs = slotBgs,
+            slotIcons = slotIcons,
             slotLabels = slotLabels,
             slotButtons = slotButtons,
-            journeyBarBg = jBarGO.GetComponent<Image>(),
-            journeyBarFill = jFillGO.GetComponent<Image>(),
-            journeyText = jTextGO.GetComponent<Text>(),
-            stepsContainer = stepsRT,
-            stepRows = new List<StepRow>(),
-            lastStepCount = 0,
+            journeyRow = jContGO,
+            stepBarBg = sBgGO.GetComponent<Image>(),
+            stepBarFill = sFillGO.GetComponent<Image>(),
+            stepLabel = sLabelGO.GetComponent<Text>(),
+            stepTime = sTimeGO.GetComponent<Text>(),
+            journeyBarBg = oBgGO.GetComponent<Image>(),
+            journeyBarFill = oFillGO.GetComponent<Image>(),
+            journeyTime = oTimeGO.GetComponent<Text>(),
         };
     }
 
@@ -459,83 +488,49 @@ public class DroneStatusUI : MonoBehaviour
 
                 if (equip != null)
                 {
-                    c.slotLabels[s].text = equip.Icon + " " + equip.Name.ToUpper();
+                    c.slotIcons[s].text = equip.Icon;
+                    c.slotIcons[s].color = slotGearCol;
+                    c.slotLabels[s].text = equip.Name.ToUpper();
                     c.slotLabels[s].color = slotGearCol;
                     c.slotBgs[s].color = atRefitStation ? slotFilledCol : slotFilledCol * 0.7f;
                 }
                 else
                 {
-                    c.slotLabels[s].text = atRefitStation ? "+ EQUIP" : "EMPTY";
+                    c.slotIcons[s].text = atRefitStation ? "+" : "—";
+                    c.slotIcons[s].color = atRefitStation ? accentColor : slotTextCol;
+                    c.slotLabels[s].text = atRefitStation ? "EQUIP" : "EMPTY";
                     c.slotLabels[s].color = atRefitStation ? accentColor : slotTextCol;
                     c.slotBgs[s].color = atRefitStation ? slotEmptyCol : slotLockedCol;
                 }
             }
 
-            // ── Journey step rows ──
+            // ── Journey display (step bar + overall bar) ──
             var journey = c.drone.Journey;
             int stepCount = journey.Count;
-
-            // Rebuild step rows if count changed
-            if (stepCount != c.lastStepCount)
-            {
-                RebuildStepRows(ref c, stepCount);
-                cards[i] = c;
-            }
-
-            // Update each step row
             int activeIdx = c.drone.JourneyCurrentIndex;
-            for (int s = 0; s < c.stepRows.Count; s++)
-            {
-                var row = c.stepRows[s];
-                var step = journey[s];
-                float progress = c.drone.GetJourneyStepProgress(s);
-                float elapsed = c.drone.GetJourneyStepElapsed(s);
+            bool hasJourney = stepCount > 0 && activeIdx >= 0 && activeIdx < stepCount;
 
-                bool isActive = (s == activeIdx);
-                bool isCompleted = (s < activeIdx);
-
-                // Bar fill width
-                row.barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(progress), 1);
-
-                // Colors based on state
-                if (isCompleted)
-                {
-                    row.barFill.color = stepCompletedCol;
-                    row.barBg.color = stepBarBgCol;
-                    row.label.color = stepTextDimCol;
-                    row.time.color = stepTextDimCol;
-                }
-                else if (isActive)
-                {
-                    row.barFill.color = step.isScan ? stepScanCol : stepTravelCol;
-                    row.barBg.color = stepBarBgCol;
-                    row.label.color = stepTextActiveCol;
-                    row.time.color = stepTextActiveCol;
-                }
-                else
-                {
-                    row.barFill.color = stepFutureBarCol;
-                    row.barBg.color = stepBarBgCol;
-                    row.label.color = stepTextDimCol;
-                    row.time.color = stepTextDimCol;
-                }
-
-                string costTag = step.energyCost > 0 ? $" ⚡{step.energyCost}" : "";
-                string prefix = isActive ? "\u25B8 " : isCompleted ? "\u2713 " : "  ";
-                row.label.text = prefix + step.label + costTag;
-                row.time.text = $"{elapsed:F1}s / {step.duration:F1}s";
-            }
-
-            // ── Total journey progress bar ──
-            bool hasJourney = stepCount > 0;
-            c.journeyBarBg.gameObject.SetActive(hasJourney);
+            c.journeyRow.SetActive(hasJourney);
+            float targetH = hasJourney ? baseCardH + 24f : baseCardH;
+            c.layoutElem.preferredHeight = targetH;
+            c.layoutElem.minHeight = targetH;
             if (hasJourney)
             {
-                float jProg = c.drone.JourneyOverallProgress;
-                c.journeyBarFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(jProg), 1);
-                float jElapsed = c.drone.JourneyElapsedTime;
-                float jTotal = c.drone.JourneyTotalTime;
-                c.journeyText.text = $"{jElapsed:F1}s / {jTotal:F1}s  ⚡{c.drone.JourneyEnergyCost}";
+                var step = journey[activeIdx];
+
+                // Step bar: current action progress
+                float stepProg = c.drone.GetJourneyStepProgress(activeIdx);
+                c.stepBarFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(stepProg), 1);
+                string costTag = step.energyCost > 0 ? $" ⚡{step.energyCost}" : "";
+                c.stepLabel.text = "\u25B8 " + step.label + costTag;
+                float stepRemain = step.duration * (1f - stepProg);
+                c.stepTime.text = $"{Mathf.Max(0, stepRemain):F1}s";
+
+                // Overall journey bar
+                float overallProg = c.drone.JourneyOverallProgress;
+                c.journeyBarFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(overallProg), 1);
+                float totalRemain = c.drone.JourneyTotalTime - c.drone.JourneyElapsedTime;
+                c.journeyTime.text = $"{Mathf.Max(0, totalRemain):F1}s total";
             }
         }
 
@@ -545,75 +540,6 @@ public class DroneStatusUI : MonoBehaviour
 
         // ── Bottom hover tooltip ──
         UpdateHoverTooltip();
-    }
-
-    void RebuildStepRows(ref DroneCard c, int count)
-    {
-        // Destroy old rows
-        foreach (var row in c.stepRows)
-            if (row.root != null)
-                Destroy(row.root);
-        c.stepRows.Clear();
-
-        // Create new rows
-        for (int s = 0; s < count; s++)
-        {
-            float yTop = -(s * (stepRowH + stepGap));
-            float yBot = yTop - stepRowH;
-
-            // Row background (doubles as bar bg)
-            var rowGO = MakeImage(c.stepsContainer, "Step_" + s, stepBarBgCol);
-            var rowRT = rowGO.GetComponent<RectTransform>();
-            rowRT.anchorMin = new Vector2(0, 1);
-            rowRT.anchorMax = new Vector2(1, 1);
-            rowRT.offsetMin = new Vector2(4, yBot);
-            rowRT.offsetMax = new Vector2(-4, yTop);
-
-            // Fill bar
-            var fillGO = MakeImage(rowGO.transform, "Fill", stepTravelCol);
-            var fillRT = fillGO.GetComponent<RectTransform>();
-            fillRT.anchorMin = Vector2.zero;
-            fillRT.anchorMax = new Vector2(0, 1);
-            fillRT.offsetMin = Vector2.zero;
-            fillRT.offsetMax = Vector2.zero;
-
-            // Label (overlaid, left)
-            var labelGO = MakeText(rowGO.transform, "Label", "", 9, stepTextActiveCol,
-                                   TextAnchor.MiddleLeft);
-            var labelRT = labelGO.GetComponent<RectTransform>();
-            labelRT.anchorMin = Vector2.zero;
-            labelRT.anchorMax = Vector2.one;
-            labelRT.offsetMin = new Vector2(4, 0);
-            labelRT.offsetMax = new Vector2(-4, 0);
-
-            // Time (overlaid, right)
-            var timeGO = MakeText(rowGO.transform, "Time", "", 9, stepTextActiveCol,
-                                  TextAnchor.MiddleRight);
-            var timeRT = timeGO.GetComponent<RectTransform>();
-            timeRT.anchorMin = Vector2.zero;
-            timeRT.anchorMax = Vector2.one;
-            timeRT.offsetMin = new Vector2(4, 0);
-            timeRT.offsetMax = new Vector2(-4, 0);
-
-            c.stepRows.Add(new StepRow
-            {
-                root = rowGO,
-                label = labelGO.GetComponent<Text>(),
-                barBg = rowGO.GetComponent<Image>(),
-                barFill = fillGO.GetComponent<Image>(),
-                time = timeGO.GetComponent<Text>(),
-            });
-        }
-
-        // Resize container and card
-        float jBarExtra = count > 0 ? journeyBarH + 4f : 0f;
-        float stepsH = count > 0 ? count * stepRowH + (count - 1) * stepGap + stepGap : 0;
-        c.stepsContainer.sizeDelta = new Vector2(0, stepsH);
-        c.stepsContainer.anchoredPosition = new Vector2(0, -(baseCardH + jBarExtra));
-        float totalH = baseCardH + jBarExtra + stepsH;
-        c.layoutElem.preferredHeight = totalH;
-        c.layoutElem.minHeight = totalH;
-        c.lastStepCount = count;
     }
 
     // ── card click ───────────────────────────

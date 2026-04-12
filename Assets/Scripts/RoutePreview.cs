@@ -103,6 +103,8 @@ public class RoutePreview
             }
         }
 
+        SmoothRoomCenters(journeyWaypoints);
+
         journeyCumulDist.Add(0f);
         for (int i = 1; i < journeyWaypoints.Count; i++)
             journeyCumulDist.Add(journeyCumulDist[i - 1]
@@ -252,6 +254,8 @@ public class RoutePreview
                 previewWaypoints.Add(new Vector3(wallPt.x, pathY, wallPt.z));
             }
         }
+
+        SmoothRoomCenters(previewWaypoints);
 
         previewCumulDist.Add(0f);
         for (int i = 1; i < previewWaypoints.Count; i++)
@@ -485,6 +489,22 @@ public class RoutePreview
     }
 
     // ── shared helpers ──────────────────────
+
+    /// <summary>
+    /// Smooth pass-through room centers: pull toward the chord between
+    /// neighbors so the line matches the drone's actual curved path.
+    /// Room centers sit at indices 3, 6, 9… (groups of 3 after origin).
+    /// </summary>
+    static void SmoothRoomCenters(List<Vector3> pts)
+    {
+        for (int i = 3; i < pts.Count - 1; i += 3)
+        {
+            Vector3 prev = pts[i - 1];
+            Vector3 next = pts[i + 1];
+            Vector3 mid = (prev + next) * 0.5f;
+            pts[i] = Vector3.Lerp(pts[i], mid, 0.7f);
+        }
+    }
 
     Vector3 PassagePoint(Vector2Int from, Vector2Int to, float y)
     {
