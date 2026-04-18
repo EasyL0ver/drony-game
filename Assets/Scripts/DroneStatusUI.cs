@@ -214,6 +214,11 @@ public class DroneStatusUI : MonoBehaviour
         var capturedDrone = drone;
         btn.onClick.AddListener(() => OnCardClicked(capturedDrone));
 
+        // Touch/mouse drag to issue move orders
+        var drag = cardGO.AddComponent<DroneCardDrag>();
+        drag.Drone = drone;
+        drag.GM = gm;
+
         // Selection border (hidden by default)
         var outline = cardGO.AddComponent<Outline>();
         outline.effectColor = cardSelectedBorderCol;

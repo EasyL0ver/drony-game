@@ -72,6 +72,8 @@ public class RTSCamera : MonoBehaviour
 
     void Start()
     {
+        UnityEngine.InputSystem.EnhancedTouch.EnhancedTouchSupport.Enable();
+
         if (!initialized)
         {
             targetPosition = transform.position;
@@ -83,12 +85,12 @@ public class RTSCamera : MonoBehaviour
         if (targetPitch < minPitch) targetPitch = (minPitch + maxPitch) * 0.5f;
     }
 
+    // Touch state
+    bool isTouchPanning;
+    Vector2 lastTouchPos;
+
     void Update()
     {
-        kb    = Keyboard.current;
-        mouse = Mouse.current;
-        if (kb == null || mouse == null) return;
-
         // Skip input briefly after Init to prevent edge-scroll drift
         if (initCooldown > 0f)
         {
@@ -96,10 +98,70 @@ public class RTSCamera : MonoBehaviour
             return;
         }
 
-        HandlePan();
-        HandleZoom();
-        HandleRotation();
+        if (UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches.Count > 0)
+        {
+            HandleTouchPan();
+        }
+        else
+        {
+            isTouchPanning = false;
+
+            kb    = Keyboard.current;
+            mouse = Mouse.current;
+            if (kb == null || mouse == null) return;
+
+            HandlePan();
+            HandleZoom();
+            HandleRotation();
+        }
+
         ApplyTransform();
+    }
+
+    // ═══════════════════════════════════════
+    //  TOUCH PAN (single finger)
+    // ═══════════════════════════════════════
+
+    void HandleTouchPan()
+    {
+        var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
+        if (touches.Count != 1) { isTouchPanning = false; return; }
+
+        // Ignore if touch is over UI (drone cards, etc.)
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject(touches[0].touchId))
+        {
+            isTouchPanning = false;
+            return;
+        }
+
+        var touch = touches[0];
+
+        if (!isTouchPanning)
+        {
+            isTouchPanning = true;
+            lastTouchPos = touch.screenPosition;
+            return;
+        }
+
+        Vector2 delta = touch.screenPosition - lastTouchPos;
+        lastTouchPos = touch.screenPosition;
+
+        // Convert screen-space delta to world-space pan
+        float heightFactor = Mathf.Lerp(0.5f, 2f,
+            Mathf.InverseLerp(minHeight, maxHeight, targetZoom));
+        float speed = panSpeed * heightFactor * 0.005f;
+
+        Vector3 fwd   = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+        Vector3 right = Vector3.ProjectOnPlane(transform.right, Vector3.up).normalized;
+
+        // Invert so dragging moves the world under your finger
+        targetPosition -= (right * delta.x + fwd * delta.y) * speed;
+
+        if (boundsX > 0f)
+            targetPosition.x = Mathf.Clamp(targetPosition.x, -boundsX, boundsX);
+        if (boundsZ > 0f)
+            targetPosition.z = Mathf.Clamp(targetPosition.z, -boundsZ, boundsZ);
     }
 
     // ═══════════════════════════════════════
