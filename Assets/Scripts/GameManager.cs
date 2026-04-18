@@ -252,7 +252,7 @@ public class GameManager : MonoBehaviour
         barrier.transform.position = center;
         barrier.transform.SetParent(transform, true);
 
-        // Build rubble mesh: dense wall of rocks filling the passage floor to ceiling
+        // Build rubble mesh: parabolic wall — wide at base, tapering to top, with irregularities
         var verts = new List<Vector3>();
         var tris = new List<int>();
         var rng = new System.Random(roomA.GetHashCode() ^ roomB.GetHashCode());
@@ -260,36 +260,143 @@ public class GameManager : MonoBehaviour
         float halfLen = Vector3.Distance(midA, midB) * 0.35f;
         float halfW = passW * 0.45f;
 
-        // Pack rocks densely across width, depth, and height
-        int layers = 4;
-        for (int layer = 0; layer < layers; layer++)
-        {
-            float yBase = (layer / (float)layers) * passH;
-            float yTop  = ((layer + 1) / (float)layers) * passH;
-            int count = 6 + rng.Next(4);
-            for (int c = 0; c < count; c++)
-            {
-                float rx = (float)(rng.NextDouble() * 2 - 1) * halfLen;
-                float rz = (float)(rng.NextDouble() * 2 - 1) * halfW;
-                float ry = yBase + (float)rng.NextDouble() * (yTop - yBase);
-                Vector3 rockPos = along * rx + across * rz + Vector3.up * ry;
+        // Grid resolution for the wall surface
+        int segX = 12;  // across width
+        int segY = 10;  // floor to ceiling
+        float F() => (float)rng.NextDouble();
 
-                // Rocks sized to overlap and fill gaps
-                float size = 0.2f + (float)rng.NextDouble() * 0.35f;
-                AddRock(verts, tris, rockPos, size, rng);
+        // Generate wall surface vertices on a grid
+        // Parabolic profile: depth = maxDepth * (1 - (y/h)^2), width shrinks toward top
+        float maxDepth = halfLen * 0.8f;
+        var wallVerts = new Vector3[segX + 1, segY + 1];
+
+        for (int yi = 0; yi <= segY; yi++)
+        {
+            float t = (float)yi / segY;
+            float y = t * passH;
+
+            // Parabolic width: full at base, ~30% at top
+            float widthScale = 1f - 0.7f * t * t;
+            float localHalfW = halfW * widthScale;
+
+            // Parabolic depth
+            float baseDepth = maxDepth * (1f - t * t);
+
+            for (int xi = 0; xi <= segX; xi++)
+            {
+                float s = (float)xi / segX;
+                float xPos = Mathf.Lerp(-localHalfW, localHalfW, s);
+
+                // Edge taper: thinner at the sides
+                float edgeDist = 1f - Mathf.Abs(s - 0.5f) * 2f;
+                float edgeTaper = Mathf.Sqrt(Mathf.Max(0, edgeDist));
+                float depth = baseDepth * edgeTaper;
+
+                // Surface irregularities — bumps and dents
+                float noise = (F() - 0.5f) * 0.15f * passH;
+                depth += noise * edgeTaper;
+
+                Vector3 p = across * xPos + Vector3.up * y;
+                wallVerts[xi, yi] = p;
+
+                // Front face vertex
+                verts.Add(center + p + along * (depth * 0.5f + (F() - 0.5f) * 0.05f));
             }
         }
 
-        // Extra large boulders to seal gaps
-        int boulderCount = 3 + rng.Next(3);
-        for (int b = 0; b < boulderCount; b++)
+        // Back face vertices (mirrored)
+        int backStart = verts.Count;
+        for (int yi = 0; yi <= segY; yi++)
         {
-            float rx = (float)(rng.NextDouble() * 2 - 1) * halfLen * 0.5f;
-            float rz = (float)(rng.NextDouble() * 2 - 1) * halfW * 0.4f;
-            float ry = (float)rng.NextDouble() * passH * 0.8f;
-            Vector3 rockPos = along * rx + across * rz + Vector3.up * ry;
-            float size = 0.4f + (float)rng.NextDouble() * 0.4f;
-            AddRock(verts, tris, rockPos, size, rng);
+            float t = (float)yi / segY;
+            float widthScale = 1f - 0.7f * t * t;
+            float localHalfW = halfW * widthScale;
+            float baseDepth = maxDepth * (1f - t * t);
+
+            for (int xi = 0; xi <= segX; xi++)
+            {
+                float s = (float)xi / segX;
+                float xPos = Mathf.Lerp(-localHalfW, localHalfW, s);
+                float edgeDist = 1f - Mathf.Abs(s - 0.5f) * 2f;
+                float edgeTaper = Mathf.Sqrt(Mathf.Max(0, edgeDist));
+                float depth = baseDepth * edgeTaper + (F() - 0.5f) * 0.15f * passH * edgeTaper;
+
+                Vector3 p = wallVerts[xi, yi];
+                verts.Add(center + p - along * (depth * 0.5f + (F() - 0.5f) * 0.05f));
+            }
+        }
+
+        int w = segX + 1;
+
+        // Triangulate front face
+        for (int yi = 0; yi < segY; yi++)
+            for (int xi = 0; xi < segX; xi++)
+            {
+                int a = yi * w + xi, b = a + 1, c2 = a + w, d = c2 + 1;
+                tris.AddRange(new[] { a, c2, b, b, c2, d });
+            }
+
+        // Triangulate back face (reversed winding)
+        for (int yi = 0; yi < segY; yi++)
+            for (int xi = 0; xi < segX; xi++)
+            {
+                int a = backStart + yi * w + xi, b = a + 1, c2 = a + w, d = c2 + 1;
+                tris.AddRange(new[] { a, b, c2, b, d, c2 });
+            }
+
+        // Stitch side edges (left and right)
+        for (int yi = 0; yi < segY; yi++)
+        {
+            // Left edge
+            int fl = yi * w, bl = backStart + yi * w;
+            int flUp = fl + w, blUp = bl + w;
+            tris.AddRange(new[] { fl, bl, flUp, bl, blUp, flUp });
+
+            // Right edge
+            int fr = yi * w + segX, br = backStart + yi * w + segX;
+            int frUp = fr + w, brUp = br + w;
+            tris.AddRange(new[] { fr, frUp, br, br, frUp, brUp });
+        }
+
+        // Top edge stitching
+        for (int xi = 0; xi < segX; xi++)
+        {
+            int ft = segY * w + xi, bt = backStart + segY * w + xi;
+            int ft1 = ft + 1, bt1 = bt + 1;
+            tris.AddRange(new[] { ft, ft1, bt, bt, ft1, bt1 });
+        }
+
+        // Protruding shapes — rocky chunks that stick out from the wall surface
+        int numProtrusions = 4 + rng.Next(4);
+        for (int p = 0; p < numProtrusions; p++)
+        {
+            float py = F() * passH * 0.85f;
+            float t = py / passH;
+            float widthScale = 1f - 0.7f * t * t;
+            float localHalfW = halfW * widthScale;
+            float px = (F() * 2f - 1f) * localHalfW * 0.7f;
+            float baseDepth = maxDepth * (1f - t * t) * 0.5f;
+
+            // Direction: stick out front or back
+            float side = F() > 0.5f ? 1f : -1f;
+            Vector3 rockCenter = center + across * px + Vector3.up * py + along * side * baseDepth * 0.6f;
+
+            // Elongated angular rock
+            float rSize = 0.15f + F() * 0.3f;
+            float stretch = 0.5f + F() * 1.5f;
+            AddProtrudingRock(verts, tris, rockCenter, rSize, stretch, along * side, across, rng);
+        }
+
+        // Extra chunks along the base for a rubble pile effect
+        int baseChunks = 3 + rng.Next(3);
+        for (int bc = 0; bc < baseChunks; bc++)
+        {
+            float bx = (F() * 2f - 1f) * halfW * 0.6f;
+            float by = F() * passH * 0.15f;
+            float bside = F() > 0.5f ? 1f : -1f;
+            Vector3 chunkPos = center + across * bx + Vector3.up * by + along * bside * maxDepth * 0.3f;
+            float cSize = 0.2f + F() * 0.25f;
+            AddRock(verts, tris, chunkPos, cSize, rng);
         }
 
         var mesh = new Mesh { name = "RubbleMesh" };
@@ -305,10 +412,10 @@ public class GameManager : MonoBehaviour
         meshGO.AddComponent<MeshFilter>().sharedMesh = mesh;
 
         var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        mat.color = new Color(0.18f, 0.16f, 0.14f);
-        mat.SetColor("_BaseColor", new Color(0.18f, 0.16f, 0.14f));
-        mat.SetFloat("_Metallic", 0.05f);
-        mat.SetFloat("_Smoothness", 0.15f);
+        mat.color = new Color(0.22f, 0.18f, 0.14f);
+        mat.SetColor("_BaseColor", new Color(0.22f, 0.18f, 0.14f));
+        mat.SetFloat("_Metallic", 0.02f);
+        mat.SetFloat("_Smoothness", 0.08f);
         meshGO.AddComponent<MeshRenderer>().sharedMaterial = mat;
 
         // Per-passage glow strip (not baked, so we can swap on clear)
@@ -370,6 +477,60 @@ public class GameManager : MonoBehaviour
             T+0, T+3, T+4,  T+0, T+4, T+2,
             T+1, T+5, T+2,  T+1, T+3, T+5,
             T+1, T+4, T+3,  T+1, T+2, T+4,
+        });
+    }
+
+    /// <summary>
+    /// Elongated angular rock that protrudes outward from the wall surface.
+    /// Uses a stretched pentahedron shape for a shard/spike look.
+    /// </summary>
+    static void AddProtrudingRock(List<Vector3> verts, List<int> tris,
+        Vector3 pos, float size, float stretch, Vector3 outDir, Vector3 sideDir, System.Random rng)
+    {
+        int baseIdx = verts.Count;
+        float J() => 0.7f + (float)rng.NextDouble() * 0.6f;
+
+        float sx = size * J();
+        float sy = size * J();
+
+        // Tip extends outward
+        Vector3 tip = pos + outDir.normalized * size * stretch;
+        // Add randomness to tip
+        tip += sideDir * ((float)rng.NextDouble() - 0.5f) * size * 0.3f;
+        tip += Vector3.up * ((float)rng.NextDouble() - 0.5f) * size * 0.4f;
+
+        // Base vertices form a rough quad around the attachment point
+        Vector3 up = Vector3.up * sy;
+        Vector3 side = sideDir * sx;
+
+        Vector3 b0 = pos + up + side;
+        Vector3 b1 = pos + up - side;
+        Vector3 b2 = pos - up * 0.6f - side;
+        Vector3 b3 = pos - up * 0.6f + side;
+
+        // Jitter base vertices
+        for (int i = 0; i < 1; i++)
+        {
+            float jx = ((float)rng.NextDouble() - 0.5f) * size * 0.2f;
+            float jy = ((float)rng.NextDouble() - 0.5f) * size * 0.2f;
+            Vector3 jitter = sideDir * jx + Vector3.up * jy;
+            b0 += jitter; b1 -= jitter; b2 += jitter * 0.5f; b3 -= jitter * 0.5f;
+        }
+
+        verts.Add(tip); // 0
+        verts.Add(b0);  // 1
+        verts.Add(b1);  // 2
+        verts.Add(b2);  // 3
+        verts.Add(b3);  // 4
+
+        int T = baseIdx;
+        tris.AddRange(new[] {
+            T+0, T+1, T+2,  // top face
+            T+0, T+2, T+3,  // right face
+            T+0, T+3, T+4,  // bottom face
+            T+0, T+4, T+1,  // left face
+            T+1, T+3, T+2,  // base tri 1
+            T+1, T+4, T+3,  // base tri 2
         });
     }
 
