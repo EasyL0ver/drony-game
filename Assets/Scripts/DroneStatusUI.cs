@@ -247,14 +247,16 @@ public class DroneStatusUI : MonoBehaviour
 
         for (int s = 0; s < maxSlots; s++)
         {
-            float slotY = -pad - s * (slotSize + slotGap);
-
+            // Slots anchored to full card height, split evenly
             var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
             var slotRT = slotGO.GetComponent<RectTransform>();
-            slotRT.anchorMin = new Vector2(0, 1); slotRT.anchorMax = new Vector2(0, 1);
-            slotRT.pivot = new Vector2(0, 1);
-            slotRT.anchoredPosition = new Vector2(pad, slotY);
-            slotRT.sizeDelta = new Vector2(slotSize, slotSize);
+            float yMax = 1f - (float)s / maxSlots;
+            float yMin = 1f - (float)(s + 1) / maxSlots;
+            slotRT.anchorMin = new Vector2(0, yMin);
+            slotRT.anchorMax = new Vector2(0, yMax);
+            slotRT.pivot = new Vector2(0, 0.5f);
+            slotRT.offsetMin = new Vector2(pad, s == maxSlots - 1 ? pad : 1);
+            slotRT.offsetMax = new Vector2(pad + slotSize, s == 0 ? -pad : -1);
 
             var slotOutline = slotGO.AddComponent<Outline>();
             slotOutline.effectColor = new Color(0.25f, 0.35f, 0.40f, 0.6f);
