@@ -80,6 +80,8 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color stepBarFillCol    = Palette.WithAlpha(Palette.DroneMoving, 0.85f);
     static readonly Color journeyBarFillCol = Palette.WithAlpha(Palette.DroneMoving, 0.45f);
     static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
+    static readonly Color idleBarBgCol      = new Color(0.12f, 0.12f, 0.15f, 0.9f);
+    static readonly Color idleTextCol       = new Color(0.35f, 0.40f, 0.45f, 0.8f);
 
     const float baseCardH = 64f;
     const float slotSize  = 22f;
@@ -528,6 +530,10 @@ public class DroneStatusUI : MonoBehaviour
             {
                 var step = journey[activeIdx];
 
+                c.stepBarBg.color = journeyBarBgCol;
+                c.journeyBarBg.color = journeyBarBgCol;
+                c.stepLabel.color = journeyTextCol;
+
                 // Step bar: current action progress
                 float stepProg = c.drone.GetJourneyStepProgress(activeIdx);
                 c.stepBarFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(stepProg), 1);
@@ -544,8 +550,13 @@ public class DroneStatusUI : MonoBehaviour
             }
             else
             {
+                // Dim the bars when idle so they don't blend with active cards
+                c.stepBarBg.color = idleBarBgCol;
+                c.journeyBarBg.color = idleBarBgCol;
+                c.stepLabel.color = idleTextCol;
+
                 c.stepBarFill.rectTransform.anchorMax = new Vector2(0, 1);
-                c.stepLabel.text = "IDLE";
+                c.stepLabel.text = "— IDLE —";
                 c.stepTime.text = "";
                 c.journeyBarFill.rectTransform.anchorMax = new Vector2(0, 1);
                 c.journeyTime.text = "";
