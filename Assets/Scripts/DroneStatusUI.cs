@@ -301,15 +301,15 @@ public class DroneStatusUI : MonoBehaviour
 
         for (int s = 0; s < maxSlots; s++)
         {
-            // Anchor to top-right, stack slots from right to left
-            float slotX = R - (maxSlots - 1 - s) * (slotSize + slotGap) - slotSize;
+            // Anchor to top-right, stack slots left to right
+            float slotX = -cardPad - slotsWidth + s * (slotSize + slotGap);
 
             var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
             var slotRT = slotGO.GetComponent<RectTransform>();
             slotRT.anchorMin = new Vector2(1, 1); slotRT.anchorMax = new Vector2(1, 1);
             slotRT.pivot = new Vector2(0, 1);
             slotRT.anchoredPosition = new Vector2(slotX, eY0);
-            slotRT.sizeDelta = new Vector2(slotSize, -eY0 + eY1);  // match energy bar height
+            slotRT.sizeDelta = new Vector2(slotSize, eY0 - eY1);  // positive height (13)
 
             var slotOutline = slotGO.AddComponent<Outline>();
             slotOutline.effectColor = new Color(0.25f, 0.35f, 0.40f, 0.6f);
