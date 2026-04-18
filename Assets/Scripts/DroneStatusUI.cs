@@ -81,7 +81,7 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color journeyBarFillCol = Palette.WithAlpha(Palette.DroneMoving, 0.45f);
     static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
 
-    const float baseCardH = 36f;
+    const float baseCardH = 58f;
     const float slotSize  = 22f;
     const float slotGap   = 3f;
     const float cardPad   = 5f;
@@ -342,7 +342,7 @@ public class DroneStatusUI : MonoBehaviour
         }
 
         // ── Journey bars (below energy bar, full width) ──
-        float jBase = eY1 - 2f;         // below energy row
+        float jBase = eY1 - 4f;         // padding below energy/slots row
         float barH = 10f, barGap = 2f;
         float sBarY0 = jBase, sBarY1 = jBase - barH;
         float oBarY0 = sBarY1 - barGap, oBarY1 = oBarY0 - barH;
@@ -390,7 +390,7 @@ public class DroneStatusUI : MonoBehaviour
         oTimeRT.anchorMin = Vector2.zero; oTimeRT.anchorMax = Vector2.one;
         oTimeRT.offsetMin = new Vector2(3, 0); oTimeRT.offsetMax = new Vector2(-3, 0);
 
-        jContGO.SetActive(false);
+        // Journey bars always visible (show "IDLE" when inactive)
 
         return new DroneCard
         {
@@ -522,10 +522,6 @@ public class DroneStatusUI : MonoBehaviour
             int activeIdx = c.drone.JourneyCurrentIndex;
             bool hasJourney = stepCount > 0 && activeIdx >= 0 && activeIdx < stepCount;
 
-            c.journeyRow.SetActive(hasJourney);
-            float targetH = hasJourney ? baseCardH + 24f : baseCardH;
-            c.layoutElem.preferredHeight = targetH;
-            c.layoutElem.minHeight = targetH;
             if (hasJourney)
             {
                 var step = journey[activeIdx];
@@ -543,6 +539,14 @@ public class DroneStatusUI : MonoBehaviour
                 c.journeyBarFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(overallProg), 1);
                 float totalRemain = c.drone.JourneyTotalTime - c.drone.JourneyElapsedTime;
                 c.journeyTime.text = $"{Mathf.Max(0, totalRemain):F1}s total";
+            }
+            else
+            {
+                c.stepBarFill.rectTransform.anchorMax = new Vector2(0, 1);
+                c.stepLabel.text = "IDLE";
+                c.stepTime.text = "";
+                c.journeyBarFill.rectTransform.anchorMax = new Vector2(0, 1);
+                c.journeyTime.text = "";
             }
         }
 
