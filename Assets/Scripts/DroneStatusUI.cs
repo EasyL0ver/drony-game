@@ -134,7 +134,11 @@ public class DroneStatusUI : MonoBehaviour
         var scaler = canvasGO.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
-        scaler.matchWidthOrHeight = 0.5f;
+        // On mobile (touch devices), match width so cards scale up on narrow screens
+        bool isMobile = Application.isMobilePlatform
+            || UnityEngine.InputSystem.Touchscreen.current != null;
+        scaler.matchWidthOrHeight = isMobile ? 0f : 0.5f;
+        if (isMobile) scaler.referenceResolution = new Vector2(800, 600);
 
         canvasGO.AddComponent<GraphicRaycaster>();
 
