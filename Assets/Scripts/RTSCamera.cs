@@ -88,6 +88,7 @@ public class RTSCamera : MonoBehaviour
     // Touch state
     bool isTouchPanning;
     Vector2 lastTouchPos;
+    Vector2 smoothedTouchDelta;
 
     void Update()
     {
@@ -125,13 +126,14 @@ public class RTSCamera : MonoBehaviour
     void HandleTouchPan()
     {
         var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
-        if (touches.Count != 1) { isTouchPanning = false; return; }
+        if (touches.Count != 1) { isTouchPanning = false; smoothedTouchDelta = Vector2.zero; return; }
 
         // Ignore if touch is over UI (drone cards, etc.)
         if (UnityEngine.EventSystems.EventSystem.current != null &&
             UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject(touches[0].touchId))
         {
             isTouchPanning = false;
+            smoothedTouchDelta = Vector2.zero;
             return;
         }
 
@@ -141,22 +143,30 @@ public class RTSCamera : MonoBehaviour
         {
             isTouchPanning = true;
             lastTouchPos = touch.screenPosition;
+            smoothedTouchDelta = Vector2.zero;
             return;
         }
 
-        Vector2 delta = touch.screenPosition - lastTouchPos;
+        Vector2 rawDelta = touch.screenPosition - lastTouchPos;
         lastTouchPos = touch.screenPosition;
+
+        // Dead zone to ignore finger jitter
+        if (rawDelta.magnitude < 1.5f)
+            rawDelta = Vector2.zero;
+
+        // Smooth the delta to kill jumpiness
+        smoothedTouchDelta = Vector2.Lerp(smoothedTouchDelta, rawDelta, 0.35f);
 
         // Convert screen-space delta to world-space pan
         float heightFactor = Mathf.Lerp(0.5f, 2f,
             Mathf.InverseLerp(minHeight, maxHeight, targetZoom));
-        float speed = panSpeed * heightFactor * 0.005f;
+        float speed = panSpeed * heightFactor * 0.004f;
 
         Vector3 fwd   = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
         Vector3 right = Vector3.ProjectOnPlane(transform.right, Vector3.up).normalized;
 
         // Invert so dragging moves the world under your finger
-        targetPosition -= (right * delta.x + fwd * delta.y) * speed;
+        targetPosition -= (right * smoothedTouchDelta.x + fwd * smoothedTouchDelta.y) * speed;
 
         if (boundsX > 0f)
             targetPosition.x = Mathf.Clamp(targetPosition.x, -boundsX, boundsX);
