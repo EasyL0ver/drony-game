@@ -81,7 +81,7 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color journeyBarFillCol = Palette.WithAlpha(Palette.DroneMoving, 0.45f);
     static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
 
-    const float baseCardH = 58f;
+    const float baseCardH = 64f;
     const float slotSize  = 22f;
     const float slotGap   = 3f;
     const float cardPad   = 5f;
