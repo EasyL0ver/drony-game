@@ -230,70 +230,16 @@ public class DroneStatusUI : MonoBehaviour
         outline.enabled = false;
 
         // ════════════════════════════════════
-        //  VERTICAL LAYOUT (full width rows)
+        //  TWO-COLUMN LAYOUT
+        //  Left: equipment slots (vertical)
+        //  Right: name, energy bar, journey bars
         // ════════════════════════════════════
-        float L = cardPad, R = -cardPad; // left/right insets
-
-        // ── Row 1: Name + corridor-size dots ──
-        float nY0 = -2f, nY1 = -17f;
-
-        var nameGO = MakeText(cardGO.transform, "Name", drone.DroneName, 12, accentColor,
-                              TextAnchor.MiddleLeft);
-        nameGO.GetComponent<Text>().fontStyle = FontStyle.Bold;
-        var nameRT = nameGO.GetComponent<RectTransform>();
-        nameRT.anchorMin = new Vector2(0, 1); nameRT.anchorMax = new Vector2(1, 1);
-        nameRT.offsetMin = new Vector2(L, nY1); nameRT.offsetMax = new Vector2(-40, nY0);
-
-        PassageType[] sizes = { PassageType.Corridor, PassageType.Duct, PassageType.Vent };
-        Color[] dotColors = { Palette.CorridorGlow, Palette.DuctGlow, Palette.VentGlow };
-        float dotSize = 5f, dotGap2 = 3f;
-        for (int d = 0; d < sizes.Length; d++)
-        {
-            var dotGO = MakeImage(cardGO.transform, $"Dot_{sizes[d]}", dotColors[d]);
-            var dotRT = dotGO.GetComponent<RectTransform>();
-            dotRT.anchorMin = new Vector2(1, 1); dotRT.anchorMax = new Vector2(1, 1);
-            dotRT.pivot = new Vector2(1, 0.5f);
-            float dx = -cardPad - (sizes.Length - 1 - d) * (dotSize + dotGap2);
-            dotRT.anchoredPosition = new Vector2(dx, (nY0 + nY1) * 0.5f);
-            dotRT.sizeDelta = new Vector2(dotSize, dotSize);
-        }
-
-        // ── Row 2: Energy segments + count  |  Equipment slots (right side) ──
-        float eY0 = -19f, eY1 = -32f;
-
-        // Calculate slot area width to reserve space on the right
+        float pad = cardPad;
         int maxSlots = drone.Model != null ? drone.Model.MaxSlots : 2;
-        float slotsWidth = maxSlots * (slotSize + slotGap);
+        float slotCol = pad + slotSize + 4f; // left column width (slot + gap)
+        float R = -pad;
 
-        var energyContGO = new GameObject("EnergyBar");
-        energyContGO.transform.SetParent(cardGO.transform, false);
-        var energyContRT = energyContGO.AddComponent<RectTransform>();
-        energyContRT.anchorMin = new Vector2(0, 1); energyContRT.anchorMax = new Vector2(1, 1);
-        energyContRT.offsetMin = new Vector2(L + slotsWidth, eY1); energyContRT.offsetMax = new Vector2(-38, eY0);
-
-        int maxE = drone.MaxEnergy;
-        var segments = new List<Image>();
-        float segGap = 1.5f;
-        for (int s = 0; s < maxE; s++)
-        {
-            var segGO = MakeImage(energyContGO.transform, $"Seg_{s}", segFullCol);
-            var segRT = segGO.GetComponent<RectTransform>();
-            float xMin = (float)s / maxE;
-            float xMax = (float)(s + 1) / maxE;
-            segRT.anchorMin = new Vector2(xMin, 0); segRT.anchorMax = new Vector2(xMax, 1);
-            float halfGap = segGap * 0.5f;
-            segRT.offsetMin = new Vector2(s == 0 ? 0 : halfGap, 1);
-            segRT.offsetMax = new Vector2(s == maxE - 1 ? 0 : -halfGap, -1);
-            segments.Add(segGO.GetComponent<Image>());
-        }
-
-        var pctGO = MakeText(cardGO.transform, "Pct", $"{maxE}/{maxE}", 10, accentColor,
-                             TextAnchor.MiddleRight);
-        var pctRT = pctGO.GetComponent<RectTransform>();
-        pctRT.anchorMin = new Vector2(1, 1); pctRT.anchorMax = new Vector2(1, 1);
-        pctRT.offsetMin = new Vector2(-36, eY1); pctRT.offsetMax = new Vector2(R, eY0);
-
-        // ── Equipment slots (left side, same row as energy) ──
+        // ── LEFT COLUMN: Equipment slots stacked vertically ──
         var slotBgs = new List<Image>();
         var slotIcons = new List<Text>();
         var slotLabels = new List<Text>();
@@ -301,15 +247,14 @@ public class DroneStatusUI : MonoBehaviour
 
         for (int s = 0; s < maxSlots; s++)
         {
-            // Anchor to top-left, stack slots left to right
-            float slotX = L + s * (slotSize + slotGap);
+            float slotY = -pad - s * (slotSize + slotGap);
 
             var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
             var slotRT = slotGO.GetComponent<RectTransform>();
             slotRT.anchorMin = new Vector2(0, 1); slotRT.anchorMax = new Vector2(0, 1);
             slotRT.pivot = new Vector2(0, 1);
-            slotRT.anchoredPosition = new Vector2(slotX, eY0);
-            slotRT.sizeDelta = new Vector2(slotSize, eY0 - eY1);  // positive height (13)
+            slotRT.anchoredPosition = new Vector2(pad, slotY);
+            slotRT.sizeDelta = new Vector2(slotSize, slotSize);
 
             var slotOutline = slotGO.AddComponent<Outline>();
             slotOutline.effectColor = new Color(0.25f, 0.35f, 0.40f, 0.6f);
@@ -341,8 +286,63 @@ public class DroneStatusUI : MonoBehaviour
             slotButtons.Add(slotBtn);
         }
 
-        // ── Journey bars (below energy bar, full width) ──
-        float jBase = eY1 - 4f;         // padding below energy/slots row
+        // ── RIGHT COLUMN: Name row ──
+        float nY0 = -3f, nY1 = -17f;
+
+        var nameGO = MakeText(cardGO.transform, "Name", drone.DroneName, 12, accentColor,
+                              TextAnchor.MiddleLeft);
+        nameGO.GetComponent<Text>().fontStyle = FontStyle.Bold;
+        var nameRT = nameGO.GetComponent<RectTransform>();
+        nameRT.anchorMin = new Vector2(0, 1); nameRT.anchorMax = new Vector2(1, 1);
+        nameRT.offsetMin = new Vector2(slotCol, nY1); nameRT.offsetMax = new Vector2(-40, nY0);
+
+        PassageType[] sizes = { PassageType.Corridor, PassageType.Duct, PassageType.Vent };
+        Color[] dotColors = { Palette.CorridorGlow, Palette.DuctGlow, Palette.VentGlow };
+        float dotSize = 5f, dotGap2 = 3f;
+        for (int d = 0; d < sizes.Length; d++)
+        {
+            var dotGO = MakeImage(cardGO.transform, $"Dot_{sizes[d]}", dotColors[d]);
+            var dotRT = dotGO.GetComponent<RectTransform>();
+            dotRT.anchorMin = new Vector2(1, 1); dotRT.anchorMax = new Vector2(1, 1);
+            dotRT.pivot = new Vector2(1, 0.5f);
+            float dx = -pad - (sizes.Length - 1 - d) * (dotSize + dotGap2);
+            dotRT.anchoredPosition = new Vector2(dx, (nY0 + nY1) * 0.5f);
+            dotRT.sizeDelta = new Vector2(dotSize, dotSize);
+        }
+
+        // ── RIGHT COLUMN: Energy bar ──
+        float eY0 = -19f, eY1 = -31f;
+
+        var energyContGO = new GameObject("EnergyBar");
+        energyContGO.transform.SetParent(cardGO.transform, false);
+        var energyContRT = energyContGO.AddComponent<RectTransform>();
+        energyContRT.anchorMin = new Vector2(0, 1); energyContRT.anchorMax = new Vector2(1, 1);
+        energyContRT.offsetMin = new Vector2(slotCol, eY1); energyContRT.offsetMax = new Vector2(-38, eY0);
+
+        int maxE = drone.MaxEnergy;
+        var segments = new List<Image>();
+        float segGap = 1.5f;
+        for (int s = 0; s < maxE; s++)
+        {
+            var segGO = MakeImage(energyContGO.transform, $"Seg_{s}", segFullCol);
+            var segRT = segGO.GetComponent<RectTransform>();
+            float xMin = (float)s / maxE;
+            float xMax = (float)(s + 1) / maxE;
+            segRT.anchorMin = new Vector2(xMin, 0); segRT.anchorMax = new Vector2(xMax, 1);
+            float halfGap = segGap * 0.5f;
+            segRT.offsetMin = new Vector2(s == 0 ? 0 : halfGap, 1);
+            segRT.offsetMax = new Vector2(s == maxE - 1 ? 0 : -halfGap, -1);
+            segments.Add(segGO.GetComponent<Image>());
+        }
+
+        var pctGO = MakeText(cardGO.transform, "Pct", $"{maxE}/{maxE}", 10, accentColor,
+                             TextAnchor.MiddleRight);
+        var pctRT = pctGO.GetComponent<RectTransform>();
+        pctRT.anchorMin = new Vector2(1, 1); pctRT.anchorMax = new Vector2(1, 1);
+        pctRT.offsetMin = new Vector2(-36, eY1); pctRT.offsetMax = new Vector2(R, eY0);
+
+        // ── RIGHT COLUMN: Journey bars ──
+        float jBase = eY1 - 3f;
         float barH = 10f, barGap = 2f;
         float sBarY0 = jBase, sBarY1 = jBase - barH;
         float oBarY0 = sBarY1 - barGap, oBarY1 = oBarY0 - barH;
@@ -357,7 +357,7 @@ public class DroneStatusUI : MonoBehaviour
         var sBgGO = MakeImage(jContGO.transform, "StepBg", journeyBarBgCol);
         var sBgRT = sBgGO.GetComponent<RectTransform>();
         sBgRT.anchorMin = new Vector2(0, 1); sBgRT.anchorMax = new Vector2(1, 1);
-        sBgRT.offsetMin = new Vector2(L, sBarY1); sBgRT.offsetMax = new Vector2(R, sBarY0);
+        sBgRT.offsetMin = new Vector2(slotCol, sBarY1); sBgRT.offsetMax = new Vector2(R, sBarY0);
 
         var sFillGO = MakeImage(sBgGO.transform, "Fill", stepBarFillCol);
         var sFillRT = sFillGO.GetComponent<RectTransform>();
@@ -378,7 +378,7 @@ public class DroneStatusUI : MonoBehaviour
         var oBgGO = MakeImage(jContGO.transform, "JourneyBg", journeyBarBgCol);
         var oBgRT = oBgGO.GetComponent<RectTransform>();
         oBgRT.anchorMin = new Vector2(0, 1); oBgRT.anchorMax = new Vector2(1, 1);
-        oBgRT.offsetMin = new Vector2(L, oBarY1); oBgRT.offsetMax = new Vector2(R, oBarY0);
+        oBgRT.offsetMin = new Vector2(slotCol, oBarY1); oBgRT.offsetMax = new Vector2(R, oBarY0);
 
         var oFillGO = MakeImage(oBgGO.transform, "Fill", journeyBarFillCol);
         var oFillRT = oFillGO.GetComponent<RectTransform>();
