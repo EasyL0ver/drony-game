@@ -269,7 +269,7 @@ public class DroneStatusUI : MonoBehaviour
         energyContGO.transform.SetParent(cardGO.transform, false);
         var energyContRT = energyContGO.AddComponent<RectTransform>();
         energyContRT.anchorMin = new Vector2(0, 1); energyContRT.anchorMax = new Vector2(1, 1);
-        energyContRT.offsetMin = new Vector2(L, eY1); energyContRT.offsetMax = new Vector2(-38 - slotsWidth, eY0);
+        energyContRT.offsetMin = new Vector2(L + slotsWidth, eY1); energyContRT.offsetMax = new Vector2(-38, eY0);
 
         int maxE = drone.MaxEnergy;
         var segments = new List<Image>();
@@ -291,9 +291,9 @@ public class DroneStatusUI : MonoBehaviour
                              TextAnchor.MiddleRight);
         var pctRT = pctGO.GetComponent<RectTransform>();
         pctRT.anchorMin = new Vector2(1, 1); pctRT.anchorMax = new Vector2(1, 1);
-        pctRT.offsetMin = new Vector2(-36 - slotsWidth, eY1); pctRT.offsetMax = new Vector2(-slotsWidth + R, eY0);
+        pctRT.offsetMin = new Vector2(-36, eY1); pctRT.offsetMax = new Vector2(R, eY0);
 
-        // ── Equipment slots (right side, same row as energy) ──
+        // ── Equipment slots (left side, same row as energy) ──
         var slotBgs = new List<Image>();
         var slotIcons = new List<Text>();
         var slotLabels = new List<Text>();
@@ -301,12 +301,12 @@ public class DroneStatusUI : MonoBehaviour
 
         for (int s = 0; s < maxSlots; s++)
         {
-            // Anchor to top-right, stack slots left to right
-            float slotX = -cardPad - slotsWidth + s * (slotSize + slotGap);
+            // Anchor to top-left, stack slots left to right
+            float slotX = L + s * (slotSize + slotGap);
 
             var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
             var slotRT = slotGO.GetComponent<RectTransform>();
-            slotRT.anchorMin = new Vector2(1, 1); slotRT.anchorMax = new Vector2(1, 1);
+            slotRT.anchorMin = new Vector2(0, 1); slotRT.anchorMax = new Vector2(0, 1);
             slotRT.pivot = new Vector2(0, 1);
             slotRT.anchoredPosition = new Vector2(slotX, eY0);
             slotRT.sizeDelta = new Vector2(slotSize, eY0 - eY1);  // positive height (13)
