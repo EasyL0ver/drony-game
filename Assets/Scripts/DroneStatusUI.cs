@@ -81,7 +81,7 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color journeyBarFillCol = Palette.WithAlpha(Palette.DroneMoving, 0.45f);
     static readonly Color journeyTextCol    = new Color(0.75f, 0.85f, 0.90f, 0.95f);
 
-    const float baseCardH = 58f;
+    const float baseCardH = 36f;
     const float slotSize  = 22f;
     const float slotGap   = 3f;
     const float cardPad   = 5f;
@@ -258,14 +258,18 @@ public class DroneStatusUI : MonoBehaviour
             dotRT.sizeDelta = new Vector2(dotSize, dotSize);
         }
 
-        // ── Row 2: Energy segments + count ──
+        // ── Row 2: Energy segments + count  |  Equipment slots (right side) ──
         float eY0 = -19f, eY1 = -32f;
+
+        // Calculate slot area width to reserve space on the right
+        int maxSlots = drone.Model != null ? drone.Model.MaxSlots : 2;
+        float slotsWidth = maxSlots * (slotSize + slotGap);
 
         var energyContGO = new GameObject("EnergyBar");
         energyContGO.transform.SetParent(cardGO.transform, false);
         var energyContRT = energyContGO.AddComponent<RectTransform>();
         energyContRT.anchorMin = new Vector2(0, 1); energyContRT.anchorMax = new Vector2(1, 1);
-        energyContRT.offsetMin = new Vector2(L, eY1); energyContRT.offsetMax = new Vector2(-38, eY0);
+        energyContRT.offsetMin = new Vector2(L, eY1); energyContRT.offsetMax = new Vector2(-38 - slotsWidth, eY0);
 
         int maxE = drone.MaxEnergy;
         var segments = new List<Image>();
@@ -287,11 +291,9 @@ public class DroneStatusUI : MonoBehaviour
                              TextAnchor.MiddleRight);
         var pctRT = pctGO.GetComponent<RectTransform>();
         pctRT.anchorMin = new Vector2(1, 1); pctRT.anchorMax = new Vector2(1, 1);
-        pctRT.offsetMin = new Vector2(-36, eY1); pctRT.offsetMax = new Vector2(R, eY0);
+        pctRT.offsetMin = new Vector2(-36 - slotsWidth, eY1); pctRT.offsetMax = new Vector2(-slotsWidth + R, eY0);
 
-        // ── Row 3: Equipment slots (inline) ──
-        float slY = -34f;
-        int maxSlots = drone.Model != null ? drone.Model.MaxSlots : 2;
+        // ── Equipment slots (right side, same row as energy) ──
         var slotBgs = new List<Image>();
         var slotIcons = new List<Text>();
         var slotLabels = new List<Text>();
@@ -299,14 +301,15 @@ public class DroneStatusUI : MonoBehaviour
 
         for (int s = 0; s < maxSlots; s++)
         {
-            float slotX = L + s * (slotSize + slotGap);
+            // Anchor to top-right, stack slots from right to left
+            float slotX = R - (maxSlots - 1 - s) * (slotSize + slotGap) - slotSize;
 
             var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
             var slotRT = slotGO.GetComponent<RectTransform>();
-            slotRT.anchorMin = new Vector2(0, 1); slotRT.anchorMax = new Vector2(0, 1);
+            slotRT.anchorMin = new Vector2(1, 1); slotRT.anchorMax = new Vector2(1, 1);
             slotRT.pivot = new Vector2(0, 1);
-            slotRT.anchoredPosition = new Vector2(slotX, slY);
-            slotRT.sizeDelta = new Vector2(slotSize, slotSize);
+            slotRT.anchoredPosition = new Vector2(slotX, eY0);
+            slotRT.sizeDelta = new Vector2(slotSize, -eY0 + eY1);  // match energy bar height
 
             var slotOutline = slotGO.AddComponent<Outline>();
             slotOutline.effectColor = new Color(0.25f, 0.35f, 0.40f, 0.6f);
@@ -338,8 +341,8 @@ public class DroneStatusUI : MonoBehaviour
             slotButtons.Add(slotBtn);
         }
 
-        // ── Journey bars (below slots, full width) ──
-        float jBase = slY - slotSize - 2f;         // below slots
+        // ── Journey bars (below energy bar, full width) ──
+        float jBase = eY1 - 2f;         // below energy row
         float barH = 10f, barGap = 2f;
         float sBarY0 = jBase, sBarY1 = jBase - barH;
         float oBarY0 = sBarY1 - barGap, oBarY1 = oBarY0 - barH;
