@@ -274,6 +274,12 @@ public class SelectionManager : MonoBehaviour
 
         if (tile == null) return (null, StationType.None, false, default, default);
 
+        // Only do edge/passage resolution on visible tiles where the user can see
+        // room layout and intend to click "through" a passage. For hidden tiles the
+        // user is targeting the fog hex itself.
+        if (tile.State != FogState.Visible)
+            return (tile, StationType.None, false, default, default);
+
         int edge = gm.hexMap.Model.NearestEdge(hitPoint, tile.Coord);
         StationType wallStation = tile.RModel.GetWallStation(edge);
 
