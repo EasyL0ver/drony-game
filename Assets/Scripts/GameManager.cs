@@ -252,83 +252,78 @@ public class GameManager : MonoBehaviour
         barrier.transform.position = center;
         barrier.transform.SetParent(transform, true);
 
-        // Build rubble mesh: parabolic wall — wide at base, tapering to top, with irregularities
+        // Build rubble mesh: faceted parabolic wall with sharp angular edges
         var verts = new List<Vector3>();
         var tris = new List<int>();
         var rng = new System.Random(roomA.GetHashCode() ^ roomB.GetHashCode());
-
-        float halfLen = Vector3.Distance(midA, midB) * 0.35f;
-        float halfW = passW * 0.45f;
-
-        // Grid resolution for the wall surface
-        int segX = 12;  // across width
-        int segY = 10;  // floor to ceiling
         float F() => (float)rng.NextDouble();
 
-        // Generate wall surface vertices on a grid
-        // Parabolic profile: depth = maxDepth * (1 - (y/h)^2), width shrinks toward top
-        float maxDepth = halfLen * 0.8f;
-        var wallVerts = new Vector3[segX + 1, segY + 1];
+        float halfLen = Vector3.Distance(midA, midB) * 0.5f;
+        float halfW = passW * 0.5f;
+        float maxDepth = halfLen * 1.0f;
 
+        // Low segment count for sharp faceted look
+        int segX = 5;
+        int segY = 5;
+
+        // Front face vertices
         for (int yi = 0; yi <= segY; yi++)
         {
             float t = (float)yi / segY;
             float y = t * passH;
 
-            // Parabolic width: full at base, ~30% at top
-            float widthScale = 1f - 0.7f * t * t;
-            float localHalfW = halfW * widthScale;
+            // Width (across corridor): stays full to block passage
+            float localHalfW = halfW;
 
-            // Parabolic depth
-            float baseDepth = maxDepth * (1f - t * t);
+            // Depth (along corridor): wide spread at base, rounded top (never zero)
+            float baseDepth = maxDepth * (0.15f + 0.85f * (1f - t) * (1f - t));
 
             for (int xi = 0; xi <= segX; xi++)
             {
                 float s = (float)xi / segX;
                 float xPos = Mathf.Lerp(-localHalfW, localHalfW, s);
 
-                // Edge taper: thinner at the sides
                 float edgeDist = 1f - Mathf.Abs(s - 0.5f) * 2f;
-                float edgeTaper = Mathf.Sqrt(Mathf.Max(0, edgeDist));
+                float edgeTaper = 0.4f + 0.6f * Mathf.Max(0, edgeDist);
                 float depth = baseDepth * edgeTaper;
 
-                // Surface irregularities — bumps and dents
-                float noise = (F() - 0.5f) * 0.15f * passH;
-                depth += noise * edgeTaper;
+                // Chunky noise for jagged surface
+                depth += (F() - 0.3f) * 0.25f * maxDepth * edgeTaper * (1f - t);
 
                 Vector3 p = across * xPos + Vector3.up * y;
-                wallVerts[xi, yi] = p;
-
-                // Front face vertex
-                verts.Add(center + p + along * (depth * 0.5f + (F() - 0.5f) * 0.05f));
+                verts.Add(p + along * depth * 0.5f);
             }
         }
 
-        // Back face vertices (mirrored)
+        // Back face vertices (independent profile for asymmetry)
         int backStart = verts.Count;
+        float backScale = 0.6f + F() * 0.5f; // different overall depth
         for (int yi = 0; yi <= segY; yi++)
         {
             float t = (float)yi / segY;
-            float widthScale = 1f - 0.7f * t * t;
-            float localHalfW = halfW * widthScale;
-            float baseDepth = maxDepth * (1f - t * t);
+            float y = t * passH;
+
+            float localHalfW = halfW;
+            float baseDepth = maxDepth * backScale * (0.2f + 0.8f * (1f - t) * (1f - 0.7f * t));
 
             for (int xi = 0; xi <= segX; xi++)
             {
                 float s = (float)xi / segX;
                 float xPos = Mathf.Lerp(-localHalfW, localHalfW, s);
-                float edgeDist = 1f - Mathf.Abs(s - 0.5f) * 2f;
-                float edgeTaper = Mathf.Sqrt(Mathf.Max(0, edgeDist));
-                float depth = baseDepth * edgeTaper + (F() - 0.5f) * 0.15f * passH * edgeTaper;
 
-                Vector3 p = wallVerts[xi, yi];
-                verts.Add(center + p - along * (depth * 0.5f + (F() - 0.5f) * 0.05f));
+                float edgeDist = 1f - Mathf.Abs(s - 0.5f) * 2f;
+                float edgeTaper = 0.35f + 0.65f * Mathf.Max(0, edgeDist);
+                float depth = baseDepth * edgeTaper;
+                depth += (F() - 0.35f) * 0.3f * maxDepth * edgeTaper * (1f - t);
+
+                Vector3 p = across * xPos + Vector3.up * y;
+                verts.Add(p - along * depth * 0.5f);
             }
         }
 
         int w = segX + 1;
 
-        // Triangulate front face
+        // Triangulate front face (flat shading via separate tris)
         for (int yi = 0; yi < segY; yi++)
             for (int xi = 0; xi < segX; xi++)
             {
@@ -344,15 +339,13 @@ public class GameManager : MonoBehaviour
                 tris.AddRange(new[] { a, b, c2, b, d, c2 });
             }
 
-        // Stitch side edges (left and right)
+        // Stitch side edges
         for (int yi = 0; yi < segY; yi++)
         {
-            // Left edge
             int fl = yi * w, bl = backStart + yi * w;
             int flUp = fl + w, blUp = bl + w;
             tris.AddRange(new[] { fl, bl, flUp, bl, blUp, flUp });
 
-            // Right edge
             int fr = yi * w + segX, br = backStart + yi * w + segX;
             int frUp = fr + w, brUp = br + w;
             tris.AddRange(new[] { fr, frUp, br, br, frUp, brUp });
@@ -366,37 +359,72 @@ public class GameManager : MonoBehaviour
             tris.AddRange(new[] { ft, ft1, bt, bt, ft1, bt1 });
         }
 
-        // Protruding shapes — rocky chunks that stick out from the wall surface
-        int numProtrusions = 4 + rng.Next(4);
-        for (int p = 0; p < numProtrusions; p++)
+        // Broken wall panel chunks protruding from rubble (same material as corridor walls)
+        int numChunks = 3 + rng.Next(2);
+        var wallChunkVerts = new List<Vector3>();
+        var wallChunkTris = new List<int>();
+        for (int p = 0; p < numChunks; p++)
         {
-            float py = F() * passH * 0.85f;
+            float py = F() * passH * 0.6f + passH * 0.1f;
             float t = py / passH;
-            float widthScale = 1f - 0.7f * t * t;
-            float localHalfW = halfW * widthScale;
-            float px = (F() * 2f - 1f) * localHalfW * 0.7f;
-            float baseDepth = maxDepth * (1f - t * t) * 0.5f;
-
-            // Direction: stick out front or back
+            float px = (F() * 2f - 1f) * halfW * 0.4f;
+            float depth = maxDepth * (1f - t) * (1f - t) * 0.5f;
             float side = F() > 0.5f ? 1f : -1f;
-            Vector3 rockCenter = center + across * px + Vector3.up * py + along * side * baseDepth * 0.6f;
 
-            // Elongated angular rock
-            float rSize = 0.15f + F() * 0.3f;
-            float stretch = 0.5f + F() * 1.5f;
-            AddProtrudingRock(verts, tris, rockCenter, rSize, stretch, along * side, across, rng);
+            Vector3 chunkBase = across * px + Vector3.up * py + along * side * depth;
+
+            // Flat broken panel: wide, tall, thin — like a broken wall slab
+            float cw = 0.2f + F() * 0.3f;   // width
+            float ch = 0.3f + F() * 0.4f;   // height
+            float cd = 0.04f + F() * 0.04f;  // thickness (thin like a wall)
+
+            // Tilt the panel randomly as if it broke off
+            float tiltFwd = (F() - 0.5f) * 0.8f;
+            float tiltSide = (F() - 0.5f) * 0.4f;
+            Vector3 panelUp = (Vector3.up + along * tiltFwd + across * tiltSide).normalized;
+            Vector3 panelRight = Vector3.Cross(panelUp, along).normalized;
+            Vector3 panelFwd = Vector3.Cross(panelRight, panelUp).normalized;
+
+            Vector3 r = panelRight * cw * 0.5f;
+            Vector3 u = panelUp * ch * 0.5f;
+            Vector3 f = panelFwd * cd * 0.5f;
+
+            int b = wallChunkVerts.Count;
+            wallChunkVerts.Add(chunkBase - r - u - f);
+            wallChunkVerts.Add(chunkBase + r - u - f);
+            wallChunkVerts.Add(chunkBase + r + u - f);
+            wallChunkVerts.Add(chunkBase - r + u - f);
+            wallChunkVerts.Add(chunkBase - r - u + f);
+            wallChunkVerts.Add(chunkBase + r - u + f);
+            wallChunkVerts.Add(chunkBase + r + u + f);
+            wallChunkVerts.Add(chunkBase - r + u + f);
+
+            wallChunkTris.AddRange(new[] {
+                b+0,b+2,b+1, b+0,b+3,b+2,
+                b+4,b+5,b+6, b+4,b+6,b+7,
+                b+0,b+1,b+5, b+0,b+5,b+4,
+                b+2,b+3,b+7, b+2,b+7,b+6,
+                b+0,b+4,b+7, b+0,b+7,b+3,
+                b+1,b+2,b+6, b+1,b+6,b+5,
+            });
         }
 
-        // Extra chunks along the base for a rubble pile effect
-        int baseChunks = 3 + rng.Next(3);
-        for (int bc = 0; bc < baseChunks; bc++)
+        // Wall chunks mesh (uses corridor wall material color)
+        if (wallChunkVerts.Count > 0)
         {
-            float bx = (F() * 2f - 1f) * halfW * 0.6f;
-            float by = F() * passH * 0.15f;
-            float bside = F() > 0.5f ? 1f : -1f;
-            Vector3 chunkPos = center + across * bx + Vector3.up * by + along * bside * maxDepth * 0.3f;
-            float cSize = 0.2f + F() * 0.25f;
-            AddRock(verts, tris, chunkPos, cSize, rng);
+            var chunkMesh = new Mesh { name = "RubbleWallChunks" };
+            chunkMesh.SetVertices(wallChunkVerts);
+            chunkMesh.SetTriangles(wallChunkTris, 0);
+            chunkMesh.RecalculateNormals();
+            var chunkGO = new GameObject("WallChunks");
+            chunkGO.transform.SetParent(barrier.transform, false);
+            chunkGO.AddComponent<MeshFilter>().sharedMesh = chunkMesh;
+            var chunkMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            chunkMat.color = new Color(0.12f, 0.12f, 0.14f);
+            chunkMat.SetColor("_BaseColor", new Color(0.12f, 0.12f, 0.14f));
+            chunkMat.SetFloat("_Metallic", 0.65f);
+            chunkMat.SetFloat("_Smoothness", 0.5f);
+            chunkGO.AddComponent<MeshRenderer>().sharedMaterial = chunkMat;
         }
 
         var mesh = new Mesh { name = "RubbleMesh" };
@@ -412,10 +440,11 @@ public class GameManager : MonoBehaviour
         meshGO.AddComponent<MeshFilter>().sharedMesh = mesh;
 
         var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        mat.color = new Color(0.22f, 0.18f, 0.14f);
-        mat.SetColor("_BaseColor", new Color(0.22f, 0.18f, 0.14f));
-        mat.SetFloat("_Metallic", 0.02f);
-        mat.SetFloat("_Smoothness", 0.08f);
+        mat.color = new Color(0.35f, 0.25f, 0.18f);
+        mat.SetColor("_BaseColor", new Color(0.35f, 0.25f, 0.18f));
+        mat.SetFloat("_Metallic", 0.1f);
+        mat.SetFloat("_Smoothness", 0.15f);
+        mat.SetFloat("_Cull", 0f); // render both sides
         meshGO.AddComponent<MeshRenderer>().sharedMaterial = mat;
 
         // Per-passage glow strip (not baked, so we can swap on clear)
@@ -435,6 +464,57 @@ public class GameManager : MonoBehaviour
 
         long barrierKey = MapModel.ConnKey(roomA, roomB);
         rubbleBarriers[barrierKey] = barrier;
+
+        // Broken glow strips from collapsed walls — embedded in rubble, flickering
+        var glowColor = Palette.ImpassableGlow; // same as this corridor's glow
+        var brokenGlowMat = hexMap.MakeEmissive(glowColor, 5f);
+        int stripCount = 3 + rng.Next(2);
+        for (int i = 0; i < stripCount; i++)
+        {
+            // Position on the rubble surface — sticking out visibly
+            float st = 0.15f + F() * 0.55f; // height along rubble
+            float sx = (F() * 2f - 1f) * halfW * 0.5f;
+            float depthAtT = maxDepth * (0.15f + 0.85f * (1f - st) * (1f - st));
+            float side = F() > 0.5f ? 1f : -1f;
+
+            // Place just outside the rubble surface so it's visible
+            Vector3 stripPos = across * sx + Vector3.up * (st * passH) + along * side * (depthAtT * 0.55f);
+
+            var stripGO = new GameObject("BrokenGlowStrip");
+            stripGO.transform.SetParent(barrier.transform, false);
+            stripGO.transform.localPosition = stripPos;
+
+            // Tilt like broken wall piece
+            float tilt = (F() - 0.5f) * 40f;
+            stripGO.transform.localRotation = Quaternion.Euler(tilt, 0f, (F() - 0.5f) * 25f);
+
+            // Visible strip mesh — like a corridor wall trim piece
+            var stripMesh = new Mesh { name = "BrokenStrip" };
+            float sw = 0.04f;
+            float sh = 0.3f + F() * 0.2f;
+            float sd = 0.015f;
+            // Box strip (visible from multiple angles)
+            stripMesh.vertices = new[] {
+                new Vector3(-sw, -sh, -sd), new Vector3(sw, -sh, -sd),
+                new Vector3(sw, sh, -sd), new Vector3(-sw, sh, -sd),
+                new Vector3(-sw, -sh, sd), new Vector3(sw, -sh, sd),
+                new Vector3(sw, sh, sd), new Vector3(-sw, sh, sd),
+            };
+            stripMesh.triangles = new[] {
+                0,2,1, 0,3,2,  // back
+                4,5,6, 4,6,7,  // front
+                0,1,5, 0,5,4,  // bottom
+                2,3,7, 2,7,6,  // top
+                0,4,7, 0,7,3,  // left
+                1,2,6, 1,6,5,  // right
+            };
+            stripMesh.RecalculateNormals();
+
+            stripGO.AddComponent<MeshFilter>().sharedMesh = stripMesh;
+            var stripRend = stripGO.AddComponent<MeshRenderer>();
+            stripRend.sharedMaterial = brokenGlowMat;
+            stripGO.AddComponent<RubbleFlicker>();
+        }
     }
 
     static void AddRock(List<Vector3> verts, List<int> tris, Vector3 pos, float size, System.Random rng)
