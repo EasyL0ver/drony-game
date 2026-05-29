@@ -153,6 +153,19 @@ public class GameManager : MonoBehaviour
 
         rtsCamera.Init(Vector3.zero, 20f, 56f);
 
+        // Compute camera bounds from tile positions
+        float minX = float.MaxValue, maxX = float.MinValue;
+        float minZ = float.MaxValue, maxZ = float.MinValue;
+        foreach (var coord in hexMap.RoomList)
+        {
+            Vector3 c = hexMap.HexCenter(coord);
+            if (c.x < minX) minX = c.x;
+            if (c.x > maxX) maxX = c.x;
+            if (c.z < minZ) minZ = c.z;
+            if (c.z > maxZ) maxZ = c.z;
+        }
+        rtsCamera.SetBounds(minX, maxX, minZ, maxZ);
+
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = Palette.CameraBg;
 

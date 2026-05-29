@@ -168,10 +168,7 @@ public class RTSCamera : MonoBehaviour
         // Invert so dragging moves the world under your finger
         targetPosition -= (right * smoothedTouchDelta.x + fwd * smoothedTouchDelta.y) * speed;
 
-        if (boundsX > 0f)
-            targetPosition.x = Mathf.Clamp(targetPosition.x, -boundsX, boundsX);
-        if (boundsZ > 0f)
-            targetPosition.z = Mathf.Clamp(targetPosition.z, -boundsZ, boundsZ);
+        ClampToBounds();
     }
 
     // ═══════════════════════════════════════
@@ -212,11 +209,7 @@ public class RTSCamera : MonoBehaviour
         Vector3 move = (right * input.x + fwd * input.y) * speed;
         targetPosition += move * Time.unscaledDeltaTime;
 
-        // Clamp to bounds
-        if (boundsX > 0f)
-            targetPosition.x = Mathf.Clamp(targetPosition.x, -boundsX, boundsX);
-        if (boundsZ > 0f)
-            targetPosition.z = Mathf.Clamp(targetPosition.z, -boundsZ, boundsZ);
+        ClampToBounds();
     }
 
     // ═══════════════════════════════════════
@@ -293,5 +286,29 @@ public class RTSCamera : MonoBehaviour
     public void SetZoom(float height)
     {
         targetZoom = Mathf.Clamp(height, minHeight, maxHeight);
+    }
+
+    /// <summary>
+    /// Set camera pan bounds from world-space min/max with padding.
+    /// </summary>
+    public void SetBounds(float minX, float maxX, float minZ, float maxZ, float padding = 5f)
+    {
+        float cx = (minX + maxX) * 0.5f;
+        float cz = (minZ + maxZ) * 0.5f;
+        boundsX = (maxX - minX) * 0.5f + padding;
+        boundsZ = (maxZ - minZ) * 0.5f + padding;
+        boundsCenter = new Vector2(cx, cz);
+    }
+
+    Vector2 boundsCenter;
+
+    void ClampToBounds()
+    {
+        if (boundsX > 0f)
+            targetPosition.x = Mathf.Clamp(targetPosition.x,
+                boundsCenter.x - boundsX, boundsCenter.x + boundsX);
+        if (boundsZ > 0f)
+            targetPosition.z = Mathf.Clamp(targetPosition.z,
+                boundsCenter.y - boundsZ, boundsCenter.y + boundsZ);
     }
 }
