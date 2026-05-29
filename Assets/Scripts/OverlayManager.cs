@@ -95,6 +95,10 @@ public class OverlayManager : MonoBehaviour
     void EnsureCanvas()
     {
         if (canvas != null) return;
+        // Destroy any orphaned overlay canvas from a previous rebuild
+        var existing = GameObject.Find("OverlayCanvas");
+        if (existing != null) DestroyImmediate(existing);
+
         var go = new GameObject("OverlayCanvas");
         DontDestroyOnLoad(go);
         canvas = go.AddComponent<Canvas>();
