@@ -125,6 +125,9 @@ public class DroneController : MonoBehaviour
     // Connection being cleared (for wall interaction completion)
     Vector2Int wallActionRoomA, wallActionRoomB;
 
+    // Active station (for energy beam)
+    WallEntity activeStation;
+
     /// <summary>True after completing a REFIT action, until a new move is issued.</summary>
     public bool IsRefitting { get; private set; }
 
@@ -288,6 +291,9 @@ public class DroneController : MonoBehaviour
         var station = tile.GetStation();
         if (station == null || station.StationType != stationAction) return;
 
+        activeStation = station;
+        station.ShowBeam(transform);
+
         journeyPlan.Add(new JourneyStep
         {
             label = MapModel.StationLabel(stationAction),
@@ -327,6 +333,7 @@ public class DroneController : MonoBehaviour
     public void SetPath(List<Vector2Int> newPath, StationType stationAction = StationType.None)
     {
         IsRefitting = false;
+        if (activeStation != null) { activeStation.HideBeam(); activeStation = null; }
         // Calculate total energy cost of this path before committing
         int cost = 0;
         Vector2Int prev = CurrentRoom;
@@ -564,6 +571,7 @@ public class DroneController : MonoBehaviour
         if (cost > available) return;
 
         IsRefitting = false;
+        if (activeStation != null) { activeStation.HideBeam(); activeStation = null; }
         moveWaypoints.Clear();
         moveSegIdx = 0;
         moveSegT = 0f;
@@ -930,6 +938,18 @@ public class DroneController : MonoBehaviour
             {
                 stationActionDuration = journeyPlan[journeyIdx].duration;
                 stationActionElapsed = 0f;
+
+                // Activate energy beam if not already active
+                if (activeStation == null)
+                {
+                    var tile = fog?.GetTile(CurrentRoom);
+                    var station = tile?.GetStation();
+                    if (station != null)
+                    {
+                        activeStation = station;
+                        station.ShowBeam(transform);
+                    }
+                }
             }
 
             stationActionElapsed += Time.deltaTime;
@@ -953,6 +973,7 @@ public class DroneController : MonoBehaviour
 
                 stationActionElapsed = 0f;
                 stationActionDuration = 0f;
+                if (activeStation != null) { activeStation.HideBeam(); activeStation = null; }
                 journeyIdx++;
             }
         }
