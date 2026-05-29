@@ -8,7 +8,7 @@ public enum PassageType { Corridor, Duct, Vent, Rubble }
 
 public enum RoomSize { Large, Medium, Small }
 
-public enum GearType { Scanner, RubbleClearer }
+public enum GearType { Scanner, Bomb }
 
 public enum StationType { None, Refitting, Charging }
 

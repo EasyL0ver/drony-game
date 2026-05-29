@@ -33,18 +33,18 @@ public static class GearCatalog
         "\u25CE" // ◎ bullseye — radar/scan
     );
 
-    public static readonly GearItem RubbleClearer = new GearItem(
-        GearType.RubbleClearer,
-        "Rubble Clearer",
-        "Allows the drone to clear rubble-blocked passages.",
+    public static readonly GearItem Bomb = new GearItem(
+        GearType.Bomb,
+        "Bomb",
+        "Clears rubble-blocked passages but destroys the drone.",
         3,
-        "\u2692" // ⚒ hammer and pick
+        "\u2622" // ☢ radioactive — explosive
     );
 
     public static GearItem[] All = new GearItem[]
     {
         Scanner,
-        RubbleClearer,
+        Bomb,
     };
 
     public static GearItem Get(GearType type)

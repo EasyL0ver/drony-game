@@ -137,7 +137,7 @@ public class MapModel
                 Connections[i] = c;
                 wallInteractions[ConnKey(c.roomA, c.roomB)] = new WallInteraction
                 {
-                    requiredGear = GearType.RubbleClearer,
+                    requiredGear = GearType.Bomb,
                     duration = 5f,
                     energyCost = 2,
                     label = "CLEAR RUBBLE",

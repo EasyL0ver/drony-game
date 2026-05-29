@@ -59,7 +59,7 @@ public class DroneModel
     public bool CanScan => HasGear(GearType.Scanner);
 
     /// <summary>True if the drone has a RubbleClearer and can clear blocked passages.</summary>
-    public bool CanClearRubble => HasGear(GearType.RubbleClearer);
+    public bool CanClearRubble => HasGear(GearType.Bomb);
 
     // ── Energy ───────────────────────────────
 
