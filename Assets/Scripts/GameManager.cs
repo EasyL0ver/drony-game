@@ -134,6 +134,7 @@ public class GameManager : MonoBehaviour
 
             // Listen for wall interaction completion (rubble clear, etc.)
             controller.OnWallInteractionCompleted += OnWallInteractionCompleted;
+            controller.OnDroneDestroyed += OnDroneDestroyed;
         }
 
         // ── selection manager ──
@@ -664,5 +665,12 @@ public class GameManager : MonoBehaviour
         var passage = tile.GetPassage(neighbor);
         if (passage != null)
             passage.UpdateType(newType);
+    }
+
+    void OnDroneDestroyed(DroneController drone)
+    {
+        drone.OnWallInteractionCompleted -= OnWallInteractionCompleted;
+        drone.OnDroneDestroyed -= OnDroneDestroyed;
+        Drones.Remove(drone);
     }
 }

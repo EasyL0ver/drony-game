@@ -124,6 +124,7 @@ public class DroneController : MonoBehaviour
 
     // Connection being cleared (for wall interaction completion)
     Vector2Int wallActionRoomA, wallActionRoomB;
+    GearType wallActionGear;
 
     // Active station (for energy beam)
     WallEntity activeStation;
@@ -133,6 +134,9 @@ public class DroneController : MonoBehaviour
 
     /// <summary>Fired when a wall interaction completes (roomA, roomB).</summary>
     public event System.Action<Vector2Int, Vector2Int> OnWallInteractionCompleted;
+
+    /// <summary>Fired when the drone is destroyed (e.g. bomb detonation). Passes this controller.</summary>
+    public event System.Action<DroneController> OnDroneDestroyed;
 
     // All route visualization delegated to RoutePreview
     RoutePreview preview;
@@ -583,6 +587,7 @@ public class DroneController : MonoBehaviour
         // Store which connection we're clearing
         wallActionRoomA = connRoomA;
         wallActionRoomB = connRoomB;
+        wallActionGear = wi.Value.requiredGear;
 
         prev = CurrentRoom;
         int stepIdx = 0;
@@ -1001,6 +1006,12 @@ public class DroneController : MonoBehaviour
                 map?.Model?.CompleteWallInteraction(wallActionRoomA, wallActionRoomB);
                 OnWallInteractionCompleted?.Invoke(wallActionRoomA, wallActionRoomB);
 
+                if (wallActionGear == GearType.Bomb)
+                {
+                    Explode();
+                    return;
+                }
+
                 stationActionElapsed = 0f;
                 stationActionDuration = 0f;
                 journeyIdx++;
@@ -1148,6 +1159,91 @@ public class DroneController : MonoBehaviour
     void OnDestroy()
     {
         preview?.Destroy();
+    }
+
+    // ── explosion (bomb detonation) ─────────────────────
+
+    /// <summary>Spawn explosion VFX, notify listeners, and destroy this drone.</summary>
+    void Explode()
+    {
+        SpawnExplosionVFX(transform.position);
+
+        // Notify fog system so room visibility updates
+        var tile = fog?.GetTile(CurrentRoom);
+        if (tile != null)
+            tile.OnDroneExit(this);
+
+        OnDroneDestroyed?.Invoke(this);
+        Destroy(gameObject);
+    }
+
+    /// <summary>Creates a standalone explosion particle burst at the given position.</summary>
+    void SpawnExplosionVFX(Vector3 position)
+    {
+        var go = new GameObject("Explosion");
+        go.transform.position = position;
+
+        var ps = go.AddComponent<ParticleSystem>();
+        var main = ps.main;
+        main.loop = false;
+        main.duration = 0.8f;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 0.8f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(3f, 8f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.2f, 0.6f);
+        main.maxParticles = 120;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 1.5f;
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(1f, 0.6f, 0f),   // orange
+            new Color(1f, 0.2f, 0f)    // deep red-orange
+        );
+
+        var emission = ps.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 80, 120) });
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.3f;
+
+        var sizeOverLife = ps.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        var sizeCurve = new AnimationCurve();
+        sizeCurve.AddKey(0f, 1f);
+        sizeCurve.AddKey(0.5f, 0.6f);
+        sizeCurve.AddKey(1f, 0f);
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
+
+        var colorOverLife = ps.colorOverLifetime;
+        colorOverLife.enabled = true;
+        var gradient = new Gradient();
+        gradient.SetKeys(
+            new[] {
+                new GradientColorKey(new Color(1f, 0.8f, 0.2f), 0f),
+                new GradientColorKey(new Color(1f, 0.3f, 0f), 0.4f),
+                new GradientColorKey(new Color(0.3f, 0.1f, 0.05f), 1f)
+            },
+            new[] {
+                new GradientAlphaKey(1f, 0f),
+                new GradientAlphaKey(1f, 0.3f),
+                new GradientAlphaKey(0f, 1f)
+            }
+        );
+        colorOverLife.color = gradient;
+
+        // Emissive particle material
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Billboard;
+        Shader sh = Shader.Find("Universal Render Pipeline/Particles/Unlit")
+                    ?? Shader.Find("Particles/Standard Unlit");
+        var mat = new Material(sh);
+        mat.color = new Color(1f, 0.5f, 0f);
+        mat.EnableKeyword("_EMISSION");
+        mat.SetColor("_EmissionColor", new Color(2f, 1f, 0.2f));
+        renderer.material = mat;
+
+        ps.Play();
+        Object.Destroy(go, 2f);
     }
 
     // ── selection ring ───────────────────────
