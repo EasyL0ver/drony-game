@@ -39,9 +39,6 @@ public abstract class WallModel
 
     // ── Convenience ─────────────────────────
 
-    /// <summary>True if this wall connects to a neighbor room at all.</summary>
-    public bool HasNeighbor => Neighbor != null;
-
     /// <summary>Called when a blocking interaction completes. Override to update state.</summary>
     public virtual PassageType? CompleteInteraction() => null;
 
@@ -72,7 +69,7 @@ public class CorridorWallModel : WallModel
 
     public override WallPassability GetPassability(DroneModel drone)
     {
-        if (!HasNeighbor || IsBlocked)
+        if (Neighbor == null || IsBlocked)
             return WallPassability.Blocked;
 
         return new WallPassability
