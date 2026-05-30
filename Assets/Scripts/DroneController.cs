@@ -27,10 +27,17 @@ public class DroneController : MonoBehaviour
     float hoverY = 1f;
     LowPolyDrone droneVisual;
     SelectionRing selectionRing;
+    RoutePreview routePreview;
 
     // Active journey
     DroneJourney activeJourney;
     public DroneJourney ActiveJourney => activeJourney;
+
+    // Journey steps for UI (one per wall crossing + optional goal interaction)
+    readonly List<JourneyStep> journeySteps = new List<JourneyStep>();
+    int journeyCurrentIndex = -1;
+    float stepStartTime;
+    float journeyStartTime;
 
     public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0)
     {
@@ -51,6 +58,7 @@ public class DroneController : MonoBehaviour
         transform.position = new Vector3(tile.Center.x, hoverY, tile.Center.z);
 
         tile.OnDroneEnter(this);
+        routePreview = new RoutePreview(this, map, fog);
     }
 
     void Start()
@@ -66,6 +74,12 @@ public class DroneController : MonoBehaviour
         selectionRing?.SetVisible(IsSelected);
         if (IsSelected) selectionRing?.UpdatePulse();
         UpdateGlow();
+        routePreview?.Update();
+    }
+
+    void OnDestroy()
+    {
+        routePreview?.Destroy();
     }
 
     // ── Movement API ────────────────────────
@@ -76,28 +90,45 @@ public class DroneController : MonoBehaviour
         if (rooms == null || rooms.Count == 0) return;
         if (state != State.Idle) Cancel();
 
-        WallInteractionConfig interaction = null;
-        if (goalWall?.Model != null)
-        {
-            var interactions = goalWall.Model.GetInteractions(Model);
-            if (interactions.Count > 0 && !interactions[0].BlocksPassage)
-                interaction = interactions[0];
-        }
+        var walls = BuildWallList(rooms);
+        var path = new DronePath(walls, Model);
+        activeJourney = new DroneJourney(path);
+        previewPath = null;
+        routePreview?.ClearPreview();
+        routePreview?.SetJourney(rooms, goalWall);
+        BuildJourneySteps();
+        StartNextHop();
+    }
 
-        activeJourney = new DroneJourney(rooms, interaction);
+    /// <summary>Commit the current preview path and start traversing.</summary>
+    public void CommitPreview()
+    {
+        if (previewPath == null) return;
+        if (state != State.Idle) Cancel();
+
+        activeJourney = new DroneJourney(previewPath);
+        previewPath = null;
+        routePreview?.ClearPreview();
+        BuildJourneySteps();
         StartNextHop();
     }
 
     /// <summary>Set a path to perform a blocking wall interaction (rubble clear, bomb).</summary>
-    public void SetPathToWallInteraction(List<Vector2Int> path, Vector2Int connA, Vector2Int connB)
+    public void SetPathToWallInteraction(List<Vector2Int> pathRooms, Vector2Int connA, Vector2Int connB)
     {
         if (state != State.Idle) Cancel();
 
-        var wi = map?.Model?.GetWallInteraction(connA, connB, Model);
-        if (wi == null) return;
+        var rooms = pathRooms ?? new List<Vector2Int>();
+        var walls = BuildWallList(rooms);
+        // Add the target wall
+        var targetWall = fog?.GetTile(connA)?.GetPassage(connB)?.Model;
+        if (targetWall == null) targetWall = fog?.GetTile(connB)?.GetPassage(connA)?.Model;
+        if (targetWall != null) walls.Add(targetWall);
 
-        var rooms = path ?? new List<Vector2Int>();
-        activeJourney = new DroneJourney(rooms, wi, connA, connB);
+        var path = new DronePath(walls, Model);
+        activeJourney = new DroneJourney(path);
+        previewPath = null;
+        BuildJourneySteps();
         StartNextHop();
     }
 
@@ -130,17 +161,116 @@ public class DroneController : MonoBehaviour
 
     public void Cancel()
     {
-        // TODO: cancel active coroutines on room/wall
         state = State.Idle;
         activeJourney = null;
+        ClearJourneySteps();
+        routePreview?.ClearJourney();
     }
 
-    // ── Preview stubs (no-op for now) ────────────
+    void BuildWallList(List<Vector2Int> rooms, List<WallModel> result)
+    {
+        result.Clear();
+        Vector2Int prev = CurrentRoom;
+        foreach (var room in rooms)
+        {
+            var passage = fog?.GetTile(prev)?.GetPassage(room);
+            if (passage?.Model != null)
+                result.Add(passage.Model);
+            prev = room;
+        }
+    }
 
-    public void ShowPreviewPath(List<Vector2Int> path, WallView wall = null) { }
-    public void ShowStationPreview(RoomTile tile, WallView wall) { }
-    public void ShowWallInteractionPreview(Vector2Int approach, Vector2Int other, WallInteractionConfig wi) { }
-    public void ClearPreviewPath() { }
+    List<WallModel> BuildWallList(List<Vector2Int> rooms)
+    {
+        var result = new List<WallModel>();
+        BuildWallList(rooms, result);
+        return result;
+    }
+
+    void BuildJourneySteps()
+    {
+        journeySteps.Clear();
+        var walls = activeJourney.Walls;
+        for (int i = 0; i < walls.Count; i++)
+        {
+            var wall = walls[i];
+            bool isLast = i == walls.Count - 1;
+            var interactions = wall.GetInteractions(Model);
+
+            if (isLast && interactions.Count > 0)
+            {
+                var cfg = interactions[0];
+                journeySteps.Add(new JourneyStep
+                {
+                    label = cfg.Label,
+                    duration = cfg.BaseDuration,
+                    isInteraction = true,
+                    interactionConfig = cfg,
+                    energyCost = cfg.EnergyCost,
+                });
+            }
+            else
+            {
+                var pass = wall.GetPassability(Model);
+                journeySteps.Add(new JourneyStep
+                {
+                    label = pass.Label,
+                    duration = pass.Duration,
+                    energyCost = pass.EnergyCost,
+                });
+            }
+        }
+        journeyCurrentIndex = 0;
+        stepStartTime = Time.time;
+        journeyStartTime = Time.time;
+    }
+
+    void AdvanceJourneyStep()
+    {
+        journeyCurrentIndex++;
+        stepStartTime = Time.time;
+    }
+
+    void ClearJourneySteps()
+    {
+        journeySteps.Clear();
+        journeyCurrentIndex = -1;
+    }
+
+    // ── Preview ────────────────────────
+
+    DronePath previewPath;
+
+    public void ShowPreviewPath(List<Vector2Int> path, WallView wall = null)
+    {
+        if (path == null || path.Count == 0) { ClearPreviewPath(); return; }
+        var walls = BuildWallList(path);
+        previewPath = new DronePath(walls, Model);
+        routePreview?.ShowPath(path, wall);
+    }
+
+    public void ShowStationPreview(RoomTile tile, WallView wall)
+    {
+        if (tile == null || wall?.Model == null) { ClearPreviewPath(); return; }
+        var walls = new List<WallModel> { wall.Model };
+        previewPath = new DronePath(walls, Model);
+        routePreview?.ShowStation(tile, wall);
+    }
+
+    public void ShowWallInteractionPreview(Vector2Int approach, Vector2Int other, WallInteractionConfig wi)
+    {
+        var wallModel = fog?.GetTile(approach)?.GetPassage(other)?.Model;
+        if (wallModel == null) { ClearPreviewPath(); return; }
+        var walls = new List<WallModel> { wallModel };
+        previewPath = new DronePath(walls, Model);
+        routePreview?.ShowWallInteraction(approach, other, wi);
+    }
+
+    public void ClearPreviewPath()
+    {
+        previewPath = null;
+        routePreview?.ClearPreview();
+    }
 
     // ── Hop execution ────────────────────────
 
@@ -148,32 +278,39 @@ public class DroneController : MonoBehaviour
     {
         if (activeJourney == null) { state = State.Idle; return; }
 
-        // All travel hops done — do goal interaction if any
-        if (activeJourney.CurrentHopIndex >= activeJourney.Rooms.Count)
+        // All walls done
+        if (activeJourney.CurrentHopIndex >= activeJourney.Walls.Count)
         {
-            if (activeJourney.GoalInteraction != null && !activeJourney.GoalDone)
-                StartGoalInteraction();
-            else
-            {
-                activeJourney = null;
-                state = State.Idle;
-            }
+            activeJourney = null;
+            ClearJourneySteps();
+            state = State.Idle;
             return;
         }
 
-        var targetRoom = activeJourney.Rooms[activeJourney.CurrentHopIndex];
+        var wall = activeJourney.Walls[activeJourney.CurrentHopIndex];
+        bool isLast = activeJourney.CurrentHopIndex == activeJourney.Walls.Count - 1;
+        var interactions = wall.GetInteractions(Model);
+
+        // Last wall with interaction → do interaction (not traversal)
+        if (isLast && interactions.Count > 0)
+        {
+            StartLastWallInteraction(wall, interactions[0]);
+            return;
+        }
+
+        // Normal traversal
+        var targetRoom = wall.Neighbor.Owner.Coord;
         var departure = fog?.GetTile(CurrentRoom)?.GetPassage(targetRoom);
         var arrival = fog?.GetTile(targetRoom)?.GetPassage(CurrentRoom);
 
         if (departure == null)
         {
-            // Can't traverse — abort
             activeJourney = null;
+            ClearJourneySteps();
             state = State.Idle;
             return;
         }
 
-        // Navigate to departure passage
         var currentTile = fog.GetTile(CurrentRoom);
         Vector3 parkPoint = departure.DroneParkPoint;
         parkPoint.y = hoverY;
@@ -183,17 +320,16 @@ public class DroneController : MonoBehaviour
         var capturedTarget = targetRoom;
         var capturedDeparture = departure;
         var capturedArrival = arrival;
-        float traversalDuration = MapModel.TravelTime(departure.Type);
+        var pass = wall.GetPassability(Model);
+        float traversalDuration = pass.Duration;
 
         state = State.RoomNavigating;
         currentTile.NavigateDrone(transform, parkPoint, approachTime, () =>
         {
-            // Departure half
             state = State.WallAnimating;
             float halfDur = traversalDuration * 0.5f;
             capturedDeparture.PlayTraversal(transform, halfDur, true, () =>
             {
-                // Arrival half
                 if (capturedArrival != null)
                 {
                     capturedArrival.PlayTraversal(transform, halfDur, false, () =>
@@ -209,6 +345,30 @@ public class DroneController : MonoBehaviour
         });
     }
 
+    void StartLastWallInteraction(WallModel wallModel, WallInteractionConfig cfg)
+    {
+        var currentTile = fog.GetTile(CurrentRoom);
+        // Find the passage view for this wall
+        var targetCoord = wallModel.Neighbor.Owner.Coord;
+        var passage = currentTile.GetPassage(targetCoord);
+
+        if (passage == null) { activeJourney = null; ClearJourneySteps(); state = State.Idle; return; }
+
+        Vector3 parkPoint = passage.DroneParkPoint;
+        parkPoint.y = hoverY;
+        float dist = Vector3.Distance(transform.position, parkPoint);
+
+        state = State.RoomNavigating;
+        currentTile.NavigateDrone(transform, parkPoint, Mathf.Max(0.2f, dist * 0.5f), () =>
+        {
+            state = State.WallAnimating;
+            passage.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
+            {
+                OnInteractionComplete(cfg, passage);
+            });
+        });
+    }
+
     void OnHopComplete(Vector2Int newRoom)
     {
         // Room transition
@@ -218,14 +378,19 @@ public class DroneController : MonoBehaviour
         var newTile = fog?.GetTile(CurrentRoom);
         newTile?.OnDroneEnter(this);
 
-        // Energy
-        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - 1);
+        // Energy — use the wall's cost
+        int hopIdx = activeJourney.CurrentHopIndex;
+        int cost = activeJourney.Walls[hopIdx].GetPassability(Model).EnergyCost;
+        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cost);
+
+        // Advance journey + UI step
+        activeJourney.AdvanceHop();
+        AdvanceJourneyStep();
 
         // Navigate to room center
         Vector3 center = new Vector3(newTile.Center.x, hoverY, newTile.Center.z);
         float dist = Vector3.Distance(transform.position, center);
 
-        activeJourney.AdvanceHop();
         state = State.RoomNavigating;
         newTile.NavigateDrone(transform, center, Mathf.Max(0.15f, dist * 0.5f), () =>
         {
@@ -233,85 +398,34 @@ public class DroneController : MonoBehaviour
         });
     }
 
-    void StartGoalInteraction()
-    {
-        var cfg = activeJourney.GoalInteraction;
-        var currentTile = fog.GetTile(CurrentRoom);
-
-        if (activeJourney.IsBlockingWallInteraction)
-        {
-            // Blocking wall interaction (rubble/bomb) — approach the passage
-            var connA = activeJourney.WallConnA;
-            var connB = activeJourney.WallConnB;
-            var passage = currentTile.GetPassage(connA == CurrentRoom ? connB : connA);
-
-            if (passage == null) { activeJourney = null; state = State.Idle; return; }
-
-            Vector3 parkPoint = passage.DroneParkPoint;
-            parkPoint.y = hoverY;
-            float dist = Vector3.Distance(transform.position, parkPoint);
-
-            state = State.RoomNavigating;
-            currentTile.NavigateDrone(transform, parkPoint, Mathf.Max(0.2f, dist * 0.5f), () =>
-            {
-                state = State.WallAnimating;
-                passage.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
-                {
-                    OnBlockingInteractionComplete(cfg, connA, connB);
-                });
-            });
-        }
-        else
-        {
-            // Non-blocking interaction at destination wall — find the wall
-            WallView wall = FindWallWithInteraction(currentTile, cfg);
-            if (wall == null) { activeJourney = null; state = State.Idle; return; }
-
-            Vector3 parkPoint = wall.DroneParkPoint;
-            parkPoint.y = hoverY;
-            float dist = Vector3.Distance(transform.position, parkPoint);
-
-            state = State.RoomNavigating;
-            currentTile.NavigateDrone(transform, parkPoint, Mathf.Max(0.2f, dist * 0.5f), () =>
-            {
-                state = State.WallAnimating;
-                wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
-                {
-                    OnInteractionComplete(cfg, wall);
-                });
-            });
-        }
-    }
 
     void OnInteractionComplete(WallInteractionConfig cfg, WallView wall)
     {
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cfg.EnergyCost);
 
+        // Notify if this was a blocking wall interaction
+        if (cfg.BlocksPassage)
+        {
+            var wallModel = wall.Model;
+            if (wallModel?.Owner != null && wallModel?.Neighbor?.Owner != null)
+            {
+                var connA = wallModel.Owner.Coord;
+                var connB = wallModel.Neighbor.Owner.Coord;
+                map?.Model?.CompleteWallInteraction(connA, connB);
+                OnWallInteractionCompleted?.Invoke(connA, connB);
+            }
+        }
+
         if (cfg.DestroysDrone)
         {
             Explode();
             return;
         }
 
-        if (activeJourney != null) activeJourney.MarkGoalDone();
+        activeJourney?.AdvanceHop();
         activeJourney = null;
-        state = State.Idle;
-    }
-
-    void OnBlockingInteractionComplete(WallInteractionConfig cfg, Vector2Int connA, Vector2Int connB)
-    {
-        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cfg.EnergyCost);
-        map?.Model?.CompleteWallInteraction(connA, connB);
-        OnWallInteractionCompleted?.Invoke(connA, connB);
-
-        if (cfg.DestroysDrone)
-        {
-            Explode();
-            return;
-        }
-
-        if (activeJourney != null) activeJourney.MarkGoalDone();
-        activeJourney = null;
+        ClearJourneySteps();
+        routePreview?.ClearJourney();
         state = State.Idle;
     }
 
@@ -341,16 +455,6 @@ public class DroneController : MonoBehaviour
         droneVisual.GlowMaterial.SetColor("_EmissionColor", col * baseInt * boost);
     }
 
-    WallView FindWallWithInteraction(RoomTile tile, WallInteractionConfig cfg)
-    {
-        foreach (var w in tile.GetComponentsInChildren<WallView>())
-        {
-            if (w.Model == null) continue;
-            if (w.Model.GetInteractions(Model).Contains(cfg)) return w;
-        }
-        return null;
-    }
-
     // ── Compat stubs (for UI that hasn't been rewritten yet) ────
 
     /// <summary>Stub: old API. Use StartInteraction instead.</summary>
@@ -369,22 +473,87 @@ public class DroneController : MonoBehaviour
         public int energyCost;
     }
 
-    public IReadOnlyList<JourneyStep> Journey => EmptyJourney;
-    static readonly List<JourneyStep> EmptyJourney = new List<JourneyStep>();
-    public int JourneyCurrentIndex => -1;
-    public float JourneyTotalTime => 0f;
-    public float JourneyElapsedTime => 0f;
-    public float JourneyOverallProgress => 0f;
-    public float PreviewTotalTime => 0f;
-    public bool IsShowingPreview => false;
+    public IReadOnlyList<JourneyStep> Journey => journeySteps;
+    public int JourneyCurrentIndex => journeyCurrentIndex;
+
+    public float JourneyTotalTime
+    {
+        get { float t = 0; foreach (var s in journeySteps) t += s.duration; return t; }
+    }
+
+    public float JourneyElapsedTime => journeyCurrentIndex >= 0 ? Time.time - journeyStartTime : 0f;
+
+    public float JourneyOverallProgress
+    {
+        get
+        {
+            float total = JourneyTotalTime;
+            if (total <= 0) return 0f;
+            return Mathf.Clamp01(JourneyElapsedTime / total);
+        }
+    }
+
+    public float PreviewTotalTime => previewPath?.TotalTime ?? 0f;
+    public bool IsShowingPreview => previewPath != null;
     public int JourneyEnergyCost => activeJourney?.RemainingEnergyCost ?? 0;
-    public int PreviewEnergyCost => 0;
-    public bool PreviewExceedsEnergy => false;
-    public float GetJourneyStepProgress(int i) => 0f;
-    public float GetJourneyStepElapsed(int i) => 0f;
-    public IReadOnlyList<JourneyStep> PreviewJourney => null;
-    public IReadOnlyList<StepAnchor> JourneyAnchors => null;
-    public IReadOnlyList<StepAnchor> PreviewAnchors => null;
+    public int PreviewEnergyCost => previewPath?.TotalEnergyCost ?? 0;
+    public bool PreviewExceedsEnergy => previewPath != null
+        && previewPath.TotalEnergyCost > (Model.CurrentEnergy - JourneyEnergyCost);
+
+    public float GetJourneyStepProgress(int i)
+    {
+        if (i != journeyCurrentIndex || journeyCurrentIndex < 0) return i < journeyCurrentIndex ? 1f : 0f;
+        float dur = journeySteps[i].duration;
+        if (dur <= 0) return 1f;
+        return Mathf.Clamp01((Time.time - stepStartTime) / dur);
+    }
+
+    public float GetJourneyStepElapsed(int i)
+    {
+        if (i != journeyCurrentIndex || journeyCurrentIndex < 0) return 0f;
+        return Time.time - stepStartTime;
+    }
+
+    public IReadOnlyList<JourneyStep> PreviewJourney
+    {
+        get
+        {
+            if (previewPath == null) return null;
+            var steps = new List<JourneyStep>();
+            var walls = previewPath.Walls;
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var wall = walls[i];
+                bool isLast = i == walls.Count - 1;
+                var interactions = wall.GetInteractions(Model);
+                if (isLast && interactions.Count > 0)
+                {
+                    var cfg = interactions[0];
+                    steps.Add(new JourneyStep
+                    {
+                        label = cfg.Label,
+                        duration = cfg.BaseDuration,
+                        isInteraction = true,
+                        interactionConfig = cfg,
+                        energyCost = cfg.EnergyCost,
+                    });
+                }
+                else
+                {
+                    var pass = wall.GetPassability(Model);
+                    steps.Add(new JourneyStep
+                    {
+                        label = pass.Label,
+                        duration = pass.Duration,
+                        energyCost = pass.EnergyCost,
+                    });
+                }
+            }
+            return steps;
+        }
+    }
+    public IReadOnlyList<StepAnchor> JourneyAnchors => routePreview?.JourneyAnchors;
+    public IReadOnlyList<StepAnchor> PreviewAnchors => routePreview?.PreviewAnchors;
     internal int MoveSegIdx => 0;
     internal float MoveSegT => 0f;
 

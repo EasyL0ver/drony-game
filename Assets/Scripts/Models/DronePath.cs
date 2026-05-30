@@ -2,68 +2,41 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// A hypothetical path for a drone: rooms to traverse + computed costs.
-/// Used for previews (mouse-over) and for validating before committing to a journey.
-/// Pure data, no side effects.
+/// A hypothetical path for a drone: walls to traverse.
+/// Energy cost and time are computed from the walls for the specific drone.
 /// </summary>
 public class DronePath
 {
-    public IReadOnlyList<Vector2Int> Rooms { get; }
-    public int TotalEnergyCost { get; }
-    public float TotalTime { get; }
-    public WallInteractionConfig GoalInteraction { get; }
+    public IReadOnlyList<WallModel> Walls { get; }
+    public DroneModel Drone { get; }
 
-    DronePath(List<Vector2Int> rooms, int energyCost, float time, WallInteractionConfig goal)
+    public DronePath(List<WallModel> walls, DroneModel drone)
     {
-        Rooms = rooms;
-        TotalEnergyCost = energyCost;
-        TotalTime = time;
-        GoalInteraction = goal;
+        Walls = walls;
+        Drone = drone;
     }
 
-    /// <summary>
-    /// Compute a path preview given rooms, fog context, and optional goal.
-    /// </summary>
-    public static DronePath Compute(
-        Vector2Int start,
-        List<Vector2Int> rooms,
-        FogOfWar fog,
-        DroneModel drone,
-        WallInteractionConfig goalInteraction = null)
+    public int TotalEnergyCost
     {
-        int energy = 0;
-        float time = 0f;
-        Vector2Int prev = start;
-
-        foreach (var room in rooms)
+        get
         {
-            var passage = fog?.GetTile(prev)?.GetPassage(room);
-            var ptype = passage != null ? passage.Type : PassageType.Corridor;
-            energy += MapModel.StepEnergyCost(ptype);
-            time += MapModel.TravelTime(ptype);
-            prev = room;
+            int cost = 0;
+            foreach (var wall in Walls)
+                cost += wall.GetPassability(Drone).EnergyCost;
+            return cost;
         }
-
-        // Scan at final room
-        if (rooms.Count > 0 && drone.CanScan)
-        {
-            var finalTile = fog?.GetTile(rooms[rooms.Count - 1]);
-            if (finalTile != null && finalTile.State == FogState.Unknown)
-            {
-                energy += MapModel.ScanEnergyCost;
-                time += finalTile.ScanTotalTime;
-            }
-        }
-
-        if (goalInteraction != null)
-        {
-            energy += goalInteraction.EnergyCost;
-            time += goalInteraction.BaseDuration;
-        }
-
-        return new DronePath(new List<Vector2Int>(rooms), energy, time, goalInteraction);
     }
 
-    /// <summary>Can the drone afford this path given current energy?</summary>
-    public bool CanAfford(int currentEnergy) => TotalEnergyCost <= currentEnergy;
+    public float TotalTime
+    {
+        get
+        {
+            float time = 0f;
+            foreach (var wall in Walls)
+                time += wall.GetPassability(Drone).Duration;
+            return time;
+        }
+    }
+
+    public bool CanAfford() => TotalEnergyCost <= Drone.CurrentEnergy;
 }
