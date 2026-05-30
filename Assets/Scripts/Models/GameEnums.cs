@@ -55,7 +55,7 @@ public class WallInteractionConfig
     public static WallInteractionConfig Charging() => new WallInteractionConfig
     {
         Label = "CHARGE",
-        BaseDuration = 1.5f,
+        BaseDuration = 0.6f,
         EnergyGainPerCycle = 5,
         RepeatCondition = drone => drone.CurrentEnergy < drone.MaxEnergy,
     };

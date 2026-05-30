@@ -485,7 +485,6 @@ public class RoomTile : MonoBehaviour
         while (elapsed < duration)
         {
             float t = elapsed / duration;
-            t = t * t * (3f - 2f * t); // smoothstep
             drone.position = Vector3.Lerp(start, target, t);
 
             Vector3 dir = (target - start);

@@ -86,7 +86,8 @@ public abstract class WallView : MonoBehaviour
         parkPoint.y = drone.position.y;
         wallMid.y = drone.position.y;
 
-        Vector3 start = departing ? parkPoint : wallMid;
+        // When arriving, start from drone's actual position to avoid any snap
+        Vector3 start = departing ? parkPoint : drone.position;
         Vector3 end = departing ? wallMid : parkPoint;
 
         float elapsed = 0f;

@@ -29,6 +29,9 @@ public class DroneController : MonoBehaviour
     SelectionRing selectionRing;
     RoutePreview routePreview;
 
+    /// <summary>Consistent drone movement speed in world units/second.</summary>
+    const float DroneSpeed = 1.6f;
+
     // Active journey
     DroneJourney activeJourney;
     public DroneJourney ActiveJourney => activeJourney;
@@ -457,6 +460,11 @@ public class DroneController : MonoBehaviour
 
     // ── Hop execution ────────────────────────
 
+    float DurationForDistance(float dist) => Mathf.Max(0.08f, dist / DroneSpeed);
+
+    /// <summary>Corridor traversal uses half speed so it doesn't look like a slingshot.</summary>
+    float CorridorDuration(float dist) => Mathf.Max(0.08f, dist / (DroneSpeed * 0.4f));
+
     void StartNextHop()
     {
         if (activeJourney == null) { state = State.Idle; return; }
@@ -497,25 +505,27 @@ public class DroneController : MonoBehaviour
         var currentTile = fog.GetTile(CurrentRoom);
         Vector3 parkPoint = departure.DroneParkPoint;
         parkPoint.y = hoverY;
-        float dist = Vector3.Distance(transform.position, parkPoint);
-        float approachTime = Mathf.Max(0.15f, dist * 0.5f);
+        float approachDist = Vector3.Distance(transform.position, parkPoint);
 
         var capturedTarget = targetRoom;
         var capturedDeparture = departure;
         var capturedArrival = arrival;
-        var pass = wall.GetPassability(Model);
-        float traversalDuration = pass.Duration;
+
+        // Compute wall traversal duration from actual distance
+        float depDist = Vector3.Distance(parkPoint, departure.transform.position);
+        float arrDist = capturedArrival != null
+            ? Vector3.Distance(capturedArrival.transform.position, capturedArrival.DroneParkPoint)
+            : depDist;
 
         state = State.RoomNavigating;
-        currentTile.NavigateDrone(transform, parkPoint, approachTime, () =>
+        currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(approachDist), () =>
         {
             state = State.WallAnimating;
-            float halfDur = traversalDuration * 0.5f;
-            capturedDeparture.PlayTraversal(transform, halfDur, true, () =>
+            capturedDeparture.PlayTraversal(transform, CorridorDuration(depDist), true, () =>
             {
                 if (capturedArrival != null)
                 {
-                    capturedArrival.PlayTraversal(transform, halfDur, false, () =>
+                    capturedArrival.PlayTraversal(transform, CorridorDuration(arrDist), false, () =>
                     {
                         OnHopComplete(capturedTarget);
                     });
@@ -542,7 +552,7 @@ public class DroneController : MonoBehaviour
         float dist = Vector3.Distance(transform.position, parkPoint);
 
         state = State.RoomNavigating;
-        currentTile.NavigateDrone(transform, parkPoint, Mathf.Max(0.2f, dist * 0.5f), () =>
+        currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
         {
             state = State.WallAnimating;
             passage.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
@@ -572,23 +582,89 @@ public class DroneController : MonoBehaviour
         moveSegIdx += 3; // passA + passB + roomCenter
         moveSegT = 0f;
 
-        // Navigate to room center
-        Vector3 center = new Vector3(newTile.Center.x, hoverY, newTile.Center.z);
-        float dist = Vector3.Distance(transform.position, center);
+        // Must scan → go to center first
+        bool needsScan = newTile.State == FogState.Unknown && Model.CanScan;
+        bool hasMoreHops = activeJourney.CurrentHopIndex < activeJourney.Walls.Count;
 
-        state = State.RoomNavigating;
-        newTile.NavigateDrone(transform, center, Mathf.Max(0.15f, dist * 0.5f), () =>
+        if (needsScan || !hasMoreHops)
         {
-            // Trigger scanning if room is unknown
-            if (newTile.State == FogState.Unknown && Model.CanScan)
+            // Navigate to room center
+            Vector3 center = new Vector3(newTile.Center.x, hoverY, newTile.Center.z);
+            float dist = Vector3.Distance(transform.position, center);
+
+            state = State.RoomNavigating;
+            newTile.NavigateDrone(transform, center, DurationForDistance(dist), () =>
             {
-                newTile.OnDroneArrived(true);
-                StartScanning(newTile);
+                if (needsScan)
+                {
+                    newTile.OnDroneArrived(true);
+                    StartScanning(newTile);
+                }
+                else
+                {
+                    newTile.OnDroneArrived(false);
+                    StartNextHop();
+                }
+            });
+        }
+        else
+        {
+            // More hops ahead — straight line to next departure park point
+            newTile.OnDroneArrived(false);
+            var nextWall = activeJourney.Walls[activeJourney.CurrentHopIndex];
+            var nextTargetRoom = nextWall.Neighbor.Owner.Coord;
+            var nextDeparture = fog?.GetTile(CurrentRoom)?.GetPassage(nextTargetRoom);
+
+            if (nextDeparture == null) { StartNextHop(); return; }
+
+            Vector3 parkPoint = nextDeparture.DroneParkPoint;
+            parkPoint.y = hoverY;
+            float dist = Vector3.Distance(transform.position, parkPoint);
+
+            state = State.RoomNavigating;
+            newTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
+            {
+                StartNextHopFromPark(nextWall, nextTargetRoom, nextDeparture);
+            });
+        }
+    }
+
+    /// <summary>Start next hop when drone is already at the departure park point.</summary>
+    void StartNextHopFromPark(WallModel wall, Vector2Int targetRoom, WallView departure)
+    {
+        if (activeJourney == null) { state = State.Idle; return; }
+
+        bool isLast = activeJourney.CurrentHopIndex == activeJourney.Walls.Count - 1;
+        var interactions = wall.GetInteractions(Model);
+
+        if (isLast && interactions.Count > 0)
+        {
+            StartLastWallInteraction(wall, interactions[0]);
+            return;
+        }
+
+        var arrival = fog?.GetTile(targetRoom)?.GetPassage(CurrentRoom);
+
+        // Distance-based durations
+        Vector3 parkPos = transform.position;
+        float depDist = Vector3.Distance(parkPos, departure.transform.position);
+        float arrDist = arrival != null
+            ? Vector3.Distance(arrival.transform.position, arrival.DroneParkPoint)
+            : depDist;
+
+        state = State.WallAnimating;
+        departure.PlayTraversal(transform, CorridorDuration(depDist), true, () =>
+        {
+            if (arrival != null)
+            {
+                arrival.PlayTraversal(transform, CorridorDuration(arrDist), false, () =>
+                {
+                    OnHopComplete(targetRoom);
+                });
             }
             else
             {
-                newTile.OnDroneArrived(false);
-                StartNextHop();
+                OnHopComplete(targetRoom);
             }
         });
     }
