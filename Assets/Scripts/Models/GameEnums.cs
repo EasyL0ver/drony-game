@@ -55,7 +55,7 @@ public class WallInteractionConfig
     public static WallInteractionConfig Charging() => new WallInteractionConfig
     {
         Label = "CHARGE",
-        BaseDuration = 4f,
+        BaseDuration = 1.5f,
         EnergyGainPerCycle = 5,
         RepeatCondition = drone => drone.CurrentEnergy < drone.MaxEnergy,
     };
@@ -70,7 +70,7 @@ public class WallInteractionConfig
     public static WallInteractionConfig RubbleClear(GearType gear) => new WallInteractionConfig
     {
         Label = "CLEAR",
-        BaseDuration = 5f,
+        BaseDuration = 3f,
         EnergyCost = 2,
         RequiredGear = gear,
         BlocksPassage = true,

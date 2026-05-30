@@ -35,6 +35,7 @@ public class DroneController : MonoBehaviour
 
     // Journey steps for UI (one per wall crossing + optional goal interaction)
     readonly List<JourneyStep> journeySteps = new List<JourneyStep>();
+    readonly List<StepAnchor> journeyAnchors = new List<StepAnchor>();
     int journeyCurrentIndex = -1;
     float stepStartTime;
     float journeyStartTime;
@@ -234,12 +235,19 @@ public class DroneController : MonoBehaviour
     void BuildJourneySteps()
     {
         journeySteps.Clear();
+        journeyAnchors.Clear();
         var walls = activeJourney.Walls;
+        Vector2Int prev = CurrentRoom;
         for (int i = 0; i < walls.Count; i++)
         {
             var wall = walls[i];
             bool isLast = i == walls.Count - 1;
             var interactions = wall.GetInteractions(Model);
+            var targetCoord = wall.Neighbor?.Owner?.Coord ?? prev;
+
+            // Anchor at the passage midpoint between prev and target
+            Vector3 anchorPos = map.WallMidpoint(prev, wall.EdgeIndex,
+                fog?.GetTile(prev)?.RModel?.Size ?? RoomSize.Small);
 
             if (isLast && interactions.Count > 0)
             {
@@ -252,6 +260,13 @@ public class DroneController : MonoBehaviour
                     interactionConfig = cfg,
                     energyCost = cfg.EnergyCost,
                 });
+                journeyAnchors.Add(new StepAnchor
+                {
+                    worldPos = anchorPos,
+                    roomA = prev,
+                    roomB = targetCoord,
+                    layer = 0,
+                });
             }
             else
             {
@@ -262,6 +277,39 @@ public class DroneController : MonoBehaviour
                     duration = pass.Duration,
                     energyCost = pass.EnergyCost,
                 });
+                journeyAnchors.Add(new StepAnchor
+                {
+                    worldPos = anchorPos,
+                    roomA = prev,
+                    roomB = targetCoord,
+                    layer = 0,
+                });
+
+                // If this leads to unknown room and drone can scan, add scan step+anchor
+                if (Model.CanScan)
+                {
+                    var destTile = fog?.GetTile(targetCoord);
+                    if (destTile != null && destTile.State == FogState.Unknown)
+                    {
+                        journeySteps.Add(new JourneyStep
+                        {
+                            label = "SCAN",
+                            duration = destTile.ScanTotalTime,
+                            isScan = true,
+                            energyCost = MapModel.ScanEnergyCost,
+                        });
+                        Vector3 roomCenter = map.HexCenter(targetCoord);
+                        journeyAnchors.Add(new StepAnchor
+                        {
+                            worldPos = new Vector3(roomCenter.x, 0.5f, roomCenter.z),
+                            roomA = targetCoord,
+                            roomB = targetCoord,
+                            layer = 1,
+                        });
+                    }
+                }
+
+                prev = targetCoord;
             }
         }
         journeyCurrentIndex = 0;
@@ -278,6 +326,7 @@ public class DroneController : MonoBehaviour
     void ClearJourneySteps()
     {
         journeySteps.Clear();
+        journeyAnchors.Clear();
         journeyCurrentIndex = -1;
     }
 
@@ -285,13 +334,15 @@ public class DroneController : MonoBehaviour
 
     DronePath previewPath;
     List<JourneyStep> cachedPreviewSteps;
+    List<StepAnchor> cachedPreviewAnchors;
 
     public void ShowPreviewPath(List<Vector2Int> path, WallView wall = null)
     {
         if (path == null || path.Count == 0) { ClearPreviewPath(); return; }
         var walls = BuildWallList(path);
         previewPath = new DronePath(walls, Model);
-        cachedPreviewSteps = BuildStepsFromWalls(walls);
+        cachedPreviewAnchors = new List<StepAnchor>();
+        cachedPreviewSteps = BuildStepsFromWalls(walls, cachedPreviewAnchors);
         routePreview?.ShowPath(path, wall);
     }
 
@@ -300,7 +351,8 @@ public class DroneController : MonoBehaviour
         if (tile == null || wall?.Model == null) { ClearPreviewPath(); return; }
         var walls = new List<WallModel> { wall.Model };
         previewPath = new DronePath(walls, Model);
-        cachedPreviewSteps = BuildStepsFromWalls(walls);
+        cachedPreviewAnchors = new List<StepAnchor>();
+        cachedPreviewSteps = BuildStepsFromWalls(walls, cachedPreviewAnchors);
         routePreview?.ShowStation(tile, wall);
     }
 
@@ -310,7 +362,8 @@ public class DroneController : MonoBehaviour
         if (wallModel == null) { ClearPreviewPath(); return; }
         var walls = new List<WallModel> { wallModel };
         previewPath = new DronePath(walls, Model);
-        cachedPreviewSteps = BuildStepsFromWalls(walls);
+        cachedPreviewAnchors = new List<StepAnchor>();
+        cachedPreviewSteps = BuildStepsFromWalls(walls, cachedPreviewAnchors);
         routePreview?.ShowWallInteraction(approach, other, wi);
     }
 
@@ -318,17 +371,24 @@ public class DroneController : MonoBehaviour
     {
         previewPath = null;
         cachedPreviewSteps = null;
+        cachedPreviewAnchors = null;
         routePreview?.ClearPreview();
     }
 
-    List<JourneyStep> BuildStepsFromWalls(List<WallModel> walls)
+    List<JourneyStep> BuildStepsFromWalls(List<WallModel> walls, List<StepAnchor> anchors)
     {
         var steps = new List<JourneyStep>();
+        Vector2Int prev = CurrentRoom;
         for (int i = 0; i < walls.Count; i++)
         {
             var wall = walls[i];
             bool isLast = i == walls.Count - 1;
             var interactions = wall.GetInteractions(Model);
+            var targetCoord = wall.Neighbor?.Owner?.Coord ?? prev;
+
+            Vector3 anchorPos = map.WallMidpoint(prev, wall.EdgeIndex,
+                fog?.GetTile(prev)?.RModel?.Size ?? RoomSize.Small);
+
             if (isLast && interactions.Count > 0)
             {
                 var cfg = interactions[0];
@@ -340,6 +400,13 @@ public class DroneController : MonoBehaviour
                     interactionConfig = cfg,
                     energyCost = cfg.EnergyCost,
                 });
+                anchors.Add(new StepAnchor
+                {
+                    worldPos = anchorPos,
+                    roomA = prev,
+                    roomB = targetCoord,
+                    layer = 0,
+                });
             }
             else
             {
@@ -349,6 +416,13 @@ public class DroneController : MonoBehaviour
                     label = pass.Label,
                     duration = pass.Duration,
                     energyCost = pass.EnergyCost,
+                });
+                anchors.Add(new StepAnchor
+                {
+                    worldPos = anchorPos,
+                    roomA = prev,
+                    roomB = targetCoord,
+                    layer = 0,
                 });
 
                 // If traversal leads to unknown room and drone can scan, add scan step
@@ -364,8 +438,18 @@ public class DroneController : MonoBehaviour
                             isScan = true,
                             energyCost = MapModel.ScanEnergyCost,
                         });
+                        Vector3 roomCenter = map.HexCenter(targetCoord);
+                        anchors.Add(new StepAnchor
+                        {
+                            worldPos = new Vector3(roomCenter.x, 0.5f, roomCenter.z),
+                            roomA = targetCoord,
+                            roomB = targetCoord,
+                            layer = 1,
+                        });
                     }
                 }
+
+                prev = targetCoord;
             }
         }
         return steps;
@@ -511,18 +595,10 @@ public class DroneController : MonoBehaviour
 
     void StartScanning(RoomTile tile)
     {
-        // Add scan step to UI
-        journeySteps.Insert(journeyCurrentIndex, new JourneyStep
-        {
-            label = "SCAN",
-            duration = tile.ScanTotalTime,
-            isScan = true,
-            energyCost = MapModel.ScanEnergyCost,
-        });
         stepStartTime = Time.time;
 
         // Wait for scan to complete
-        state = State.WallAnimating; // block further movement
+        state = State.WallAnimating;
         Action handler = null;
         handler = () =>
         {
@@ -668,8 +744,8 @@ public class DroneController : MonoBehaviour
     }
 
     public IReadOnlyList<JourneyStep> PreviewJourney => cachedPreviewSteps;
-    public IReadOnlyList<StepAnchor> JourneyAnchors => routePreview?.JourneyAnchors;
-    public IReadOnlyList<StepAnchor> PreviewAnchors => routePreview?.PreviewAnchors;
+    public IReadOnlyList<StepAnchor> JourneyAnchors => journeyAnchors;
+    public IReadOnlyList<StepAnchor> PreviewAnchors => cachedPreviewAnchors;
     internal int MoveSegIdx => moveSegIdx;
     internal float MoveSegT => moveSegT;
 
