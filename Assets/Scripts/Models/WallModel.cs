@@ -71,6 +71,117 @@ public class WallModel
         return false;
     }
 
+    // ── Action Factory ─────────────────────
+
+    /// <summary>
+    /// Begin a traversal through this wall. Returns a handle to track progress.
+    /// </summary>
+    public WallAction BeginTraversal(DroneModel drone)
+    {
+        float duration = GetTraversalDuration(drone);
+        int cost = MapModel.StepEnergyCost(PassageType);
+        string label = MapModel.PassageLabel(PassageType);
+        return new WallAction(this, drone, duration, cost, label);
+    }
+
+    /// <summary>
+    /// Begin a wall interaction (rubble clear, bomb, etc.). Returns a handle to track progress.
+    /// </summary>
+    public WallAction BeginInteraction(DroneModel drone)
+    {
+        if (!HasInteraction) return null;
+        var inter = Interaction.Value;
+        float duration = GetInteractionDuration(drone);
+        return new WallAction(this, drone, duration, inter.energyCost, inter.label);
+    }
+
+    /// <summary>
+    /// Begin a station action (charge/refit). Returns a handle to track one cycle.
+    /// The handle's ShouldRepeat delegate encodes whether another cycle is needed.
+    /// </summary>
+    public WallAction BeginStationAction(DroneModel drone)
+    {
+        if (!HasStation) return null;
+        float duration = GetStationDuration(drone);
+        string label = MapModel.StationLabel(Station);
+        var action = new WallAction(this, drone, duration, 0, label);
+
+        switch (Station)
+        {
+            case StationType.Charging:
+                action.ShouldRepeat = () =>
+                {
+                    drone.CurrentEnergy = UnityEngine.Mathf.Min(drone.MaxEnergy, drone.CurrentEnergy + MapModel.ChargeEnergyGain);
+                    return drone.CurrentEnergy < drone.MaxEnergy;
+                };
+                break;
+
+            case StationType.Refitting:
+                // Single cycle, no repeat
+                break;
+        }
+
+        return action;
+    }
+
+    // ── Duration Queries ────────────────────
+
+    /// <summary>
+    /// How long it takes the given drone to traverse this passage.
+    /// Depends on passage type and drone capabilities.
+    /// </summary>
+    public float GetTraversalDuration(DroneModel drone)
+    {
+        if (!HasPassage) return 0f;
+        float baseDuration = PassageBaseDuration(PassageType);
+        // Future: drone gear/stats could modify speed
+        return baseDuration;
+    }
+
+    /// <summary>
+    /// How long it takes the given drone to perform the wall interaction.
+    /// Depends on interaction type and drone gear.
+    /// </summary>
+    public float GetInteractionDuration(DroneModel drone)
+    {
+        if (!HasInteraction) return 0f;
+        return Interaction.Value.duration;
+        // Future: drone gear could speed this up
+    }
+
+    /// <summary>
+    /// How long one cycle of the station action takes for this drone.
+    /// Depends on station type and drone capabilities.
+    /// </summary>
+    public float GetStationDuration(DroneModel drone)
+    {
+        if (!HasStation) return 0f;
+        return StationBaseDuration(Station);
+        // Future: drone gear could speed charging/refitting
+    }
+
+    static float PassageBaseDuration(PassageType type)
+    {
+        switch (type)
+        {
+            case PassageType.Corridor: return 1.5f;
+            case PassageType.Duct:     return 2.5f;
+            case PassageType.Vent:     return 3.5f;
+            case PassageType.Rubble:   return 2.0f;
+            default:                   return 1.5f;
+        }
+    }
+
+    static float StationBaseDuration(StationType type)
+    {
+        switch (type)
+        {
+            case StationType.Charging:  return MapModel.ChargeDuration;
+            case StationType.Refitting: return MapModel.RefitDuration;
+            default:                    return 0f;
+        }
+    }
+
     // ── Construction ─────────────────────────
 
     public WallModel(RoomModel owner, int edgeIndex)

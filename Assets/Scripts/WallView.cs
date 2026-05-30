@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 /// <summary>
 /// Abstract base for wall presentation. Each instance maps to a WallModel
@@ -21,6 +22,109 @@ public abstract class WallView : MonoBehaviour
 
     /// <summary>Which station type this entity represents (None for passages).</summary>
     public virtual StationType StationType => StationType.None;
+
+    // ── animation API ────────────────────────────────────────────
+
+    Coroutine activeAnimation;
+    int animationToken;
+    bool isReversing;
+
+    /// <summary>
+    /// Play a traversal animation: drone passes through this wall over the given duration.
+    /// Traversals cannot be cancelled — only reversed via ReverseTraversal().
+    /// Override in subclasses for custom traversal visuals.
+    /// </summary>
+    public virtual void PlayTraversal(Transform drone, float duration, System.Action onComplete)
+    {
+        isReversing = false;
+        int token = ++animationToken;
+        activeAnimation = StartCoroutine(RunTraversal(drone, duration, token, onComplete));
+    }
+
+    /// <summary>
+    /// Reverse an in-progress traversal. Drone goes back the way it came.
+    /// Takes the same amount of elapsed time to return.
+    /// Calls onReversed when the drone is back at the start.
+    /// </summary>
+    public void ReverseTraversal(System.Action onReversed)
+    {
+        isReversing = true;
+        // The running coroutine detects isReversing and handles the reverse path.
+        // onReversed is stashed for the coroutine to call.
+        reverseCallback = onReversed;
+    }
+
+    System.Action reverseCallback;
+
+    /// <summary>
+    /// Play an interaction animation (charge, refit, clear rubble) over the given duration.
+    /// Interactions can be cancelled via CancelInteraction().
+    /// Override in subclasses for custom interaction visuals.
+    /// </summary>
+    public virtual void PlayInteraction(Transform drone, float duration, System.Action onComplete)
+    {
+        CancelInteraction();
+        int token = ++animationToken;
+        activeAnimation = StartCoroutine(RunInteraction(drone, duration, token, onComplete));
+    }
+
+    /// <summary>Cancel a running interaction animation immediately.</summary>
+    public void CancelInteraction()
+    {
+        animationToken++;
+        if (activeAnimation != null)
+        {
+            StopCoroutine(activeAnimation);
+            activeAnimation = null;
+        }
+        HideBeam();
+    }
+
+    protected virtual IEnumerator RunTraversal(Transform drone, float duration, int token, System.Action onComplete)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (isReversing) break;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (isReversing)
+        {
+            // Reverse: take the same elapsed time to go back
+            float reverseTime = elapsed;
+            float reverseElapsed = 0f;
+            while (reverseElapsed < reverseTime)
+            {
+                reverseElapsed += Time.deltaTime;
+                yield return null;
+            }
+            activeAnimation = null;
+            isReversing = false;
+            reverseCallback?.Invoke();
+            reverseCallback = null;
+            yield break;
+        }
+
+        activeAnimation = null;
+        if (token == animationToken) onComplete?.Invoke();
+    }
+
+    protected virtual IEnumerator RunInteraction(Transform drone, float duration, int token, System.Action onComplete)
+    {
+        ShowBeam(drone);
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (token != animationToken) yield break;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        HideBeam();
+        activeAnimation = null;
+        if (token == animationToken) onComplete?.Invoke();
+    }
 
     // ── material system (used by visual wall entities) ───────────
 
