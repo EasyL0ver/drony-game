@@ -933,7 +933,7 @@ public class DroneController : MonoBehaviour
                 {
                     activeStation = wallView;
                     activeWallAction = WallAction.Interaction(wallView.Model, Model, cfg);
-                    wallView.PlayInteraction(transform, activeWallAction.Duration, null);
+                    wallView.PlayInteraction(transform, activeWallAction.Duration, cfg, null);
                 }
                 else
                 {
@@ -981,7 +981,7 @@ public class DroneController : MonoBehaviour
                     : new WallAction(null, Model, journeyPlan[journeyIdx].duration, journeyPlan[journeyIdx].energyCost, journeyPlan[journeyIdx].label);
 
                 if (passage != null)
-                    passage.PlayInteraction(transform, activeWallAction.Duration, null);
+                    passage.PlayInteraction(transform, activeWallAction.Duration, cfg, null);
             }
 
             activeWallAction.Tick(Time.deltaTime);

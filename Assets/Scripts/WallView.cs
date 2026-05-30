@@ -22,8 +22,8 @@ public abstract class WallView : MonoBehaviour
 
     // ── animation API ────────────────────────────────────────────
 
-    Coroutine activeAnimation;
-    int animationToken;
+    protected Coroutine activeAnimation;
+    protected int animationToken;
     bool isReversing;
 
     /// <summary>
@@ -58,11 +58,11 @@ public abstract class WallView : MonoBehaviour
     /// Interactions can be cancelled via CancelInteraction().
     /// Override in subclasses for custom interaction visuals.
     /// </summary>
-    public virtual void PlayInteraction(Transform drone, float duration, System.Action onComplete)
+    public virtual void PlayInteraction(Transform drone, float duration, WallInteractionConfig config, System.Action onComplete)
     {
         CancelInteraction();
         int token = ++animationToken;
-        activeAnimation = StartCoroutine(RunInteraction(drone, duration, token, onComplete));
+        activeAnimation = StartCoroutine(RunInteraction(drone, duration, config, token, onComplete));
     }
 
     /// <summary>Cancel a running interaction animation immediately.</summary>
@@ -108,7 +108,7 @@ public abstract class WallView : MonoBehaviour
         if (token == animationToken) onComplete?.Invoke();
     }
 
-    protected virtual IEnumerator RunInteraction(Transform drone, float duration, int token, System.Action onComplete)
+    protected virtual IEnumerator RunInteraction(Transform drone, float duration, WallInteractionConfig config, int token, System.Action onComplete)
     {
         ShowBeam(drone);
         float elapsed = 0f;
