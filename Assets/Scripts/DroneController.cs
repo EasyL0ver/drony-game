@@ -39,6 +39,13 @@ public class DroneController : MonoBehaviour
     float stepStartTime;
     float journeyStartTime;
 
+    // Route line segment tracking
+    int moveSegIdx;
+    float moveSegT;
+
+    // Last completed interaction (for IsRefitting)
+    WallInteractionConfig lastCompletedInteraction;
+
     public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0)
     {
         map = mapGen;
@@ -90,10 +97,12 @@ public class DroneController : MonoBehaviour
         if (rooms == null || rooms.Count == 0) return;
         if (state != State.Idle) Cancel();
 
+        lastCompletedInteraction = null;
         var walls = BuildWallList(rooms);
         var path = new DronePath(walls, Model);
         activeJourney = new DroneJourney(path);
         previewPath = null;
+        moveSegIdx = 0; moveSegT = 0f;
         routePreview?.ClearPreview();
         routePreview?.SetJourney(rooms, goalWall);
         BuildJourneySteps();
@@ -106,9 +115,14 @@ public class DroneController : MonoBehaviour
         if (previewPath == null) return;
         if (state != State.Idle) Cancel();
 
+        lastCompletedInteraction = null;
         activeJourney = new DroneJourney(previewPath);
         previewPath = null;
+        cachedPreviewSteps = null;
+        moveSegIdx = 0; moveSegT = 0f;
+        var rooms = RoomsFromWalls(activeJourney.Walls);
         routePreview?.ClearPreview();
+        routePreview?.SetJourney(rooms);
         BuildJourneySteps();
         StartNextHop();
     }
@@ -118,9 +132,9 @@ public class DroneController : MonoBehaviour
     {
         if (state != State.Idle) Cancel();
 
+        lastCompletedInteraction = null;
         var rooms = pathRooms ?? new List<Vector2Int>();
         var walls = BuildWallList(rooms);
-        // Add the target wall
         var targetWall = fog?.GetTile(connA)?.GetPassage(connB)?.Model;
         if (targetWall == null) targetWall = fog?.GetTile(connB)?.GetPassage(connA)?.Model;
         if (targetWall != null) walls.Add(targetWall);
@@ -128,6 +142,10 @@ public class DroneController : MonoBehaviour
         var path = new DronePath(walls, Model);
         activeJourney = new DroneJourney(path);
         previewPath = null;
+        cachedPreviewSteps = null;
+        moveSegIdx = 0; moveSegT = 0f;
+        routePreview?.ClearPreview();
+        routePreview?.SetJourney(rooms);
         BuildJourneySteps();
         StartNextHop();
     }
@@ -143,6 +161,20 @@ public class DroneController : MonoBehaviour
         if (interactions == null || interactions.Count == 0) return;
         var cfg = interactions[0];
 
+        // Build single-step journey for UI
+        journeySteps.Clear();
+        journeySteps.Add(new JourneyStep
+        {
+            label = cfg.Label,
+            duration = cfg.BaseDuration,
+            isInteraction = true,
+            interactionConfig = cfg,
+            energyCost = cfg.EnergyCost,
+        });
+        journeyCurrentIndex = 0;
+        journeyStartTime = Time.time;
+        stepStartTime = Time.time;
+
         var currentTile = fog.GetTile(CurrentRoom);
         Vector3 parkPoint = wall.DroneParkPoint;
         parkPoint.y = hoverY;
@@ -151,6 +183,7 @@ public class DroneController : MonoBehaviour
         state = State.RoomNavigating;
         currentTile.NavigateDrone(transform, parkPoint, Mathf.Max(0.2f, dist * 0.6f), () =>
         {
+            stepStartTime = Time.time; // reset when actual interaction starts
             state = State.WallAnimating;
             wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
             {
@@ -185,6 +218,17 @@ public class DroneController : MonoBehaviour
         var result = new List<WallModel>();
         BuildWallList(rooms, result);
         return result;
+    }
+
+    List<Vector2Int> RoomsFromWalls(IReadOnlyList<WallModel> walls)
+    {
+        var rooms = new List<Vector2Int>();
+        foreach (var wall in walls)
+        {
+            if (wall.Neighbor?.Owner != null)
+                rooms.Add(wall.Neighbor.Owner.Coord);
+        }
+        return rooms;
     }
 
     void BuildJourneySteps()
@@ -240,12 +284,14 @@ public class DroneController : MonoBehaviour
     // ── Preview ────────────────────────
 
     DronePath previewPath;
+    List<JourneyStep> cachedPreviewSteps;
 
     public void ShowPreviewPath(List<Vector2Int> path, WallView wall = null)
     {
         if (path == null || path.Count == 0) { ClearPreviewPath(); return; }
         var walls = BuildWallList(path);
         previewPath = new DronePath(walls, Model);
+        cachedPreviewSteps = BuildStepsFromWalls(walls);
         routePreview?.ShowPath(path, wall);
     }
 
@@ -254,6 +300,7 @@ public class DroneController : MonoBehaviour
         if (tile == null || wall?.Model == null) { ClearPreviewPath(); return; }
         var walls = new List<WallModel> { wall.Model };
         previewPath = new DronePath(walls, Model);
+        cachedPreviewSteps = BuildStepsFromWalls(walls);
         routePreview?.ShowStation(tile, wall);
     }
 
@@ -263,13 +310,49 @@ public class DroneController : MonoBehaviour
         if (wallModel == null) { ClearPreviewPath(); return; }
         var walls = new List<WallModel> { wallModel };
         previewPath = new DronePath(walls, Model);
+        cachedPreviewSteps = BuildStepsFromWalls(walls);
         routePreview?.ShowWallInteraction(approach, other, wi);
     }
 
     public void ClearPreviewPath()
     {
         previewPath = null;
+        cachedPreviewSteps = null;
         routePreview?.ClearPreview();
+    }
+
+    List<JourneyStep> BuildStepsFromWalls(List<WallModel> walls)
+    {
+        var steps = new List<JourneyStep>();
+        for (int i = 0; i < walls.Count; i++)
+        {
+            var wall = walls[i];
+            bool isLast = i == walls.Count - 1;
+            var interactions = wall.GetInteractions(Model);
+            if (isLast && interactions.Count > 0)
+            {
+                var cfg = interactions[0];
+                steps.Add(new JourneyStep
+                {
+                    label = cfg.Label,
+                    duration = cfg.BaseDuration,
+                    isInteraction = true,
+                    interactionConfig = cfg,
+                    energyCost = cfg.EnergyCost,
+                });
+            }
+            else
+            {
+                var pass = wall.GetPassability(Model);
+                steps.Add(new JourneyStep
+                {
+                    label = pass.Label,
+                    duration = pass.Duration,
+                    energyCost = pass.EnergyCost,
+                });
+            }
+        }
+        return steps;
     }
 
     // ── Hop execution ────────────────────────
@@ -383,9 +466,11 @@ public class DroneController : MonoBehaviour
         int cost = activeJourney.Walls[hopIdx].GetPassability(Model).EnergyCost;
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cost);
 
-        // Advance journey + UI step
+        // Advance journey + UI step + route line segment
         activeJourney.AdvanceHop();
         AdvanceJourneyStep();
+        moveSegIdx += 3; // passA + passB + roomCenter
+        moveSegT = 0f;
 
         // Navigate to room center
         Vector3 center = new Vector3(newTile.Center.x, hoverY, newTile.Center.z);
@@ -402,6 +487,7 @@ public class DroneController : MonoBehaviour
     void OnInteractionComplete(WallInteractionConfig cfg, WallView wall)
     {
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cfg.EnergyCost);
+        lastCompletedInteraction = cfg;
 
         // Notify if this was a blocking wall interaction
         if (cfg.BlocksPassage)
@@ -461,7 +547,7 @@ public class DroneController : MonoBehaviour
     public void StartStationAction(RoomTile tile, WallView wall) => StartInteraction(tile, wall);
 
     public bool IsPerformingStationAction => IsPerformingInteraction;
-    public bool IsRefitting => false;
+    public bool IsRefitting => lastCompletedInteraction != null && lastCompletedInteraction.EnablesRefit;
 
     public struct JourneyStep
     {
@@ -514,48 +600,11 @@ public class DroneController : MonoBehaviour
         return Time.time - stepStartTime;
     }
 
-    public IReadOnlyList<JourneyStep> PreviewJourney
-    {
-        get
-        {
-            if (previewPath == null) return null;
-            var steps = new List<JourneyStep>();
-            var walls = previewPath.Walls;
-            for (int i = 0; i < walls.Count; i++)
-            {
-                var wall = walls[i];
-                bool isLast = i == walls.Count - 1;
-                var interactions = wall.GetInteractions(Model);
-                if (isLast && interactions.Count > 0)
-                {
-                    var cfg = interactions[0];
-                    steps.Add(new JourneyStep
-                    {
-                        label = cfg.Label,
-                        duration = cfg.BaseDuration,
-                        isInteraction = true,
-                        interactionConfig = cfg,
-                        energyCost = cfg.EnergyCost,
-                    });
-                }
-                else
-                {
-                    var pass = wall.GetPassability(Model);
-                    steps.Add(new JourneyStep
-                    {
-                        label = pass.Label,
-                        duration = pass.Duration,
-                        energyCost = pass.EnergyCost,
-                    });
-                }
-            }
-            return steps;
-        }
-    }
+    public IReadOnlyList<JourneyStep> PreviewJourney => cachedPreviewSteps;
     public IReadOnlyList<StepAnchor> JourneyAnchors => routePreview?.JourneyAnchors;
     public IReadOnlyList<StepAnchor> PreviewAnchors => routePreview?.PreviewAnchors;
-    internal int MoveSegIdx => 0;
-    internal float MoveSegT => 0f;
+    internal int MoveSegIdx => moveSegIdx;
+    internal float MoveSegT => moveSegT;
 
     internal static void BuildDashedRibbonInto(Mesh m, List<Vector3> w, List<float> c, float d, float width, float dash, float gap)
         => DashedRibbon.Build(m, w, c, d, width, dash, gap);
