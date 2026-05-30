@@ -428,7 +428,15 @@ public class DroneStatusUI : MonoBehaviour
         for (int i = 0; i < cards.Count; i++)
         {
             var c = cards[i];
-            if (c.drone == null) continue;
+            if (c.drone == null)
+            {
+                // Drone was destroyed — remove its card from the UI
+                if (c.cardBg != null)
+                    Destroy(c.cardBg.gameObject);
+                cards.RemoveAt(i);
+                i--;
+                continue;
+            }
 
             int curE = c.drone.CurrentEnergy;
             int maxE = c.drone.MaxEnergy;
