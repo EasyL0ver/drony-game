@@ -42,33 +42,6 @@ public abstract class WallModel
     /// <summary>True if this wall connects to a neighbor room at all.</summary>
     public bool HasNeighbor => Neighbor != null;
 
-    /// <summary>Begin the given interaction. Returns a handle to track progress.</summary>
-    public WallAction BeginInteraction(DroneModel drone, WallInteractionConfig cfg)
-    {
-        float duration = cfg.BaseDuration;
-        var action = new WallAction(this, drone, duration, cfg.EnergyCost, cfg.Label);
-
-        if (cfg.RepeatCondition != null)
-        {
-            action.ShouldRepeat = () =>
-            {
-                if (cfg.EnergyGainPerCycle > 0)
-                    drone.CurrentEnergy = Mathf.Min(drone.MaxEnergy, drone.CurrentEnergy + cfg.EnergyGainPerCycle);
-                return cfg.RepeatCondition(drone);
-            };
-        }
-
-        return action;
-    }
-
-    /// <summary>Begin a traversal through this wall.</summary>
-    public WallAction BeginTraversal(DroneModel drone)
-    {
-        var p = GetPassability(drone);
-        if (!p.CanPass) return null;
-        return new WallAction(this, drone, p.Duration, p.EnergyCost, p.Label);
-    }
-
     /// <summary>Called when a blocking interaction completes. Override to update state.</summary>
     public virtual PassageType? CompleteInteraction() => null;
 

@@ -56,6 +56,34 @@ public class WallAction
         Label = label;
     }
 
+    // ── Factories ───────────────────────────
+
+    /// <summary>Create an action for traversing a wall.</summary>
+    public static WallAction Traversal(WallModel wall, DroneModel drone)
+    {
+        var p = wall.GetPassability(drone);
+        if (!p.CanPass) return null;
+        return new WallAction(wall, drone, p.Duration, p.EnergyCost, p.Label);
+    }
+
+    /// <summary>Create an action for performing a wall interaction.</summary>
+    public static WallAction Interaction(WallModel wall, DroneModel drone, WallInteractionConfig cfg)
+    {
+        var action = new WallAction(wall, drone, cfg.BaseDuration, cfg.EnergyCost, cfg.Label);
+
+        if (cfg.RepeatCondition != null)
+        {
+            action.ShouldRepeat = () =>
+            {
+                if (cfg.EnergyGainPerCycle > 0)
+                    drone.CurrentEnergy = UnityEngine.Mathf.Min(drone.MaxEnergy, drone.CurrentEnergy + cfg.EnergyGainPerCycle);
+                return cfg.RepeatCondition(drone);
+            };
+        }
+
+        return action;
+    }
+
     /// <summary>
     /// Begin reversing this traversal. Takes the same time as already elapsed to go back.
     /// </summary>

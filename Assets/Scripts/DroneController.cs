@@ -942,7 +942,7 @@ public class DroneController : MonoBehaviour
                 if (wallView != null)
                 {
                     activeStation = wallView;
-                    activeWallAction = wallView.Model.BeginInteraction(Model, cfg);
+                    activeWallAction = WallAction.Interaction(wallView.Model, Model, cfg);
                     wallView.PlayInteraction(transform, activeWallAction.Duration, null);
                 }
                 else
@@ -987,7 +987,7 @@ public class DroneController : MonoBehaviour
                 var wallModel = passage?.Model;
                 var cfg = journeyPlan[journeyIdx].interactionConfig;
                 activeWallAction = wallModel != null && cfg != null
-                    ? wallModel.BeginInteraction(Model, cfg)
+                    ? WallAction.Interaction(wallModel, Model, cfg)
                     : new WallAction(null, Model, journeyPlan[journeyIdx].duration, journeyPlan[journeyIdx].energyCost, journeyPlan[journeyIdx].label);
 
                 if (passage != null)
