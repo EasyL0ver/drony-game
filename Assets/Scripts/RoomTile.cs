@@ -33,24 +33,11 @@ public class RoomTile : MonoBehaviour
 
     public List<TileConnection> Connections { get; private set; } = new List<TileConnection>();
 
-    /// <summary>
-    /// World-space point where a drone should park for the station in this room.
-    /// Returns null if no station exists.
-    /// </summary>
-    public Vector3? StationDroneParkPoint
-    {
-        get
-        {
-            var s = GetStation();
-            return s != null ? (Vector3?)s.DroneParkPoint : null;
-        }
-    }
-
-    /// <summary>Get the station WallView in this room, or null.</summary>
-    public WallView GetStation()
+    /// <summary>Get the WallView at the given edge, or null.</summary>
+    public WallView GetWallView(int edge)
     {
         foreach (var w in GetComponentsInChildren<WallView>())
-            if (w.IsStation) return w;
+            if (w.Model != null && w.Model.EdgeIndex == edge) return w;
         return null;
     }
 
@@ -287,7 +274,6 @@ public class RoomTile : MonoBehaviour
         // Station structure glow
         foreach (var w in GetComponentsInChildren<WallView>())
         {
-            if (!w.IsStation) continue;
             w.SetHoverGlow(hovered && w == hoveredWall);
         }
     }

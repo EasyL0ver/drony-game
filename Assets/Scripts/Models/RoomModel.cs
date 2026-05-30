@@ -13,21 +13,8 @@ public class RoomModel
     public RoomSize Size { get; private set; }
     public FogState State { get; private set; } = FogState.Unknown;
 
-    /// <summary>Which edge (0-5) the station sits on. -1 if no station.</summary>
-    public int StationEdge => FindStationEdge();
-
     /// <summary>The 6 wall models for this room's hex edges.</summary>
     public WallModel[] Walls { get; private set; }
-
-    /// <summary>Convenience: true if this room has any station.</summary>
-    public bool IsStation => StationEdge >= 0;
-
-    public bool HasStation(int edge)
-    {
-        if (edge < 0 || edge >= Walls.Length) return false;
-        var wall = Walls[edge];
-        return wall.HasInteraction && !wall.Interaction.BlocksPassage;
-    }
 
     // Scanning
     public float ScanDuration { get; set; } = 3f;
@@ -58,7 +45,20 @@ public class RoomModel
 
         Walls = new WallModel[6];
         for (int i = 0; i < 6; i++)
-            Walls[i] = new WallModel(this, i);
+            Walls[i] = new CorridorWallModel(this, i);
+    }
+
+    // ── Wall management ────────────────────
+
+    /// <summary>Replace the wall at the given edge with a new model (e.g. StationWallModel).</summary>
+    public void SetWall(int edge, WallModel wall)
+    {
+        // Preserve neighbor link
+        var oldNeighbor = Walls[edge].Neighbor;
+        Walls[edge] = wall;
+        wall.Neighbor = oldNeighbor;
+        if (oldNeighbor != null)
+            oldNeighbor.Neighbor = wall;
     }
 
     // ── Connection management ────────────────
@@ -144,14 +144,6 @@ public class RoomModel
         var old = State;
         State = newState;
         OnStateChanged?.Invoke(old, newState);
-    }
-
-    int FindStationEdge()
-    {
-        for (int i = 0; i < Walls.Length; i++)
-            if (HasStation(i))
-                return i;
-        return -1;
     }
 }
 

@@ -363,25 +363,43 @@ public class MapModel
         return room.Walls[edge];
     }
 
-    /// <summary>Returns the passage type between two adjacent rooms.</summary>
+    /// <summary>Returns passability info for a drone at the wall between two rooms.</summary>
+    public WallPassability GetPassability(Vector2Int from, Vector2Int to, DroneModel drone)
+    {
+        var wall = GetWall(from, to);
+        if (wall == null) return WallPassability.Blocked;
+        return wall.GetPassability(drone);
+    }
+
+    /// <summary>Returns the passage type between two rooms (for legacy/display use).</summary>
     public PassageType GetPassageType(Vector2Int from, Vector2Int to)
     {
         var wall = GetWall(from, to);
-        if (wall != null) return wall.PassageType;
+        if (wall is CorridorWallModel cw) return cw.PassageType;
         return PassageType.Corridor;
     }
 
     public bool IsBlocked(Vector2Int a, Vector2Int b)
     {
         var wall = GetWall(a, b);
-        if (wall != null) return wall.IsBlocked;
+        if (wall is CorridorWallModel cw) return cw.IsBlocked;
         return false;
     }
 
-    public WallInteractionConfig GetWallInteraction(Vector2Int a, Vector2Int b)
+    public WallInteractionConfig GetWallInteraction(Vector2Int a, Vector2Int b, DroneModel drone)
     {
         var wall = GetWall(a, b);
-        return wall?.Interaction;
+        if (wall == null) return null;
+        var interactions = wall.GetInteractions(drone);
+        return interactions.Count > 0 ? interactions[0] : null;
+    }
+
+    /// <summary>Check if a connection has any rubble (no drone context needed — structural query for spawning).</summary>
+    public bool HasBlockingInteraction(Vector2Int a, Vector2Int b)
+    {
+        var wall = GetWall(a, b);
+        if (wall is CorridorWallModel cw) return cw.IsBlocked;
+        return false;
     }
 
     /// <summary>
@@ -406,7 +424,7 @@ public class MapModel
             if (ConnKey(Connections[i].roomA, Connections[i].roomB) == key)
             {
                 var c = Connections[i];
-                c.type = wallAB?.PassageType ?? PassageType.Corridor;
+                c.type = (wallAB is CorridorWallModel cwAB) ? cwAB.PassageType : PassageType.Corridor;
                 Connections[i] = c;
                 break;
             }

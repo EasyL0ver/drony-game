@@ -96,7 +96,7 @@ public class RoutePreview
         {
             var lastCoord = path[path.Count - 1];
             var lastTile = fog?.GetTile(lastCoord);
-            if (lastTile != null && lastTile.GetStation() == station)
+            if (lastTile != null)
             {
                 Vector3 wallPt = StationPoint(lastTile, station, pathY);
                 journeyWaypoints.Add(new Vector3(wallPt.x, pathY, wallPt.z));
@@ -138,8 +138,8 @@ public class RoutePreview
         {
             var step = journey[stepIdx];
             Vector3 barPos = step.isInteraction && step.interactionConfig != null
-                && !step.interactionConfig.BlocksPassage && destTile != null && destTile.RModel.StationEdge >= 0
-                ? map.WallMidpoint(destCoord, destTile.RModel.StationEdge, destTile.RModel.Size)
+                && !step.interactionConfig.BlocksPassage && station != null && station.Model != null
+                ? map.WallMidpoint(destCoord, station.Model.EdgeIndex, destTile.RModel.Size)
                 : map.HexCenter(destCoord);
             journeyAnchors.Add(new StepAnchor
             {
@@ -217,10 +217,11 @@ public class RoutePreview
             });
         }
 
-        var pvStation = finalTile?.GetStation();
-        if (pvStation != null && pvStation == station)
+        if (station != null && station.Model != null)
         {
-            plan.Add(CreateInteractionStep(pvStation.Model?.Interaction));
+            var interactions = station.Model.GetInteractions(drone.Model);
+            if (interactions.Count > 0 && !interactions[0].BlocksPassage)
+                plan.Add(CreateInteractionStep(interactions[0]));
         }
 
         previewWaypoints.Clear();
@@ -242,7 +243,7 @@ public class RoutePreview
         {
             var lastCoord = previewPath[previewPath.Count - 1];
             var lastTile = fog?.GetTile(lastCoord);
-            if (lastTile != null && lastTile.GetStation() == station)
+            if (lastTile != null)
             {
                 Vector3 wallPt = StationPoint(lastTile, station, pathY);
                 previewWaypoints.Add(new Vector3(wallPt.x, pathY, wallPt.z));
@@ -292,8 +293,8 @@ public class RoutePreview
         {
             var step = plan[stepIdx];
             Vector3 barPos = step.isInteraction && step.interactionConfig != null
-                && !step.interactionConfig.BlocksPassage && pvDestTile != null && pvDestTile.RModel.StationEdge >= 0
-                ? map.WallMidpoint(pvDestCoord, pvDestTile.RModel.StationEdge, pvDestTile.RModel.Size)
+                && !step.interactionConfig.BlocksPassage && station != null && station.Model != null
+                ? map.WallMidpoint(pvDestCoord, station.Model.EdgeIndex, pvDestTile.RModel.Size)
                 : map.HexCenter(pvDestCoord);
             previewAnchors.Add(new StepAnchor
             {
@@ -309,22 +310,22 @@ public class RoutePreview
         }
     }
 
-    public void ShowStation(RoomTile tile, WallView station = null)
+    public void ShowStation(RoomTile tile, WallView wall)
     {
-        if (tile == null || !tile.RModel.IsStation) return;
+        if (tile == null || wall == null || wall.Model == null) return;
         if (drone.IsPerformingStationAction) return;
 
-        station ??= tile.GetStation();
-        if (station == null || !station.IsStation) return;
+        var interactions = wall.Model.GetInteractions(drone.Model);
+        if (interactions.Count == 0 || interactions[0].BlocksPassage) return;
 
         ClearPreview();
         isShowing = true;
         plan.Clear();
 
-        plan.Add(CreateInteractionStep(station.Model?.Interaction));
+        plan.Add(CreateInteractionStep(interactions[0]));
 
         previewAnchors.Clear();
-        Vector3 rc = StationPoint(tile, station, 0.5f);
+        Vector3 rc = StationPoint(tile, wall, 0.5f);
         previewAnchors.Add(new StepAnchor
         {
             worldPos = new Vector3(rc.x, 0.5f, rc.z),

@@ -68,7 +68,7 @@ public class GameManager : MonoBehaviour
         // ── spawn rubble barriers for blocked connections ──
         foreach (var (a, b, type) in hexMap.ConnectionList)
         {
-            if (hexMap.Model.GetWallInteraction(a, b) != null)
+            if (hexMap.Model.HasBlockingInteraction(a, b))
                 SpawnRubbleBarrier(a, b);
         }
 
@@ -78,9 +78,9 @@ public class GameManager : MonoBehaviour
         // ── spawn refitting station building at a free wall ──
         var stationBldgGO = new GameObject("RefittingStation");
         stationBldgGO.transform.SetParent(stationTile.transform, false);
-        PlaceAtWall(stationBldgGO, Vector2Int.zero, stationTile.RModel, WallInteractionConfig.Refitting());
+        int refitEdge = PlaceAtWall(stationBldgGO, Vector2Int.zero, stationTile.RModel, WallInteractionConfig.Refitting());
         var refitView = stationBldgGO.AddComponent<RefittingStation>();
-        refitView.SetModel(stationTile.RModel.Walls[stationTile.RModel.StationEdge]);
+        refitView.SetModel(stationTile.RModel.Walls[refitEdge]);
 
         // ── place charging station on a neighbor of the starting room ──
         Vector2Int chargingCoord = Vector2Int.zero;
@@ -100,9 +100,9 @@ public class GameManager : MonoBehaviour
 
             var chargeBldgGO = new GameObject("ChargingStation");
             chargeBldgGO.transform.SetParent(chargeTile.transform, false);
-            PlaceAtWall(chargeBldgGO, chargingCoord, chargeTile.RModel, WallInteractionConfig.Charging());
+            int chargeEdge = PlaceAtWall(chargeBldgGO, chargingCoord, chargeTile.RModel, WallInteractionConfig.Charging());
             var chargeView = chargeBldgGO.AddComponent<ChargingStation>();
-            chargeView.SetModel(chargeTile.RModel.Walls[chargeTile.RModel.StationEdge]);
+            chargeView.SetModel(chargeTile.RModel.Walls[chargeEdge]);
         }
 
         // ── player economy ──
@@ -190,10 +190,11 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Position a station GO at a free hex wall (edge without a passage),
-    /// rotated to face inward. Records the edge on the RoomModel.
+    /// Position a wall GO at a free hex edge (without a passage),
+    /// rotated to face inward. Creates a StationWallModel at that edge.
+    /// Returns the edge index used.
     /// </summary>
-    void PlaceAtWall(GameObject go, Vector2Int coord, RoomModel model, WallInteractionConfig interaction)
+    int PlaceAtWall(GameObject go, Vector2Int coord, RoomModel model, WallInteractionConfig interaction)
     {
         Vector3 center = hexMap.HexCenter(coord);
         float roomR = hexMap.RoomRadius(hexMap.RoomSizeMap[coord]);
@@ -215,18 +216,20 @@ public class GameManager : MonoBehaviour
             if (!usedEdges.Contains(i)) { edge = i; break; }
         }
 
-        model.Walls[edge].Interaction = interaction;
-        model.Walls[edge].IsBlocked = interaction != null && interaction.BlocksPassage;
+        var stationWall = new StationWallModel(model, edge, interaction);
+        model.SetWall(edge, stationWall);
 
         // Edge midpoint sits on the wall
         Vector3 c0 = hexMap.Corner(center, edge, roomR);
         Vector3 c1 = hexMap.Corner(center, (edge + 1) % 6, roomR);
         Vector3 wallMid = (c0 + c1) * 0.5f;
 
-        // Push slightly inward so the station is partially embedded in the wall
+        // Push slightly inward so partially embedded in the wall
         Vector3 inward = (center - wallMid).normalized;
         go.transform.position = wallMid;
         go.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
+
+        return edge;
     }
 
     void SpawnPassage(Vector2Int room, Vector2Int neighbor, PassageType type)
