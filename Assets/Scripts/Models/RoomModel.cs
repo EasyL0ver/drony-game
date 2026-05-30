@@ -24,7 +24,8 @@ public class RoomModel
         ? Mathf.Max(0f, ScanDuration - ScanElapsed) : 0f;
 
     // Drone tracking
-    public int DroneCount { get; private set; }
+    public HashSet<DroneModel> Drones { get; private set; } = new HashSet<DroneModel>();
+    public int DroneCount => Drones.Count;
 
     // Connections to neighbors
     public List<RoomConnection> Connections { get; private set; } = new List<RoomConnection>();
@@ -71,9 +72,9 @@ public class RoomModel
     // ── Drone interaction ────────────────────
 
     /// <summary>A drone enters this room (starts heading toward it).</summary>
-    public void OnDroneEnter()
+    public void OnDroneEnter(DroneModel drone)
     {
-        DroneCount++;
+        Drones.Add(drone);
     }
 
     /// <summary>
@@ -101,10 +102,10 @@ public class RoomModel
     }
 
     /// <summary>A drone leaves this room. Demotes to Discovered when last drone leaves.</summary>
-    public void OnDroneExit()
+    public void OnDroneExit(DroneModel drone)
     {
-        DroneCount = Mathf.Max(0, DroneCount - 1);
-        if (DroneCount == 0 && State == FogState.Visible)
+        Drones.Remove(drone);
+        if (Drones.Count == 0 && State == FogState.Visible)
             SetState(FogState.Discovered);
     }
 

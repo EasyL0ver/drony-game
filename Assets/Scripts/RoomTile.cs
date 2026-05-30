@@ -118,7 +118,7 @@ public class RoomTile : MonoBehaviour
 
     public void OnDroneEnter(DroneController drone)
     {
-        RModel.OnDroneEnter();
+        RModel.OnDroneEnter(drone?.Model);
         if (drone != null) dronesPresent.Add(drone);
         RefreshDroneLabel();
     }
@@ -149,7 +149,7 @@ public class RoomTile : MonoBehaviour
 
     public void OnDroneExit(DroneController drone)
     {
-        RModel.OnDroneExit();
+        RModel.OnDroneExit(drone?.Model);
         if (drone != null) dronesPresent.Remove(drone);
         RefreshDroneLabel();
     }
