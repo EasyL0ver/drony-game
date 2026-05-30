@@ -3,7 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Pure game-logic model for a single hex wall (edge).
 /// Each room has 6 walls. A wall may be solid, contain a passage (connection to
-/// a neighbor), host a station, and/or have a wall interaction (rubble clear, etc.).
+/// a neighbor), and/or have an interaction (charge, refit, rubble clear, etc.).
 /// </summary>
 public class WallModel
 {
@@ -30,21 +30,13 @@ public class WallModel
     /// <summary>True if a drone can move through this wall right now.</summary>
     public bool IsPassable => HasPassage && !IsBlocked;
 
-    // ── Station ──────────────────────────────
+    // ── Interaction ─────────────────────────
 
-    /// <summary>Station type on this wall, if any.</summary>
-    public StationType Station { get; set; } = StationType.None;
+    /// <summary>Interaction config on this wall, or null if none.</summary>
+    public WallInteractionConfig Interaction { get; set; }
 
-    /// <summary>True if this wall hosts a station.</summary>
-    public bool HasStation => Station != StationType.None;
-
-    // ── Wall Interaction ─────────────────────
-
-    /// <summary>Current wall interaction on this wall, or null if none.</summary>
-    public WallInteraction? Interaction { get; set; }
-
-    /// <summary>True if this wall has an active interaction (rubble clear, etc.).</summary>
-    public bool HasInteraction => Interaction.HasValue;
+    /// <summary>True if this wall has an interaction a drone can perform.</summary>
+    public bool HasInteraction => Interaction != null;
 
     // ── Logic ────────────────────────────────
 
@@ -55,19 +47,17 @@ public class WallModel
     public bool CanInteract(DroneModel drone)
     {
         if (!HasInteraction) return false;
-        return drone.HasGear(Interaction.Value.requiredGear);
+        if (Interaction.RequiredGear == GearType.None) return true;
+        return drone.HasGear(Interaction.RequiredGear);
     }
 
     /// <summary>
     /// Whether the given drone can move through this wall.
-    /// A passage must exist and not be blocked, OR the drone has gear to pass
-    /// through (e.g. future drill that can traverse rubble without clearing it).
     /// </summary>
     public bool CanPass(DroneModel drone)
     {
         if (!HasPassage) return false;
         if (!IsBlocked) return true;
-        // Future: check if drone has gear that allows passage through blocked walls
         return false;
     }
 
@@ -85,40 +75,25 @@ public class WallModel
     }
 
     /// <summary>
-    /// Begin a wall interaction (rubble clear, bomb, etc.). Returns a handle to track progress.
+    /// Begin the wall interaction. Returns a handle to track progress.
+    /// The handle's ShouldRepeat delegate is set from the config's RepeatCondition.
     /// </summary>
     public WallAction BeginInteraction(DroneModel drone)
     {
         if (!HasInteraction) return null;
-        var inter = Interaction.Value;
+        var cfg = Interaction;
         float duration = GetInteractionDuration(drone);
-        return new WallAction(this, drone, duration, inter.energyCost, inter.label);
-    }
+        var action = new WallAction(this, drone, duration, cfg.EnergyCost, cfg.Label);
 
-    /// <summary>
-    /// Begin a station action (charge/refit). Returns a handle to track one cycle.
-    /// The handle's ShouldRepeat delegate encodes whether another cycle is needed.
-    /// </summary>
-    public WallAction BeginStationAction(DroneModel drone)
-    {
-        if (!HasStation) return null;
-        float duration = GetStationDuration(drone);
-        string label = MapModel.StationLabel(Station);
-        var action = new WallAction(this, drone, duration, 0, label);
-
-        switch (Station)
+        if (cfg.RepeatCondition != null)
         {
-            case StationType.Charging:
-                action.ShouldRepeat = () =>
-                {
-                    drone.CurrentEnergy = UnityEngine.Mathf.Min(drone.MaxEnergy, drone.CurrentEnergy + MapModel.ChargeEnergyGain);
-                    return drone.CurrentEnergy < drone.MaxEnergy;
-                };
-                break;
-
-            case StationType.Refitting:
-                // Single cycle, no repeat
-                break;
+            action.ShouldRepeat = () =>
+            {
+                // Apply per-cycle effects
+                if (cfg.EnergyGainPerCycle > 0)
+                    drone.CurrentEnergy = Mathf.Min(drone.MaxEnergy, drone.CurrentEnergy + cfg.EnergyGainPerCycle);
+                return cfg.RepeatCondition(drone);
+            };
         }
 
         return action;
@@ -128,36 +103,20 @@ public class WallModel
 
     /// <summary>
     /// How long it takes the given drone to traverse this passage.
-    /// Depends on passage type and drone capabilities.
     /// </summary>
     public float GetTraversalDuration(DroneModel drone)
     {
         if (!HasPassage) return 0f;
-        float baseDuration = PassageBaseDuration(PassageType);
-        // Future: drone gear/stats could modify speed
-        return baseDuration;
+        return PassageBaseDuration(PassageType);
     }
 
     /// <summary>
-    /// How long it takes the given drone to perform the wall interaction.
-    /// Depends on interaction type and drone gear.
+    /// How long it takes the given drone to perform the interaction.
     /// </summary>
     public float GetInteractionDuration(DroneModel drone)
     {
         if (!HasInteraction) return 0f;
-        return Interaction.Value.duration;
-        // Future: drone gear could speed this up
-    }
-
-    /// <summary>
-    /// How long one cycle of the station action takes for this drone.
-    /// Depends on station type and drone capabilities.
-    /// </summary>
-    public float GetStationDuration(DroneModel drone)
-    {
-        if (!HasStation) return 0f;
-        return StationBaseDuration(Station);
-        // Future: drone gear could speed charging/refitting
+        return Interaction.BaseDuration;
     }
 
     static float PassageBaseDuration(PassageType type)
@@ -169,16 +128,6 @@ public class WallModel
             case PassageType.Vent:     return 3.5f;
             case PassageType.Rubble:   return 2.0f;
             default:                   return 1.5f;
-        }
-    }
-
-    static float StationBaseDuration(StationType type)
-    {
-        switch (type)
-        {
-            case StationType.Charging:  return MapModel.ChargeDuration;
-            case StationType.Refitting: return MapModel.RefitDuration;
-            default:                    return 0f;
         }
     }
 
@@ -197,8 +146,9 @@ public class WallModel
     public PassageType? CompleteInteraction()
     {
         if (!HasInteraction) return null;
+        if (!Interaction.BlocksPassage) return null;
 
-        var resultType = Interaction.Value.resultingPassageType;
+        var resultType = Interaction.ResultingPassageType;
         Interaction = null;
         IsBlocked = false;
         PassageType = resultType;

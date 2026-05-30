@@ -8,20 +8,73 @@ public enum PassageType { Corridor, Duct, Vent, Rubble }
 
 public enum RoomSize { Large, Medium, Small }
 
-public enum GearType { Scanner, Bomb }
-
-public enum StationType { None, Refitting, Charging }
+public enum GearType { None, Scanner, Bomb }
 
 /// <summary>
-/// Generic interaction condition on a passage (wall entity).
-/// Model owns these; entities reflect them.
+/// Describes a wall interaction: anything a drone can do at a wall
+/// (charge, refit, clear rubble, bomb, etc.). Configured per-wall.
 /// </summary>
-public struct WallInteraction
+public class WallInteractionConfig
 {
-    public GearType requiredGear;
-    public float duration;
-    public int energyCost;
-    public string label;
-    public bool blocksPassage;
-    public PassageType resultingPassageType; // passage type after interaction completes
+    /// <summary>UI label (e.g. "CHARGE", "REFIT", "CLEAR").</summary>
+    public string Label { get; set; }
+
+    /// <summary>Base duration of one cycle in seconds.</summary>
+    public float BaseDuration { get; set; }
+
+    /// <summary>Energy cost applied on completion (0 for stations).</summary>
+    public int EnergyCost { get; set; }
+
+    /// <summary>Required gear to perform this interaction (None = no gear needed).</summary>
+    public GearType RequiredGear { get; set; } = GearType.None;
+
+    /// <summary>If true, this interaction blocks passage until completed.</summary>
+    public bool BlocksPassage { get; set; }
+
+    /// <summary>Passage type after interaction completes (only if BlocksPassage).</summary>
+    public PassageType ResultingPassageType { get; set; }
+
+    /// <summary>If true, the drone is destroyed on completion (e.g. bomb).</summary>
+    public bool DestroysDrone { get; set; }
+
+    /// <summary>If true, completing this enables gear management (refit).</summary>
+    public bool EnablesRefit { get; set; }
+
+    /// <summary>Energy gained per cycle (e.g. charging gives +5).</summary>
+    public int EnergyGainPerCycle { get; set; }
+
+    /// <summary>
+    /// Whether this interaction repeats after a cycle.
+    /// Called with the drone model — return true to go again.
+    /// If null, interaction is one-shot.
+    /// </summary>
+    public System.Func<DroneModel, bool> RepeatCondition { get; set; }
+
+    // ── Factory presets ─────────────────────
+
+    public static WallInteractionConfig Charging() => new WallInteractionConfig
+    {
+        Label = "CHARGE",
+        BaseDuration = 4f,
+        EnergyGainPerCycle = 5,
+        RepeatCondition = drone => drone.CurrentEnergy < drone.MaxEnergy,
+    };
+
+    public static WallInteractionConfig Refitting() => new WallInteractionConfig
+    {
+        Label = "REFIT",
+        BaseDuration = 2f,
+        EnablesRefit = true,
+    };
+
+    public static WallInteractionConfig RubbleClear(GearType gear) => new WallInteractionConfig
+    {
+        Label = "CLEAR",
+        BaseDuration = 5f,
+        EnergyCost = 2,
+        RequiredGear = gear,
+        BlocksPassage = true,
+        ResultingPassageType = PassageType.Corridor,
+        DestroysDrone = gear == GearType.Bomb,
+    };
 }
