@@ -96,9 +96,8 @@ public class DroneModel
         public string label;
         public float duration;
         public bool isScan;
-        public bool isCharge;
-        public bool isRefit;
-        public bool isWallAction;
+        public bool isInteraction;
+        public WallInteractionConfig interactionConfig;
         public int energyCost;
     }
 
@@ -187,7 +186,7 @@ public class DroneModel
         // Active step
         if (JourneyPlan[i].isScan)
             return GetScanProgress?.Invoke() ?? 0f;
-        if (JourneyPlan[i].isCharge || JourneyPlan[i].isRefit || JourneyPlan[i].isWallAction)
+        if (JourneyPlan[i].isInteraction)
             return GetStationActionProgress?.Invoke() ?? 0f;
         return TravelProgress;
     }
@@ -209,8 +208,7 @@ public class DroneModel
     /// <param name="scanDurationForRoom">Returns scan duration for a room coord, or 0 if not needed.</param>
     public bool TryBuildJourney(List<Vector2Int> newPath, MapModel map,
                                 System.Func<Vector2Int, FogState> getRoomState,
-                                System.Func<Vector2Int, float> scanDurationForRoom,
-                                System.Func<Vector2Int, StationType> getStationType = null)
+                                System.Func<Vector2Int, float> scanDurationForRoom)
     {
         // Calculate total energy cost before committing
         int cost = 0;
@@ -223,7 +221,6 @@ public class DroneModel
 
         var dest = newPath[newPath.Count - 1];
         var destState = getRoomState(dest);
-        var destStation = getStationType != null ? getStationType(dest) : StationType.None;
         float scanDur = 0f;
         if (destState == FogState.Unknown && CanScan)
         {
@@ -291,8 +288,7 @@ public class DroneModel
     /// </summary>
     public void BuildPreviewPlan(List<Vector2Int> previewPath, MapModel map,
                                  System.Func<Vector2Int, FogState> getRoomState,
-                                 System.Func<Vector2Int, float> scanDurationForRoom,
-                                 System.Func<Vector2Int, StationType> getStationType = null)
+                                 System.Func<Vector2Int, float> scanDurationForRoom)
     {
         PreviewPlan.Clear();
         if (previewPath == null || previewPath.Count == 0) return;
@@ -314,7 +310,6 @@ public class DroneModel
 
         var dest = previewPath[previewPath.Count - 1];
         var destState = getRoomState(dest);
-        var destStation = getStationType != null ? getStationType(dest) : StationType.None;
         if (destState == FogState.Unknown && CanScan)
         {
             PreviewPlan.Add(new JourneyStep

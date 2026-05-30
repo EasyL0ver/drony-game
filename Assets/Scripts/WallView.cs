@@ -20,8 +20,8 @@ public abstract class WallView : MonoBehaviour
     /// <summary>World-space point where a visiting drone should sit.</summary>
     public Vector3 DroneParkPoint => transform.position + transform.forward * ParkOffset;
 
-    /// <summary>Which station type this entity represents (None for passages).</summary>
-    public virtual StationType StationType => StationType.None;
+    /// <summary>True when this wall hosts a non-blocking interaction (a station).</summary>
+    public bool IsStation => Model != null && Model.HasInteraction && !Model.Interaction.BlocksPassage;
 
     // ── animation API ────────────────────────────────────────────
 

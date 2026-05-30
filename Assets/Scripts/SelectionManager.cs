@@ -12,7 +12,7 @@ public class SelectionManager : MonoBehaviour
 {
     GameManager gm;
     Camera cam;
-    StationType hoveredStation;
+    WallView hoveredStationView;
     // Tracked wall interaction target (when hovering a passage with an interaction)
     Vector2Int hoveredConnA, hoveredConnB;
     bool hoveredHasWallInteraction;
@@ -74,7 +74,7 @@ public class SelectionManager : MonoBehaviour
                 if (hoveredHasWallInteraction)
                     ShowWallInteractionPreviews();
                 else
-                    ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
+                    ShowPreviewsForTarget(hoveredTile.Coord, hoveredStationView);
             }
         }
 
@@ -166,7 +166,7 @@ public class SelectionManager : MonoBehaviour
     void UpdateHover(Vector2 screenPos)
     {
         var (tile, station, hasWI, connA, connB) = RaycastTileWithEdge(screenPos);
-        if (tile != hoveredTile || station != hoveredStation
+        if (tile != hoveredTile || station != hoveredStationView
             || hasWI != hoveredHasWallInteraction)
         {
             // Clear old previews
@@ -175,22 +175,22 @@ public class SelectionManager : MonoBehaviour
             if (hoveredTile != null)
                 hoveredTile.SetHovered(false);
             hoveredTile = tile;
-            hoveredStation = station;
+            hoveredStationView = station;
             hoveredHasWallInteraction = hasWI;
             hoveredConnA = connA;
             hoveredConnB = connB;
             if (hoveredTile != null)
             {
-                hoveredTile.SetHovered(true, hoveredStation);
+                hoveredTile.SetHovered(true, hoveredStationView);
                 if (hoveredHasWallInteraction)
                     ShowWallInteractionPreviews();
                 else
-                    ShowPreviewsForTarget(hoveredTile.Coord, hoveredStation);
+                    ShowPreviewsForTarget(hoveredTile.Coord, hoveredStationView);
             }
         }
     }
 
-    void ShowPreviewsForTarget(Vector2Int target, StationType stationAction)
+    void ShowPreviewsForTarget(Vector2Int target, WallView station = null)
     {
         var targetTile = gm.fog.GetTile(target);
         foreach (var d in gm.Drones)
@@ -199,10 +199,10 @@ public class SelectionManager : MonoBehaviour
             droneLastRoom[d.DroneIndex] = d.CurrentRoom;
             var p = FindPath(d.CurrentRoom, target);
             if (p != null && p.Count > 0)
-                d.ShowPreviewPath(p, stationAction);
+                d.ShowPreviewPath(p, station);
             else if (d.CurrentRoom == target && targetTile != null
-                     && stationAction != StationType.None)
-                d.ShowStationPreview(targetTile, stationAction);
+                     && station != null)
+                d.ShowStationPreview(targetTile, station);
             else
                 d.ClearPreviewPath();
         }
@@ -238,8 +238,8 @@ public class SelectionManager : MonoBehaviour
                 Vector2Int approach = d.CurrentRoom;
                 Vector2Int other = (approach == hoveredConnA) ? hoveredConnB : hoveredConnA;
                 var wi = gm.hexMap.Model.GetWallInteraction(hoveredConnA, hoveredConnB);
-                if (wi.HasValue)
-                    d.ShowWallInteractionPreview(approach, other, wi.Value);
+                if (wi != null)
+                    d.ShowWallInteractionPreview(approach, other, wi);
                 else
                     d.ClearPreviewPath();
             }
@@ -264,7 +264,7 @@ public class SelectionManager : MonoBehaviour
     /// which hex edge the cursor is nearest. Looks up wall station data on the model.
     /// No need to raycast individual station meshes.
     /// </summary>
-    (RoomTile tile, StationType station, bool hasWallInteraction, Vector2Int connA, Vector2Int connB)
+    (RoomTile tile, WallView station, bool hasWallInteraction, Vector2Int connA, Vector2Int connB)
     RaycastTileWithEdge(Vector2 screenPos)
     {
         Ray ray = cam.ScreenPointToRay(screenPos);
@@ -285,38 +285,49 @@ public class SelectionManager : MonoBehaviour
             }
         }
 
-        if (tile == null) return (null, StationType.None, false, default, default);
+        if (tile == null) return (null, null, false, default, default);
 
         // Only do edge/passage resolution on revealed tiles where the user can see
         // room layout and intend to click "through" a passage. For hidden tiles the
         // user is targeting the fog hex itself.
         if (tile.State == FogState.Unknown || tile.State == FogState.Scanning)
-            return (tile, StationType.None, false, default, default);
+            return (tile, null, false, default, default);
 
         int edge = gm.hexMap.Model.NearestEdge(hitPoint, tile.Coord);
-        StationType wallStation = tile.RModel.GetWallStation(edge);
+        WallView wallStation = GetStationAtEdge(tile, edge);
 
         // If the edge has a passage (not a station), check for wall interaction
-        if (wallStation == StationType.None)
+        if (wallStation == null)
         {
             foreach (var conn in tile.Connections)
             {
                 if (conn.edgeIndex == edge)
                 {
                     var wi = gm.hexMap.Model.GetWallInteraction(tile.Coord, conn.neighbor.Coord);
-                    if (wi.HasValue)
-                        return (tile, StationType.None, true, tile.Coord, conn.neighbor.Coord);
+                    if (wi != null)
+                        return (tile, null, true, tile.Coord, conn.neighbor.Coord);
 
                     // No interaction — resolve to neighbor tile as before
                     var neighborTile = conn.neighbor;
                     if (neighborTile != null)
-                        return (neighborTile, StationType.None, false, default, default);
+                        return (neighborTile, null, false, default, default);
                     break;
                 }
             }
         }
 
         return (tile, wallStation, false, default, default);
+    }
+
+    WallView GetStationAtEdge(RoomTile tile, int edge)
+    {
+        if (tile == null) return null;
+        foreach (var wall in tile.GetComponentsInChildren<WallView>())
+        {
+            if (wall.Model == null || wall.Model.EdgeIndex != edge) continue;
+            if (wall.IsStation) return wall;
+        }
+        return null;
     }
 
     // ── move orders ──────────────────────────
@@ -368,7 +379,7 @@ public class SelectionManager : MonoBehaviour
             if (d.IsPerformingStationAction) continue;
 
             // Drone already on this tile — try station action if structure was clicked
-            if (d.CurrentRoom == target && clickedStation != StationType.None)
+            if (d.CurrentRoom == target && clickedStation != null)
             {
                 d.StartStationAction(tile, clickedStation);
                 continue;

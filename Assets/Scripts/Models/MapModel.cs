@@ -29,20 +29,20 @@ public class MapModel
     public List<Connection> Connections { get; private set; } = new List<Connection>();
 
     // Wall interactions (rubble, etc.) — keyed by ConnKey (used during generation only)
-    readonly Dictionary<long, WallInteraction> wallInteractions = new Dictionary<long, WallInteraction>();
+    readonly Dictionary<long, WallInteractionConfig> wallInteractions = new Dictionary<long, WallInteractionConfig>();
 
     /// <summary>Read wall interaction from generation data. Used only during initial wiring.</summary>
-    public WallInteraction? GetSeedWallInteraction(Vector2Int a, Vector2Int b)
+    public WallInteractionConfig GetSeedWallInteraction(Vector2Int a, Vector2Int b)
     {
         long key = ConnKey(a, b);
-        return wallInteractions.TryGetValue(key, out var wi) ? (WallInteraction?)wi : null;
+        return wallInteractions.TryGetValue(key, out var wi) ? wi : null;
     }
 
     /// <summary>Read blocked state from generation data. Used only during initial wiring.</summary>
     public bool IsSeedBlocked(Vector2Int a, Vector2Int b)
     {
         long key = ConnKey(a, b);
-        return wallInteractions.TryGetValue(key, out var wi) && wi.blocksPassage;
+        return wallInteractions.TryGetValue(key, out var wi) && wi.BlocksPassage;
     }
 
     // Room models — set after tile creation so WallModels become authoritative
@@ -123,15 +123,7 @@ public class MapModel
         };
 
         wallInteractions.Clear();
-        wallInteractions[ConnKey(roomA, roomC)] = new WallInteraction
-        {
-            requiredGear = GearType.Bomb,
-            duration = 5f,
-            energyCost = 2,
-            label = "CLEAR RUBBLE",
-            blocksPassage = true,
-            resultingPassageType = PassageType.Corridor,
-        };
+        wallInteractions[ConnKey(roomA, roomC)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
     }
 
     public void GenerateLayout()
@@ -196,15 +188,9 @@ public class MapModel
                 var originalType = c.type;
                 c.type = PassageType.Rubble;
                 Connections[i] = c;
-                wallInteractions[ConnKey(c.roomA, c.roomB)] = new WallInteraction
-                {
-                    requiredGear = GearType.Bomb,
-                    duration = 5f,
-                    energyCost = 2,
-                    label = "CLEAR RUBBLE",
-                    blocksPassage = true,
-                    resultingPassageType = originalType,
-                };
+                var interaction = WallInteractionConfig.RubbleClear(GearType.Bomb);
+                interaction.ResultingPassageType = originalType;
+                wallInteractions[ConnKey(c.roomA, c.roomB)] = interaction;
             }
         }
     }
@@ -392,7 +378,7 @@ public class MapModel
         return false;
     }
 
-    public WallInteraction? GetWallInteraction(Vector2Int a, Vector2Int b)
+    public WallInteractionConfig GetWallInteraction(Vector2Int a, Vector2Int b)
     {
         var wall = GetWall(a, b);
         return wall?.Interaction;
@@ -467,29 +453,6 @@ public class MapModel
     }
 
     public const int ScanEnergyCost = 2;
-    public const float ChargeDuration = 4f;
-    public const int ChargeEnergyGain = 5;
-    public const float RefitDuration = 2f;
-
-    public static string StationLabel(StationType type)
-    {
-        switch (type)
-        {
-            case StationType.Charging:  return "CHARGE";
-            case StationType.Refitting: return "REFIT";
-            default:                    return "";
-        }
-    }
-
-    public static float StationDuration(StationType type)
-    {
-        switch (type)
-        {
-            case StationType.Charging:  return ChargeDuration;
-            case StationType.Refitting: return RefitDuration;
-            default:                    return 0f;
-        }
-    }
 
     // ── Pathfinding (Dijkstra) ───────────────
 

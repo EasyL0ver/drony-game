@@ -8,7 +8,6 @@ using UnityEngine;
 public class RefittingStation : WallView
 {
     public override float ParkOffset => 1.2f;
-    public override StationType StationType => StationType.Refitting;
 
     void OnEnable()
     {

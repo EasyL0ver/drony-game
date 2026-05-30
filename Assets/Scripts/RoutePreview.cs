@@ -71,7 +71,7 @@ public class RoutePreview
 
     // ── journey (active move) ───────────────
 
-    public void SetJourney(List<Vector2Int> path, StationType stationAction)
+    public void SetJourney(List<Vector2Int> path, WallView station = null)
     {
         journeyWaypoints.Clear();
         journeyCumulDist.Clear();
@@ -92,13 +92,13 @@ public class RoutePreview
             prev = room;
         }
 
-        if (stationAction != StationType.None)
+        if (station != null)
         {
             var lastCoord = path[path.Count - 1];
             var lastTile = fog?.GetTile(lastCoord);
-            if (lastTile != null && lastTile.RModel.StationEdge >= 0)
+            if (lastTile != null && lastTile.GetStation() == station)
             {
-                Vector3 wallPt = map.WallMidpoint(lastCoord, lastTile.RModel.StationEdge, lastTile.RModel.Size);
+                Vector3 wallPt = StationPoint(lastTile, station, pathY);
                 journeyWaypoints.Add(new Vector3(wallPt.x, pathY, wallPt.z));
             }
         }
@@ -137,7 +137,8 @@ public class RoutePreview
         while (stepIdx < journey.Count)
         {
             var step = journey[stepIdx];
-            Vector3 barPos = (step.isCharge || step.isRefit) && destTile != null && destTile.RModel.StationEdge >= 0
+            Vector3 barPos = step.isInteraction && step.interactionConfig != null
+                && !step.interactionConfig.BlocksPassage && destTile != null && destTile.RModel.StationEdge >= 0
                 ? map.WallMidpoint(destCoord, destTile.RModel.StationEdge, destTile.RModel.Size)
                 : map.HexCenter(destCoord);
             journeyAnchors.Add(new StepAnchor
@@ -178,7 +179,7 @@ public class RoutePreview
 
     // ── preview (hover) ─────────────────────
 
-    public void ShowPath(List<Vector2Int> previewPath, StationType stationAction = StationType.None)
+    public void ShowPath(List<Vector2Int> previewPath, WallView station = null)
     {
         if (previewPath == null || previewPath.Count == 0)
         {
@@ -217,16 +218,9 @@ public class RoutePreview
         }
 
         var pvStation = finalTile?.GetStation();
-        if (pvStation != null && pvStation.StationType == stationAction)
+        if (pvStation != null && pvStation == station)
         {
-            plan.Add(new DroneController.JourneyStep
-            {
-                label = MapModel.StationLabel(stationAction),
-                duration = MapModel.StationDuration(stationAction),
-                isCharge = stationAction == StationType.Charging,
-                isRefit = stationAction == StationType.Refitting,
-                energyCost = 0,
-            });
+            plan.Add(CreateInteractionStep(pvStation.Model?.Interaction));
         }
 
         previewWaypoints.Clear();
@@ -244,13 +238,13 @@ public class RoutePreview
             prev = room;
         }
 
-        if (stationAction != StationType.None)
+        if (station != null)
         {
             var lastCoord = previewPath[previewPath.Count - 1];
             var lastTile = fog?.GetTile(lastCoord);
-            if (lastTile != null && lastTile.RModel.StationEdge >= 0)
+            if (lastTile != null && lastTile.GetStation() == station)
             {
-                Vector3 wallPt = map.WallMidpoint(lastCoord, lastTile.RModel.StationEdge, lastTile.RModel.Size);
+                Vector3 wallPt = StationPoint(lastTile, station, pathY);
                 previewWaypoints.Add(new Vector3(wallPt.x, pathY, wallPt.z));
             }
         }
@@ -297,7 +291,8 @@ public class RoutePreview
         while (stepIdx < plan.Count)
         {
             var step = plan[stepIdx];
-            Vector3 barPos = (step.isCharge || step.isRefit) && pvDestTile != null && pvDestTile.RModel.StationEdge >= 0
+            Vector3 barPos = step.isInteraction && step.interactionConfig != null
+                && !step.interactionConfig.BlocksPassage && pvDestTile != null && pvDestTile.RModel.StationEdge >= 0
                 ? map.WallMidpoint(pvDestCoord, pvDestTile.RModel.StationEdge, pvDestTile.RModel.Size)
                 : map.HexCenter(pvDestCoord);
             previewAnchors.Add(new StepAnchor
@@ -314,31 +309,22 @@ public class RoutePreview
         }
     }
 
-    public void ShowStation(RoomTile tile, StationType stationAction = StationType.None)
+    public void ShowStation(RoomTile tile, WallView station = null)
     {
         if (tile == null || !tile.RModel.IsStation) return;
         if (drone.IsPerformingStationAction) return;
 
-        var station = tile.GetStation();
-        if (station == null || station.StationType != stationAction) return;
+        station ??= tile.GetStation();
+        if (station == null || !station.IsStation) return;
 
         ClearPreview();
         isShowing = true;
         plan.Clear();
 
-        plan.Add(new DroneController.JourneyStep
-        {
-            label = MapModel.StationLabel(stationAction),
-            duration = MapModel.StationDuration(stationAction),
-            isCharge = stationAction == StationType.Charging,
-            isRefit = stationAction == StationType.Refitting,
-            energyCost = 0,
-        });
+        plan.Add(CreateInteractionStep(station.Model?.Interaction));
 
         previewAnchors.Clear();
-        Vector3 rc = tile.RModel.StationEdge >= 0
-            ? map.WallMidpoint(tile.Coord, tile.RModel.StationEdge, tile.RModel.Size)
-            : map.HexCenter(tile.Coord);
+        Vector3 rc = StationPoint(tile, station, 0.5f);
         previewAnchors.Add(new StepAnchor
         {
             worldPos = new Vector3(rc.x, 0.5f, rc.z),
@@ -381,7 +367,7 @@ public class RoutePreview
     /// Show a wall interaction preview (rubble clear) when the drone is already
     /// at the approach room. Shows a short dashed line to the passage wall.
     /// </summary>
-    public void ShowWallInteraction(Vector2Int approachRoom, Vector2Int otherRoom, WallInteraction wi)
+    public void ShowWallInteraction(Vector2Int approachRoom, Vector2Int otherRoom, WallInteractionConfig wi)
     {
         if (drone.IsPerformingStationAction) return;
 
@@ -389,13 +375,7 @@ public class RoutePreview
         isShowing = true;
         plan.Clear();
 
-        plan.Add(new DroneController.JourneyStep
-        {
-            label = wi.label,
-            duration = wi.duration,
-            isWallAction = true,
-            energyCost = wi.energyCost,
-        });
+        plan.Add(CreateInteractionStep(wi));
 
         Vector3 wallPt = PassagePoint(approachRoom, otherRoom, 0.5f);
         previewAnchors.Clear();
@@ -446,7 +426,7 @@ public class RoutePreview
         bool hasPath = journeyWaypoints.Count > 1 && journeyIdx >= 0;
 
         if (!hasPath || (journeyIdx < journey.Count
-            && (journey[journeyIdx].isScan || journey[journeyIdx].isCharge || journey[journeyIdx].isRefit)))
+            && (journey[journeyIdx].isScan || journey[journeyIdx].isInteraction)))
         {
             if (pathLineGO != null) pathLineGO.SetActive(false);
             return;
@@ -560,5 +540,30 @@ public class RoutePreview
             return new Vector3(pass.DroneParkPoint.x, y, pass.DroneParkPoint.z);
         var (mid, _) = map.PassageEndpoints(from, to);
         return new Vector3(mid.x, y, mid.z);
+    }
+
+    static DroneController.JourneyStep CreateInteractionStep(WallInteractionConfig interaction)
+    {
+        if (interaction == null) return default;
+        return new DroneController.JourneyStep
+        {
+            label = interaction.Label,
+            duration = interaction.BaseDuration,
+            isInteraction = true,
+            interactionConfig = interaction,
+            energyCost = interaction.EnergyCost,
+        };
+    }
+
+    Vector3 StationPoint(RoomTile tile, WallView station, float y)
+    {
+        if (tile != null && station != null && station.Model != null)
+        {
+            var wallPt = map.WallMidpoint(tile.Coord, station.Model.EdgeIndex, tile.RModel.Size);
+            return new Vector3(wallPt.x, y, wallPt.z);
+        }
+
+        Vector3 roomPt = tile != null ? map.HexCenter(tile.Coord) : Vector3.zero;
+        return new Vector3(roomPt.x, y, roomPt.z);
     }
 }

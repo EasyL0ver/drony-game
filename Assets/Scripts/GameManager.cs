@@ -68,7 +68,7 @@ public class GameManager : MonoBehaviour
         // ── spawn rubble barriers for blocked connections ──
         foreach (var (a, b, type) in hexMap.ConnectionList)
         {
-            if (hexMap.Model.GetWallInteraction(a, b).HasValue)
+            if (hexMap.Model.GetWallInteraction(a, b) != null)
                 SpawnRubbleBarrier(a, b);
         }
 
@@ -78,7 +78,7 @@ public class GameManager : MonoBehaviour
         // ── spawn refitting station building at a free wall ──
         var stationBldgGO = new GameObject("RefittingStation");
         stationBldgGO.transform.SetParent(stationTile.transform, false);
-        PlaceAtWall(stationBldgGO, Vector2Int.zero, stationTile.RModel, StationType.Refitting);
+        PlaceAtWall(stationBldgGO, Vector2Int.zero, stationTile.RModel, WallInteractionConfig.Refitting());
         var refitView = stationBldgGO.AddComponent<RefittingStation>();
         refitView.SetModel(stationTile.RModel.Walls[stationTile.RModel.StationEdge]);
 
@@ -100,7 +100,7 @@ public class GameManager : MonoBehaviour
 
             var chargeBldgGO = new GameObject("ChargingStation");
             chargeBldgGO.transform.SetParent(chargeTile.transform, false);
-            PlaceAtWall(chargeBldgGO, chargingCoord, chargeTile.RModel, StationType.Charging);
+            PlaceAtWall(chargeBldgGO, chargingCoord, chargeTile.RModel, WallInteractionConfig.Charging());
             var chargeView = chargeBldgGO.AddComponent<ChargingStation>();
             chargeView.SetModel(chargeTile.RModel.Walls[chargeTile.RModel.StationEdge]);
         }
@@ -193,7 +193,7 @@ public class GameManager : MonoBehaviour
     /// Position a station GO at a free hex wall (edge without a passage),
     /// rotated to face inward. Records the edge on the RoomModel.
     /// </summary>
-    void PlaceAtWall(GameObject go, Vector2Int coord, RoomModel model, StationType stationType)
+    void PlaceAtWall(GameObject go, Vector2Int coord, RoomModel model, WallInteractionConfig interaction)
     {
         Vector3 center = hexMap.HexCenter(coord);
         float roomR = hexMap.RoomRadius(hexMap.RoomSizeMap[coord]);
@@ -215,8 +215,8 @@ public class GameManager : MonoBehaviour
             if (!usedEdges.Contains(i)) { edge = i; break; }
         }
 
-        // Record on model
-        model.SetWallStation(edge, stationType);
+        model.Walls[edge].Interaction = interaction;
+        model.Walls[edge].IsBlocked = interaction != null && interaction.BlocksPassage;
 
         // Edge midpoint sits on the wall
         Vector3 c0 = hexMap.Corner(center, edge, roomR);

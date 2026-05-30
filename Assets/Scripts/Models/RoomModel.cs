@@ -13,36 +13,21 @@ public class RoomModel
     public RoomSize Size { get; private set; }
     public FogState State { get; private set; } = FogState.Unknown;
 
-    /// <summary>The type of station in this room, if any.</summary>
-    public StationType Station { get; private set; } = StationType.None;
-
     /// <summary>Which edge (0-5) the station sits on. -1 if no station.</summary>
-    public int StationEdge { get; private set; } = -1;
-
-    /// <summary>What occupies each hex wall (6 edges). Passages tracked separately in Connections.</summary>
-    StationType[] wallStations = new StationType[6];
+    public int StationEdge => FindStationEdge();
 
     /// <summary>The 6 wall models for this room's hex edges.</summary>
     public WallModel[] Walls { get; private set; }
 
-    /// <summary>Place a station on a specific edge.</summary>
-    public void SetWallStation(int edge, StationType type)
-    {
-        wallStations[edge] = type;
-        Station = type;
-        StationEdge = edge;
-        Walls[edge].Station = type;
-    }
-
-    /// <summary>Get the station type on a specific edge.</summary>
-    public StationType GetWallStation(int edge) => wallStations[edge];
-
     /// <summary>Convenience: true if this room has any station.</summary>
-    public bool IsStation => Station != StationType.None;
+    public bool IsStation => StationEdge >= 0;
 
-    /// <summary>Legacy convenience accessor.</summary>
-    public bool IsRefittingStation => Station == StationType.Refitting;
-    public bool IsChargingStation => Station == StationType.Charging;
+    public bool HasStation(int edge)
+    {
+        if (edge < 0 || edge >= Walls.Length) return false;
+        var wall = Walls[edge];
+        return wall.HasInteraction && !wall.Interaction.BlocksPassage;
+    }
 
     // Scanning
     public float ScanDuration { get; set; } = 3f;
@@ -159,6 +144,14 @@ public class RoomModel
         var old = State;
         State = newState;
         OnStateChanged?.Invoke(old, newState);
+    }
+
+    int FindStationEdge()
+    {
+        for (int i = 0; i < Walls.Length; i++)
+            if (HasStation(i))
+                return i;
+        return -1;
     }
 }
 

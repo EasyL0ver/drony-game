@@ -50,7 +50,7 @@ public class RoomTile : MonoBehaviour
     public WallView GetStation()
     {
         foreach (var w in GetComponentsInChildren<WallView>())
-            if (w.StationType != StationType.None) return w;
+            if (w.IsStation) return w;
         return null;
     }
 
@@ -262,7 +262,7 @@ public class RoomTile : MonoBehaviour
 
     // ── interaction ──────────────────────────
 
-    public void SetHovered(bool hovered, StationType hoveredStationType = StationType.None)
+    public void SetHovered(bool hovered, WallView hoveredWall = null)
     {
         isHovered = hovered;
         if (hoverHighlight != null)
@@ -287,8 +287,8 @@ public class RoomTile : MonoBehaviour
         // Station structure glow
         foreach (var w in GetComponentsInChildren<WallView>())
         {
-            if (w.StationType == StationType.None) continue;
-            w.SetHoverGlow(hovered && hoveredStationType == w.StationType);
+            if (!w.IsStation) continue;
+            w.SetHoverGlow(hovered && w == hoveredWall);
         }
     }
 

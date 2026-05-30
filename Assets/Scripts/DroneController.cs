@@ -109,9 +109,8 @@ public class DroneController : MonoBehaviour
         public string label;
         public float duration;
         public bool isScan;
-        public bool isCharge;
-        public bool isRefit;
-        public bool isWallAction;
+        public bool isInteraction;
+        public WallInteractionConfig interactionConfig;
         public int energyCost;
     }
 
@@ -123,8 +122,6 @@ public class DroneController : MonoBehaviour
 
     // Connection being cleared (for wall interaction completion)
     Vector2Int wallActionRoomA, wallActionRoomB;
-    GearType wallActionGear;
-
     // Active station view (for energy beam visuals)
     WallView activeStation;
 
@@ -208,7 +205,7 @@ public class DroneController : MonoBehaviour
             var tile = fog?.GetTile(CurrentRoom);
             return tile != null ? tile.ScanProgress : 0f;
         }
-        if (journeyPlan[i].isCharge || journeyPlan[i].isRefit || journeyPlan[i].isWallAction)
+        if (journeyPlan[i].isInteraction)
             return activeWallAction != null ? activeWallAction.Progress : 0f;
         // Travel step — compute from waypoint progress
         float totalDist = 0f, doneDist = 0f;
@@ -270,12 +267,12 @@ public class DroneController : MonoBehaviour
     /// <summary>True when the drone is executing a timed action (charge/refit/wall interaction).</summary>
     public bool IsPerformingStationAction =>
         journeyIdx >= 0 && journeyIdx < journeyPlan.Count
-        && (journeyPlan[journeyIdx].isCharge || journeyPlan[journeyIdx].isRefit || journeyPlan[journeyIdx].isWallAction);
+        && journeyPlan[journeyIdx].isInteraction;
 
     /// <summary>
     /// Start a station action (charge/refit) when the drone is already on a station tile.
     /// </summary>
-    public void StartStationAction(RoomTile tile, StationType stationAction = StationType.None)
+    public void StartStationAction(RoomTile tile, WallView station = null)
     {
         if (tile == null) return;
         if (IsMoving || IsPerformingStationAction) return;
@@ -290,17 +287,11 @@ public class DroneController : MonoBehaviour
         journeyPlan.Clear();
         preview?.ClearJourney();
 
-        var station = tile.GetStation();
-        if (station == null || station.StationType != stationAction) return;
+        station ??= tile.GetStation();
+        var interaction = station?.Model?.Interaction;
+        if (station == null || interaction == null || interaction.BlocksPassage) return;
 
-        journeyPlan.Add(new JourneyStep
-        {
-            label = MapModel.StationLabel(stationAction),
-            duration = MapModel.StationDuration(stationAction),
-            isCharge = stationAction == StationType.Charging,
-            isRefit = stationAction == StationType.Refitting,
-            energyCost = 0,
-        });
+        journeyPlan.Add(CreateInteractionStep(interaction));
 
         journeyIdx = 0;
 
@@ -329,7 +320,7 @@ public class DroneController : MonoBehaviour
         preview?.SetStationJourney(parkPos);
     }
 
-    public void SetPath(List<Vector2Int> newPath, StationType stationAction = StationType.None)
+    public void SetPath(List<Vector2Int> newPath, WallView station = null)
     {
         IsRefitting = false;
         CancelActiveWallAction();
@@ -346,6 +337,9 @@ public class DroneController : MonoBehaviour
         var checkTile = fog?.GetTile(newPath[newPath.Count - 1]);
         if (checkTile != null && checkTile.State == FogState.Unknown && Model.CanScan)
             cost += scanEnergyCost;
+        var stationInteraction = station?.Model?.Interaction;
+        if (stationInteraction != null && !stationInteraction.BlocksPassage)
+            cost += stationInteraction.EnergyCost;
 
         int available = CurrentEnergy - JourneyEnergyCost;
         if (cost > available) return;
@@ -472,21 +466,12 @@ public class DroneController : MonoBehaviour
             }
 
             // Append station action
-            var station = finalTile?.GetStation();
-            if (station != null && station.StationType == stationAction)
-            {
-                journeyPlan.Add(new JourneyStep
-                {
-                    label = MapModel.StationLabel(stationAction),
-                    duration = MapModel.StationDuration(stationAction),
-                    isCharge = stationAction == StationType.Charging,
-                    isRefit = stationAction == StationType.Refitting,
-                    energyCost = 0,
-                });
-            }
+            var finalStation = finalTile?.GetStation();
+            if (finalStation != null && finalStation == station && stationInteraction != null && !stationInteraction.BlocksPassage)
+                journeyPlan.Add(CreateInteractionStep(stationInteraction));
 
             // If station action, add waypoint to approach station wall
-            if (stationAction != StationType.None && finalTile != null)
+            if (station != null && finalTile != null && finalStation == station)
             {
                 Vector3? parkPt = finalTile.StationDroneParkPoint;
                 if (parkPt.HasValue)
@@ -526,7 +511,7 @@ public class DroneController : MonoBehaviour
         }
 
         // Build route visualization (path line + step bars)
-        preview?.SetJourney(newPath, stationAction);
+        preview?.SetJourney(newPath, station);
         preview?.ClearPreview();
     }
 
@@ -540,7 +525,7 @@ public class DroneController : MonoBehaviour
                                           Vector2Int connRoomA, Vector2Int connRoomB)
     {
         var wi = map?.Model?.GetWallInteraction(connRoomA, connRoomB);
-        if (!wi.HasValue) return;
+        if (wi == null) return;
 
         // Determine approach room
         Vector2Int approachRoom;
@@ -562,7 +547,7 @@ public class DroneController : MonoBehaviour
                 prev = room;
             }
         }
-        cost += wi.Value.energyCost;
+        cost += wi.EnergyCost;
 
         int available = CurrentEnergy - JourneyEnergyCost;
         if (cost > available) return;
@@ -578,8 +563,6 @@ public class DroneController : MonoBehaviour
         // Store which connection we're clearing
         wallActionRoomA = connRoomA;
         wallActionRoomB = connRoomB;
-        wallActionGear = wi.Value.requiredGear;
-
         prev = CurrentRoom;
         int stepIdx = 0;
         Vector3 roomCenter = RoomWorldPos(CurrentRoom);
@@ -674,10 +657,11 @@ public class DroneController : MonoBehaviour
         // Append the wall interaction step
         journeyPlan.Add(new JourneyStep
         {
-            label = wi.Value.label,
-            duration = wi.Value.duration,
-            isWallAction = true,
-            energyCost = wi.Value.energyCost,
+            label = wi.Label,
+            duration = wi.BaseDuration,
+            isInteraction = true,
+            interactionConfig = wi,
+            energyCost = wi.EnergyCost,
         });
 
         // Add waypoint to approach the passage wall
@@ -709,17 +693,17 @@ public class DroneController : MonoBehaviour
             moveWaypoints[wi2] = wp;
         }
 
-        preview?.SetJourney(newPath ?? new List<Vector2Int>(), StationType.None);
+        preview?.SetJourney(newPath ?? new List<Vector2Int>());
         preview?.ClearPreview();
     }
 
-    public void ShowPreviewPath(List<Vector2Int> previewPath, StationType stationAction = StationType.None)
-        => preview?.ShowPath(previewPath, stationAction);
+    public void ShowPreviewPath(List<Vector2Int> previewPath, WallView station = null)
+        => preview?.ShowPath(previewPath, station);
 
-    public void ShowStationPreview(RoomTile tile, StationType stationAction = StationType.None)
-        => preview?.ShowStation(tile, stationAction);
+    public void ShowStationPreview(RoomTile tile, WallView station = null)
+        => preview?.ShowStation(tile, station);
 
-    public void ShowWallInteractionPreview(Vector2Int approachRoom, Vector2Int otherRoom, WallInteraction wi)
+    public void ShowWallInteractionPreview(Vector2Int approachRoom, Vector2Int otherRoom, WallInteractionConfig wi)
         => preview?.ShowWallInteraction(approachRoom, otherRoom, wi);
 
     public void ClearPreviewPath() => preview?.ClearPreview();
@@ -872,9 +856,7 @@ public class DroneController : MonoBehaviour
                 int step = wp.journeyStep;
                 if (step >= 0 && step < journeyPlan.Count
                     && !journeyPlan[step].isScan
-                    && !journeyPlan[step].isCharge
-                    && !journeyPlan[step].isRefit
-                    && !journeyPlan[step].isWallAction)
+                    && !journeyPlan[step].isInteraction)
                 {
                     CurrentEnergy = Mathf.Max(0, CurrentEnergy - journeyPlan[step].energyCost);
                     journeyIdx = step + 1;
@@ -927,9 +909,11 @@ public class DroneController : MonoBehaviour
             }
         }
 
-        // Advance charge/refit step (wait for drone to finish moving to station wall)
+        // Advance station interaction step (wait for drone to finish moving to station wall)
         if (journeyIdx >= 0 && journeyIdx < journeyPlan.Count
-            && (journeyPlan[journeyIdx].isCharge || journeyPlan[journeyIdx].isRefit))
+            && journeyPlan[journeyIdx].isInteraction
+            && journeyPlan[journeyIdx].interactionConfig != null
+            && !journeyPlan[journeyIdx].interactionConfig.BlocksPassage)
         {
             if (IsMoving) return;
 
@@ -943,14 +927,14 @@ public class DroneController : MonoBehaviour
                     activeStation = station;
                     var wallModel = station.Model;
                     activeWallAction = wallModel != null
-                        ? wallModel.BeginStationAction(Model)
-                        : new WallAction(null, Model, journeyPlan[journeyIdx].duration, 0, journeyPlan[journeyIdx].label);
+                        ? wallModel.BeginInteraction(Model)
+                        : new WallAction(null, Model, journeyPlan[journeyIdx].duration, journeyPlan[journeyIdx].energyCost, journeyPlan[journeyIdx].label);
                     station.PlayInteraction(transform, activeWallAction.Duration, null);
                 }
                 else
                 {
                     // Fallback if no station view found
-                    activeWallAction = new WallAction(null, Model, journeyPlan[journeyIdx].duration, 0, journeyPlan[journeyIdx].label);
+                    activeWallAction = new WallAction(null, Model, journeyPlan[journeyIdx].duration, journeyPlan[journeyIdx].energyCost, journeyPlan[journeyIdx].label);
                 }
             }
 
@@ -966,7 +950,9 @@ public class DroneController : MonoBehaviour
                 }
 
                 // Refit: enable gear management until drone moves again
-                if (journeyPlan[journeyIdx].isRefit)
+                if (activeWallAction.Wall?.Interaction?.EnablesRefit
+                    ?? journeyPlan[journeyIdx].interactionConfig?.EnablesRefit
+                    ?? false)
                     IsRefitting = true;
 
                 CancelActiveWallAction();
@@ -976,7 +962,9 @@ public class DroneController : MonoBehaviour
 
         // Advance wall interaction step
         if (journeyIdx >= 0 && journeyIdx < journeyPlan.Count
-            && journeyPlan[journeyIdx].isWallAction)
+            && journeyPlan[journeyIdx].isInteraction
+            && journeyPlan[journeyIdx].interactionConfig != null
+            && journeyPlan[journeyIdx].interactionConfig.BlocksPassage)
         {
             if (IsMoving) return;
 
@@ -1002,7 +990,9 @@ public class DroneController : MonoBehaviour
                 map?.Model?.CompleteWallInteraction(wallActionRoomA, wallActionRoomB);
                 OnWallInteractionCompleted?.Invoke(wallActionRoomA, wallActionRoomB);
 
-                if (wallActionGear == GearType.Bomb)
+                if (activeWallAction.Wall?.Interaction?.DestroysDrone
+                    ?? journeyPlan[journeyIdx].interactionConfig?.DestroysDrone
+                    ?? false)
                 {
                     CancelActiveWallAction();
                     Explode();
@@ -1056,6 +1046,19 @@ public class DroneController : MonoBehaviour
     {
         Vector3 c = map.HexCenter(room);
         return new Vector3(c.x, hoverY, c.z);
+    }
+
+    static JourneyStep CreateInteractionStep(WallInteractionConfig interaction)
+    {
+        if (interaction == null) return default;
+        return new JourneyStep
+        {
+            label = interaction.Label,
+            duration = interaction.BaseDuration,
+            isInteraction = true,
+            interactionConfig = interaction,
+            energyCost = interaction.EnergyCost,
+        };
     }
 
     float SmoothStep(float t) => t * t * (3f - 2f * t);
