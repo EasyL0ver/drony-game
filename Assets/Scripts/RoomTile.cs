@@ -46,10 +46,10 @@ public class RoomTile : MonoBehaviour
         }
     }
 
-    /// <summary>Get the station WallEntity in this room, or null.</summary>
-    public WallEntity GetStation()
+    /// <summary>Get the station WallView in this room, or null.</summary>
+    public WallView GetStation()
     {
-        foreach (var w in GetComponentsInChildren<WallEntity>())
+        foreach (var w in GetComponentsInChildren<WallView>())
             if (w.StationType != StationType.None) return w;
         return null;
     }
@@ -285,7 +285,7 @@ public class RoomTile : MonoBehaviour
         }
 
         // Station structure glow
-        foreach (var w in GetComponentsInChildren<WallEntity>())
+        foreach (var w in GetComponentsInChildren<WallView>())
         {
             if (w.StationType == StationType.None) continue;
             w.SetHoverGlow(hovered && hoveredStationType == w.StationType);
@@ -367,7 +367,7 @@ public class RoomTile : MonoBehaviour
         var mf = go.AddComponent<MeshFilter>();
         fogRenderer = go.AddComponent<MeshRenderer>();
         var col = go.AddComponent<MeshCollider>();
-        mf.sharedMesh = MakeHexLid(center, outlineRadius, fogMeshY);
+        mf.sharedMesh = RoomTileMesh.HexLid(center, outlineRadius, fogMeshY);
         col.sharedMesh = mf.sharedMesh;
         fogRenderer.sharedMaterial = matUnknown;
         fogRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -383,21 +383,7 @@ public class RoomTile : MonoBehaviour
 
         for (int i = 0; i < 6; i++)
         {
-            float a1 = Mathf.Deg2Rad * 60f * i;
-            float a2 = Mathf.Deg2Rad * 60f * ((i + 1) % 6);
-            float c1 = Mathf.Cos(a1), s1 = Mathf.Sin(a1);
-            float c2 = Mathf.Cos(a2), s2 = Mathf.Sin(a2);
-
-            Vector3 o1 = new Vector3(center.x + c1 * outerR, fogY, center.z + s1 * outerR);
-            Vector3 o2 = new Vector3(center.x + c2 * outerR, fogY, center.z + s2 * outerR);
-            Vector3 i1 = new Vector3(center.x + c1 * innerR, fogY, center.z + s1 * innerR);
-            Vector3 i2 = new Vector3(center.x + c2 * innerR, fogY, center.z + s2 * innerR);
-
-            var mesh = new Mesh { name = $"Edge{i}" };
-            mesh.SetVertices(new List<Vector3> { o1, i1, i2, o2 });
-            mesh.SetTriangles(new List<int> { 0, 1, 2, 0, 2, 3 }, 0);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
+            var mesh = RoomTileMesh.EdgeStrip(center, outerR, innerR, fogY, i);
 
             var go = new GameObject($"Edge_{i}");
             go.transform.SetParent(transform, false);
@@ -411,127 +397,6 @@ public class RoomTile : MonoBehaviour
 
             outlineEdges[i] = go;
         }
-    }
-
-    // ── hex lid mesh ─────────────────────────
-
-    Mesh MakeHexLid(Vector3 center, float r, float y)
-    {
-        var verts = new List<Vector3>();
-        var tris  = new List<int>();
-
-        verts.Add(new Vector3(center.x, y, center.z));
-        for (int i = 0; i < 6; i++)
-        {
-            float a = Mathf.Deg2Rad * 60f * i;
-            verts.Add(new Vector3(
-                center.x + Mathf.Cos(a) * r, y,
-                center.z + Mathf.Sin(a) * r));
-        }
-
-        for (int i = 0; i < 6; i++)
-        {
-            tris.Add(0);
-            tris.Add(((i + 1) % 6) + 1);
-            tris.Add(i + 1);
-        }
-
-        float floorY = -0.05f;
-        for (int i = 0; i < 6; i++)
-        {
-            int next = (i + 1) % 6;
-            Vector3 topA = verts[i + 1];
-            Vector3 topB = verts[next + 1];
-            Vector3 botA = new Vector3(topA.x, floorY, topA.z);
-            Vector3 botB = new Vector3(topB.x, floorY, topB.z);
-
-            int v = verts.Count;
-            verts.Add(topA); verts.Add(botA); verts.Add(botB); verts.Add(topB);
-            tris.Add(v);     tris.Add(v + 1); tris.Add(v + 2);
-            tris.Add(v);     tris.Add(v + 2); tris.Add(v + 3);
-        }
-
-        var m = new Mesh { name = "FogHex" };
-        m.SetVertices(verts);
-        m.SetTriangles(tris, 0);
-        m.RecalculateNormals();
-        m.RecalculateBounds();
-        return m;
-    }
-
-    // ── interaction meshes ───────────────────
-
-    void BuildInteractionMeshes(HexMapGenerator map)
-    {
-        Vector3 center = map.HexCenter(Coord);
-        Mesh hex = MakeFlatHex(center, outlineRadius * 0.97f, 0.03f);
-
-        // Hover highlight
-        hoverHighlight = new GameObject("Hover");
-        hoverHighlight.transform.SetParent(transform, false);
-        var mf1 = hoverHighlight.AddComponent<MeshFilter>();
-        hoverRenderer = hoverHighlight.AddComponent<MeshRenderer>();
-        mf1.sharedMesh = hex;
-        matHover = MakeInteractionMat(new Color(1f, 1f, 1f, 0.08f));
-        hoverRenderer.sharedMaterial = matHover;
-        hoverRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        hoverRenderer.receiveShadows = false;
-        hoverHighlight.SetActive(false);
-
-        // Move flash
-        moveFlash = new GameObject("MoveFlash");
-        moveFlash.transform.SetParent(transform, false);
-        var mf2 = moveFlash.AddComponent<MeshFilter>();
-        flashRenderer = moveFlash.AddComponent<MeshRenderer>();
-        mf2.sharedMesh = hex;
-        matFlash = MakeInteractionMat(new Color(1f, 1f, 1f, 0.3f));
-        flashRenderer.sharedMaterial = matFlash;
-        flashRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        flashRenderer.receiveShadows = false;
-        moveFlash.SetActive(false);
-
-        // Drone name label (world-space text on top of fog)
-        droneLabel = new GameObject("DroneLabel");
-        droneLabel.transform.SetParent(transform, false);
-        droneLabel.transform.position = new Vector3(center.x, fogMeshY + 0.05f, center.z);
-        droneLabel.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        droneLabelText = droneLabel.AddComponent<TextMesh>();
-        droneLabelText.fontSize = 32;
-        droneLabelText.characterSize = 0.12f;
-        droneLabelText.anchor = TextAnchor.MiddleCenter;
-        droneLabelText.alignment = TextAlignment.Center;
-        droneLabelText.color = Palette.WithAlpha(Palette.DroneIdle, 0.9f);
-        droneLabelText.text = "";
-        droneLabel.SetActive(false);
-    }
-
-    Mesh MakeFlatHex(Vector3 center, float r, float y)
-    {
-        var verts = new List<Vector3>();
-        var tris  = new List<int>();
-
-        verts.Add(new Vector3(center.x, y, center.z));
-        for (int i = 0; i < 6; i++)
-        {
-            float a = Mathf.Deg2Rad * 60f * i;
-            verts.Add(new Vector3(
-                center.x + Mathf.Cos(a) * r, y,
-                center.z + Mathf.Sin(a) * r));
-        }
-
-        for (int i = 0; i < 6; i++)
-        {
-            tris.Add(0);
-            tris.Add(((i + 1) % 6) + 1);
-            tris.Add(i + 1);
-        }
-
-        var m = new Mesh { name = "FlatHex" };
-        m.SetVertices(verts);
-        m.SetTriangles(tris, 0);
-        m.RecalculateNormals();
-        m.RecalculateBounds();
-        return m;
     }
 
     Material MakeInteractionMat(Color c)

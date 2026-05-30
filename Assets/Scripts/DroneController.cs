@@ -127,7 +127,7 @@ public class DroneController : MonoBehaviour
     GearType wallActionGear;
 
     // Active station (for energy beam)
-    WallEntity activeStation;
+    WallView activeStation;
 
     /// <summary>True after completing a REFIT action, until a new move is issued.</summary>
     public bool IsRefitting { get; private set; }

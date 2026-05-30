@@ -5,7 +5,7 @@ using UnityEngine;
 /// Placed at the wall midpoint, facing into the room (+Z = inward).
 /// Each connection spawns two Passage instances (one per room).
 /// </summary>
-public class Passage : WallEntity
+public class Passage : WallView
 {
     public override float ParkOffset => 0.5f;
 
