@@ -295,9 +295,6 @@ public class DroneController : MonoBehaviour
         var station = tile.GetStation();
         if (station == null || station.StationType != stationAction) return;
 
-        activeStation = station;
-        station.ShowBeam(transform);
-
         journeyPlan.Add(new JourneyStep
         {
             label = MapModel.StationLabel(stationAction),
