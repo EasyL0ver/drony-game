@@ -194,16 +194,7 @@ public class StationWallModel : WallModel
 
     public override WallPassability GetPassability(DroneModel drone)
     {
-        if (!HasNeighbor)
-            return WallPassability.Blocked;
-
-        return new WallPassability
-        {
-            CanPass = true,
-            Duration = CorridorWallModel.PassageBaseDuration(PassageType.Corridor),
-            EnergyCost = CorridorWallModel.PassageEnergyCost(PassageType.Corridor),
-            Label = CorridorWallModel.PassageLabel(PassageType.Corridor),
-        };
+        return WallPassability.Blocked;
     }
 
     public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
