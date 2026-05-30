@@ -304,11 +304,27 @@ public class RTSCamera : MonoBehaviour
 
     void ClampToBounds()
     {
+        if (boundsX <= 0f && boundsZ <= 0f) return;
+
+        // Clamp the ground point the camera looks at, not the camera's own position.
+        // The camera is offset back from its look-at point by the pitch angle.
+        float lookAheadZ = targetZoom / Mathf.Tan(targetPitch * Mathf.Deg2Rad);
+        float yawRad = targetYaw * Mathf.Deg2Rad;
+        float offsetX = Mathf.Sin(yawRad) * lookAheadZ;
+        float offsetZ = Mathf.Cos(yawRad) * lookAheadZ;
+
+        // Compute look-at point on ground
+        float lookX = targetPosition.x + offsetX;
+        float lookZ = targetPosition.z + offsetZ;
+
+        // Clamp the look-at point
         if (boundsX > 0f)
-            targetPosition.x = Mathf.Clamp(targetPosition.x,
-                boundsCenter.x - boundsX, boundsCenter.x + boundsX);
+            lookX = Mathf.Clamp(lookX, boundsCenter.x - boundsX, boundsCenter.x + boundsX);
         if (boundsZ > 0f)
-            targetPosition.z = Mathf.Clamp(targetPosition.z,
-                boundsCenter.y - boundsZ, boundsCenter.y + boundsZ);
+            lookZ = Mathf.Clamp(lookZ, boundsCenter.y - boundsZ, boundsCenter.y + boundsZ);
+
+        // Derive camera position back from clamped look-at
+        targetPosition.x = lookX - offsetX;
+        targetPosition.z = lookZ - offsetZ;
     }
 }
