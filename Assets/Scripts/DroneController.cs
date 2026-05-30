@@ -350,6 +350,22 @@ public class DroneController : MonoBehaviour
                     duration = pass.Duration,
                     energyCost = pass.EnergyCost,
                 });
+
+                // If traversal leads to unknown room and drone can scan, add scan step
+                if (Model.CanScan && wall.Neighbor?.Owner != null)
+                {
+                    var destTile = fog?.GetTile(wall.Neighbor.Owner.Coord);
+                    if (destTile != null && destTile.State == FogState.Unknown)
+                    {
+                        steps.Add(new JourneyStep
+                        {
+                            label = "SCAN",
+                            duration = destTile.ScanTotalTime,
+                            isScan = true,
+                            energyCost = MapModel.ScanEnergyCost,
+                        });
+                    }
+                }
             }
         }
         return steps;
@@ -479,8 +495,48 @@ public class DroneController : MonoBehaviour
         state = State.RoomNavigating;
         newTile.NavigateDrone(transform, center, Mathf.Max(0.15f, dist * 0.5f), () =>
         {
-            StartNextHop();
+            // Trigger scanning if room is unknown
+            if (newTile.State == FogState.Unknown && Model.CanScan)
+            {
+                newTile.OnDroneArrived(true);
+                StartScanning(newTile);
+            }
+            else
+            {
+                newTile.OnDroneArrived(false);
+                StartNextHop();
+            }
         });
+    }
+
+    void StartScanning(RoomTile tile)
+    {
+        // Add scan step to UI
+        journeySteps.Insert(journeyCurrentIndex, new JourneyStep
+        {
+            label = "SCAN",
+            duration = tile.ScanTotalTime,
+            isScan = true,
+            energyCost = MapModel.ScanEnergyCost,
+        });
+        stepStartTime = Time.time;
+
+        // Wait for scan to complete
+        state = State.WallAnimating; // block further movement
+        Action handler = null;
+        handler = () =>
+        {
+            tile.RModel.OnScanComplete -= handler;
+            OnScanComplete(tile);
+        };
+        tile.RModel.OnScanComplete += handler;
+    }
+
+    void OnScanComplete(RoomTile tile)
+    {
+        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - MapModel.ScanEnergyCost);
+        AdvanceJourneyStep();
+        StartNextHop();
     }
 
 
@@ -579,12 +635,23 @@ public class DroneController : MonoBehaviour
         }
     }
 
-    public float PreviewTotalTime => previewPath?.TotalTime ?? 0f;
+    public float PreviewTotalTime => cachedPreviewSteps != null
+        ? SumDuration(cachedPreviewSteps) : 0f;
     public bool IsShowingPreview => previewPath != null;
     public int JourneyEnergyCost => activeJourney?.RemainingEnergyCost ?? 0;
-    public int PreviewEnergyCost => previewPath?.TotalEnergyCost ?? 0;
-    public bool PreviewExceedsEnergy => previewPath != null
-        && previewPath.TotalEnergyCost > (Model.CurrentEnergy - JourneyEnergyCost);
+    public int PreviewEnergyCost => cachedPreviewSteps != null
+        ? SumEnergy(cachedPreviewSteps) : 0;
+    public bool PreviewExceedsEnergy => cachedPreviewSteps != null
+        && SumEnergy(cachedPreviewSteps) > (Model.CurrentEnergy - JourneyEnergyCost);
+
+    static float SumDuration(List<JourneyStep> steps)
+    {
+        float t = 0; foreach (var s in steps) t += s.duration; return t;
+    }
+    static int SumEnergy(List<JourneyStep> steps)
+    {
+        int e = 0; foreach (var s in steps) e += s.energyCost; return e;
+    }
 
     public float GetJourneyStepProgress(int i)
     {
