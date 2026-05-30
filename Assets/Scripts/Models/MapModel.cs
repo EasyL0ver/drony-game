@@ -73,6 +73,41 @@ public class MapModel
 
     // ── Layout generation ────────────────────
 
+    /// <summary>
+    /// Minimal test layout: three rooms — A and B connected by corridor,
+    /// A and C connected by rubbled passage (requires Bomb to clear).
+    /// </summary>
+    public void GenerateTestLayout()
+    {
+        var roomA = Vector2Int.zero;
+        var roomB = HexDirs[0]; // neighbor to the right
+        var roomC = HexDirs[1]; // neighbor upper-right
+
+        RoomList = new List<Vector2Int> { roomA, roomB, roomC };
+        RoomSizes = new Dictionary<Vector2Int, RoomSize>
+        {
+            { roomA, RoomSize.Large },
+            { roomB, RoomSize.Large },
+            { roomC, RoomSize.Large },
+        };
+        Connections = new List<Connection>
+        {
+            new Connection { roomA = roomA, roomB = roomB, type = PassageType.Corridor },
+            new Connection { roomA = roomA, roomB = roomC, type = PassageType.Rubble },
+        };
+
+        wallInteractions.Clear();
+        wallInteractions[ConnKey(roomA, roomC)] = new WallInteraction
+        {
+            requiredGear = GearType.Bomb,
+            duration = 5f,
+            energyCost = 2,
+            label = "CLEAR RUBBLE",
+            blocksPassage = true,
+            resultingPassageType = PassageType.Corridor,
+        };
+    }
+
     public void GenerateLayout()
     {
         var rng = new System.Random(Seed);

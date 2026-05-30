@@ -377,6 +377,53 @@ public class RoutePreview
         previewAnchors.Clear();
     }
 
+    /// <summary>
+    /// Show a wall interaction preview (rubble clear) when the drone is already
+    /// at the approach room. Shows a short dashed line to the passage wall.
+    /// </summary>
+    public void ShowWallInteraction(Vector2Int approachRoom, Vector2Int otherRoom, WallInteraction wi)
+    {
+        if (drone.IsPerformingStationAction) return;
+
+        ClearPreview();
+        isShowing = true;
+        plan.Clear();
+
+        plan.Add(new DroneController.JourneyStep
+        {
+            label = wi.label,
+            duration = wi.duration,
+            isWallAction = true,
+            energyCost = wi.energyCost,
+        });
+
+        Vector3 wallPt = PassagePoint(approachRoom, otherRoom, 0.5f);
+        previewAnchors.Clear();
+        previewAnchors.Add(new StepAnchor
+        {
+            worldPos = wallPt,
+            roomA = approachRoom,
+            roomB = otherRoom,
+            layer = 0,
+        });
+
+        previewWaypoints.Clear();
+        previewCumulDist.Clear();
+        Vector3 dronePos = drone.transform.position;
+        Vector3 target = PassagePoint(approachRoom, otherRoom, pathY);
+        previewWaypoints.Add(new Vector3(dronePos.x, pathY, dronePos.z));
+        previewWaypoints.Add(target);
+        previewCumulDist.Add(0f);
+        previewCumulDist.Add(Vector3.Distance(previewWaypoints[0], previewWaypoints[1]));
+
+        EnsurePreviewLine();
+        previewLineGO.SetActive(true);
+        Color col = Palette.WithAlpha(Palette.PreviewLine, 0.4f);
+        previewMat.color = col;
+        previewMat.SetColor("_BaseColor", col);
+        DroneController.BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
+    }
+
     // ── per-frame update ────────────────────
 
     public void Update()

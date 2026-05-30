@@ -19,6 +19,8 @@ public class HexMapGenerator : MonoBehaviour
     [Header("Map Layout")]
     [SerializeField] int roomCount = 18;
     [SerializeField] int seed = 42;
+    [SerializeField] bool testMode = true;
+    public bool TestMode => testMode;
 
     [Header("Hex Dimensions")]
     [SerializeField] float hexRadius = 5f;
@@ -81,9 +83,12 @@ public class HexMapGenerator : MonoBehaviour
             DestroyImmediate(transform.GetChild(0).gameObject);
 
         // --- 1. Layout via MapModel ---
-        Model = new MapModel(roomCount, seed, hexRadius, gridScale, mediumScale, smallScale,
+        Model = new MapModel(testMode ? 3 : roomCount, seed, hexRadius, gridScale, mediumScale, smallScale,
                              wallHeight, corridorWidth, ductWidth, ventPipeRadius);
-        Model.GenerateLayout();
+        if (testMode)
+            Model.GenerateTestLayout();
+        else
+            Model.GenerateLayout();
 
         // Build tuple list for backward compatibility
         ConnectionList = new List<(Vector2Int, Vector2Int, PassageType)>();

@@ -229,7 +229,16 @@ public class SelectionManager : MonoBehaviour
             if (best != null && best.Count > 0)
                 d.ShowPreviewPath(best);
             else if (d.CurrentRoom == hoveredConnA || d.CurrentRoom == hoveredConnB)
-                d.ShowPreviewPath(new List<Vector2Int>()); // already there
+            {
+                // Drone is already at the approach room — show wall interaction preview
+                Vector2Int approach = d.CurrentRoom;
+                Vector2Int other = (approach == hoveredConnA) ? hoveredConnB : hoveredConnA;
+                var wi = gm.hexMap.Model.GetWallInteraction(hoveredConnA, hoveredConnB);
+                if (wi.HasValue)
+                    d.ShowWallInteractionPreview(approach, other, wi.Value);
+                else
+                    d.ClearPreviewPath();
+            }
             else
                 d.ClearPreviewPath();
         }

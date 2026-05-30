@@ -723,6 +723,9 @@ public class DroneController : MonoBehaviour
     public void ShowStationPreview(RoomTile tile, StationType stationAction = StationType.None)
         => preview?.ShowStation(tile, stationAction);
 
+    public void ShowWallInteractionPreview(Vector2Int approachRoom, Vector2Int otherRoom, WallInteraction wi)
+        => preview?.ShowWallInteraction(approachRoom, otherRoom, wi);
+
     public void ClearPreviewPath() => preview?.ClearPreview();
 
     void Start()

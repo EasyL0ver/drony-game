@@ -122,6 +122,10 @@ public class GameManager : MonoBehaviour
             if (i == 0)
                 controller.Model.Equip(GearCatalog.Scanner);
 
+            // Hornet-2 starts with a Bomb in test mode
+            if (i == 1 && hexMap.TestMode)
+                controller.Model.Equip(GearCatalog.Bomb);
+
             var modelGO = new GameObject("Model");
             modelGO.transform.SetParent(droneGO.transform, false);
             modelGO.AddComponent<LowPolyDrone>();
