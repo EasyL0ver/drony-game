@@ -211,10 +211,14 @@ public class SelectionManager : MonoBehaviour
     void ShowWallInteractionPreviews()
     {
         // For wall interactions, path to the approach room (the side the drone can reach)
+        int edgeAB = gm.hexMap.EdgeToward(hoveredConnA, hoveredConnB);
+        var tileA = gm.fog.GetTile(hoveredConnA);
+        var wallModel = tileA?.RModel.Walls[edgeAB];
+
         foreach (var d in gm.Drones)
         {
             if (!d.IsSelected) continue;
-            if (!d.Model.CanClearRubble) { d.ClearPreviewPath(); continue; }
+            if (wallModel == null || !wallModel.CanInteract(d.Model)) { d.ClearPreviewPath(); continue; }
 
             // Try to path to either side of the blocked connection
             var pA = FindPath(d.CurrentRoom, hoveredConnA);
@@ -327,11 +331,15 @@ public class SelectionManager : MonoBehaviour
         // Wall interaction click (rubble, etc.)
         if (hasWI)
         {
+            int edgeAB = gm.hexMap.EdgeToward(connA, connB);
+            var wallTile = gm.fog.GetTile(connA);
+            var wallModel = wallTile?.RModel.Walls[edgeAB];
+
             foreach (var d in gm.Drones)
             {
                 if (!d.IsSelected) continue;
                 if (d.IsPerformingStationAction) continue;
-                if (!d.Model.CanClearRubble) continue;
+                if (wallModel == null || !wallModel.CanInteract(d.Model)) continue;
 
                 // Path to whichever side is reachable (prefer shorter)
                 var pA = FindPath(d.CurrentRoom, connA);

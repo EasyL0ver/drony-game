@@ -28,8 +28,34 @@ public class MapModel
         = new Dictionary<Vector2Int, RoomSize>();
     public List<Connection> Connections { get; private set; } = new List<Connection>();
 
-    // Wall interactions (rubble, etc.) — keyed by ConnKey
+    // Wall interactions (rubble, etc.) — keyed by ConnKey (used during generation only)
     readonly Dictionary<long, WallInteraction> wallInteractions = new Dictionary<long, WallInteraction>();
+
+    /// <summary>Read wall interaction from generation data. Used only during initial wiring.</summary>
+    public WallInteraction? GetSeedWallInteraction(Vector2Int a, Vector2Int b)
+    {
+        long key = ConnKey(a, b);
+        return wallInteractions.TryGetValue(key, out var wi) ? (WallInteraction?)wi : null;
+    }
+
+    /// <summary>Read blocked state from generation data. Used only during initial wiring.</summary>
+    public bool IsSeedBlocked(Vector2Int a, Vector2Int b)
+    {
+        long key = ConnKey(a, b);
+        return wallInteractions.TryGetValue(key, out var wi) && wi.blocksPassage;
+    }
+
+    // Room models — set after tile creation so WallModels become authoritative
+    Dictionary<Vector2Int, RoomModel> rooms;
+
+    /// <summary>
+    /// Register room models so that IsBlocked/GetWallInteraction/GetPassageType
+    /// delegate to WallModel as the single source of truth.
+    /// </summary>
+    public void RegisterRooms(Dictionary<Vector2Int, RoomModel> roomModels)
+    {
+        rooms = roomModels;
+    }
 
     /// <summary>One directional passage between two rooms.</summary>
     public struct Connection
@@ -343,48 +369,58 @@ public class MapModel
 
     // ── Passage lookup ───────────────────────
 
+    /// <summary>Get the WallModel for the edge from room 'a' toward room 'b', or null.</summary>
+    WallModel GetWall(Vector2Int a, Vector2Int b)
+    {
+        if (rooms == null || !rooms.TryGetValue(a, out var room)) return null;
+        int edge = EdgeToward(a, b);
+        return room.Walls[edge];
+    }
+
     /// <summary>Returns the passage type between two adjacent rooms.</summary>
     public PassageType GetPassageType(Vector2Int from, Vector2Int to)
     {
-        long key = ConnKey(from, to);
-        foreach (var c in Connections)
-        {
-            if (ConnKey(c.roomA, c.roomB) == key)
-                return c.type;
-        }
+        var wall = GetWall(from, to);
+        if (wall != null) return wall.PassageType;
         return PassageType.Corridor;
     }
 
     public bool IsBlocked(Vector2Int a, Vector2Int b)
     {
-        long key = ConnKey(a, b);
-        return wallInteractions.TryGetValue(key, out var wi) && wi.blocksPassage;
+        var wall = GetWall(a, b);
+        if (wall != null) return wall.IsBlocked;
+        return false;
     }
 
     public WallInteraction? GetWallInteraction(Vector2Int a, Vector2Int b)
     {
-        long key = ConnKey(a, b);
-        return wallInteractions.TryGetValue(key, out var wi) ? (WallInteraction?)wi : null;
+        var wall = GetWall(a, b);
+        return wall?.Interaction;
     }
 
     /// <summary>
     /// Complete a wall interaction: remove it and apply its resulting passage type.
+    /// Updates both the legacy data structures and WallModels.
     /// Returns true if an interaction was found and completed.
     /// </summary>
     public bool CompleteWallInteraction(Vector2Int a, Vector2Int b)
     {
-        long key = ConnKey(a, b);
-        if (!wallInteractions.TryGetValue(key, out var wi)) return false;
+        // Update WallModels (authoritative source)
+        var wallAB = GetWall(a, b);
+        var wallBA = GetWall(b, a);
+        wallAB?.CompleteInteraction();
+        wallBA?.CompleteInteraction();
 
+        // Update legacy data structures
+        long key = ConnKey(a, b);
         wallInteractions.Remove(key);
 
-        // Update connection type to the result
         for (int i = 0; i < Connections.Count; i++)
         {
             if (ConnKey(Connections[i].roomA, Connections[i].roomB) == key)
             {
                 var c = Connections[i];
-                c.type = wi.resultingPassageType;
+                c.type = wallAB?.PassageType ?? PassageType.Corridor;
                 Connections[i] = c;
                 break;
             }

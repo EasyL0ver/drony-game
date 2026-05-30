@@ -22,12 +22,16 @@ public class RoomModel
     /// <summary>What occupies each hex wall (6 edges). Passages tracked separately in Connections.</summary>
     StationType[] wallStations = new StationType[6];
 
+    /// <summary>The 6 wall models for this room's hex edges.</summary>
+    public WallModel[] Walls { get; private set; }
+
     /// <summary>Place a station on a specific edge.</summary>
     public void SetWallStation(int edge, StationType type)
     {
         wallStations[edge] = type;
         Station = type;
         StationEdge = edge;
+        Walls[edge].Station = type;
     }
 
     /// <summary>Get the station type on a specific edge.</summary>
@@ -66,6 +70,10 @@ public class RoomModel
         Coord = coord;
         Size = size;
         ScanDuration = scanDuration;
+
+        Walls = new WallModel[6];
+        for (int i = 0; i < 6; i++)
+            Walls[i] = new WallModel(this, i);
     }
 
     // ── Connection management ────────────────

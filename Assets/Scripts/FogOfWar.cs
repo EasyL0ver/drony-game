@@ -35,6 +35,7 @@ public class FogOfWar : MonoBehaviour
         CreateMaterials();
         BuildTiles();
         WireConnections();
+        RegisterRoomModels();
     }
 
     public RoomTile GetTile(Vector2Int coord)
@@ -79,7 +80,31 @@ public class FogOfWar : MonoBehaviour
 
             tileA.AddConnection(new TileConnection { neighbor = tileB, passageType = type, edgeIndex = edgeAB });
             tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type, edgeIndex = edgeBA });
+
+            // Wire wall models from seed data
+            bool blocked = map.Model.IsSeedBlocked(a, b);
+            var wi = map.Model.GetSeedWallInteraction(a, b);
+
+            var wallAB = tileA.RModel.Walls[edgeAB];
+            wallAB.Neighbor = tileB.RModel;
+            wallAB.PassageType = type;
+            wallAB.IsBlocked = blocked;
+            wallAB.Interaction = wi;
+
+            var wallBA = tileB.RModel.Walls[edgeBA];
+            wallBA.Neighbor = tileA.RModel;
+            wallBA.PassageType = type;
+            wallBA.IsBlocked = blocked;
+            wallBA.Interaction = wi;
         }
+    }
+
+    void RegisterRoomModels()
+    {
+        var roomModels = new Dictionary<Vector2Int, RoomModel>();
+        foreach (var kvp in Tiles)
+            roomModels[kvp.Key] = kvp.Value.RModel;
+        map.Model.RegisterRooms(roomModels);
     }
 
     // ── materials ─────────────────────────
