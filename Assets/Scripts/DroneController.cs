@@ -14,17 +14,7 @@ public class DroneController : MonoBehaviour
     public bool IsSelected { get; set; }
     public bool IsMoving => moveSegIdx < moveWaypoints.Count - 1;
 
-    public string DroneName { get; private set; } = "Drone";
     public int DroneIndex { get; private set; }
-
-    // Discrete energy — delegates to model
-    public int MaxEnergy => Model != null ? Model.MaxEnergy : 10;
-    public int CurrentEnergy
-    {
-        get => Model != null ? Model.CurrentEnergy : 10;
-        set { if (Model != null) Model.CurrentEnergy = value; }
-    }
-    public float EnergyFraction => Model != null ? Model.EnergyFraction : 1f;
 
     /// <summary>True when the preview path costs more energy than available.</summary>
     public bool PreviewExceedsEnergy => preview != null && preview.ExceedsEnergy;
@@ -246,7 +236,7 @@ public class DroneController : MonoBehaviour
         };
 
         CurrentRoom = startRoom;
-        DroneName = droneName;
+        Model.Name = droneName;
         CreateSelectionRing();
         Model.SpeedJitter = 1f;
         Model.InitSlots();
@@ -349,7 +339,7 @@ public class DroneController : MonoBehaviour
             }
         }
 
-        int available = CurrentEnergy - JourneyEnergyCost;
+        int available = Model.CurrentEnergy - JourneyEnergyCost;
         if (cost > available) return;
 
         // Reset movement state
@@ -551,7 +541,7 @@ public class DroneController : MonoBehaviour
         }
         cost += wi.EnergyCost;
 
-        int available = CurrentEnergy - JourneyEnergyCost;
+        int available = Model.CurrentEnergy - JourneyEnergyCost;
         if (cost > available) return;
 
         IsRefitting = false;
@@ -746,7 +736,7 @@ public class DroneController : MonoBehaviour
         {
             float baseInt = droneModel.BaseGlowIntensity;
             Color stateCol;
-            if (CurrentEnergy <= 0)
+            if (Model.CurrentEnergy <= 0)
                 stateCol = Palette.DroneDepleted;
             else if (moveWaypoints.Count >= 2)
                 stateCol = Palette.DroneMoving;
@@ -860,7 +850,7 @@ public class DroneController : MonoBehaviour
                     && !journeyPlan[step].isScan
                     && !journeyPlan[step].isInteraction)
                 {
-                    CurrentEnergy = Mathf.Max(0, CurrentEnergy - journeyPlan[step].energyCost);
+                    Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - journeyPlan[step].energyCost);
                     journeyIdx = step + 1;
                 }
 
@@ -906,7 +896,7 @@ public class DroneController : MonoBehaviour
             var tile = fog?.GetTile(CurrentRoom);
             if (tile != null && tile.State != FogState.Scanning && tile.State != FogState.Unknown)
             {
-                CurrentEnergy = Mathf.Max(0, CurrentEnergy - journeyPlan[journeyIdx].energyCost);
+                Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - journeyPlan[journeyIdx].energyCost);
                 journeyIdx++;
             }
         }
@@ -998,7 +988,7 @@ public class DroneController : MonoBehaviour
 
             if (activeWallAction.IsComplete)
             {
-                CurrentEnergy = Mathf.Max(0, CurrentEnergy - activeWallAction.EnergyCost);
+                Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - activeWallAction.EnergyCost);
                 map?.Model?.CompleteWallInteraction(wallActionRoomA, wallActionRoomB);
                 OnWallInteractionCompleted?.Invoke(wallActionRoomA, wallActionRoomB);
 

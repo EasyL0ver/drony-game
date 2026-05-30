@@ -305,7 +305,7 @@ public class RoomTile : MonoBehaviour
             foreach (var d in dronesPresent)
             {
                 if (names.Length > 0) names.Append('\n');
-                names.Append(d.DroneName);
+                names.Append(d.Model.Name);
             }
             droneLabelText.text = names.ToString();
         }

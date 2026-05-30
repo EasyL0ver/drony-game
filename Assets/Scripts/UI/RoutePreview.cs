@@ -64,7 +64,7 @@ public class RoutePreview
     }
 
     public bool ExceedsEnergy =>
-        isShowing && EnergyCost > (drone.CurrentEnergy - drone.JourneyEnergyCost);
+        isShowing && EnergyCost > (drone.Model.CurrentEnergy - drone.JourneyEnergyCost);
 
     public IReadOnlyList<StepAnchor> JourneyAnchors => journeyAnchors;
     public IReadOnlyList<StepAnchor> PreviewAnchors => previewAnchors;
@@ -460,7 +460,7 @@ public class RoutePreview
     {
         if (pathLineGO != null) return;
 
-        pathLineGO = new GameObject("PathLine_" + drone.DroneName);
+        pathLineGO = new GameObject("PathLine_" + drone.Model.Name);
         pathMF = pathLineGO.AddComponent<MeshFilter>();
         pathMR = pathLineGO.AddComponent<MeshRenderer>();
 
@@ -491,7 +491,7 @@ public class RoutePreview
     {
         if (previewLineGO != null) return;
 
-        previewLineGO = new GameObject("PreviewLine_" + drone.DroneName);
+        previewLineGO = new GameObject("PreviewLine_" + drone.Model.Name);
         previewMF = previewLineGO.AddComponent<MeshFilter>();
         previewMR = previewLineGO.AddComponent<MeshRenderer>();
 

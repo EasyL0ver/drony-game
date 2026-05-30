@@ -205,7 +205,7 @@ public class DroneStatusUI : MonoBehaviour
     DroneCard CreateCard(Transform parent, DroneController drone)
     {
         // Card root
-        var cardGO = MakeImage(parent, "Card_" + drone.DroneName, cardColor);
+        var cardGO = MakeImage(parent, "Card_" + drone.Model.Name, cardColor);
         var cardImg = cardGO.GetComponent<Image>();
         var le = cardGO.AddComponent<LayoutElement>();
         le.preferredHeight = baseCardH;
@@ -293,7 +293,7 @@ public class DroneStatusUI : MonoBehaviour
         // ── RIGHT COLUMN: Name row ──
         float nY0 = -3f, nY1 = -17f;
 
-        var nameGO = MakeText(cardGO.transform, "Name", drone.DroneName, 12, accentColor,
+        var nameGO = MakeText(cardGO.transform, "Name", drone.Model.Name, 12, accentColor,
                               TextAnchor.MiddleLeft);
         nameGO.GetComponent<Text>().fontStyle = FontStyle.Bold;
         var nameRT = nameGO.GetComponent<RectTransform>();
@@ -323,7 +323,7 @@ public class DroneStatusUI : MonoBehaviour
         energyContRT.anchorMin = new Vector2(0, 1); energyContRT.anchorMax = new Vector2(1, 1);
         energyContRT.offsetMin = new Vector2(slotCol, eY1); energyContRT.offsetMax = new Vector2(-38, eY0);
 
-        int maxE = drone.MaxEnergy;
+        int maxE = drone.Model.MaxEnergy;
         var segments = new List<Image>();
         float segGap = 1.5f;
         for (int s = 0; s < maxE; s++)
@@ -438,8 +438,8 @@ public class DroneStatusUI : MonoBehaviour
                 continue;
             }
 
-            int curE = c.drone.CurrentEnergy;
-            int maxE = c.drone.MaxEnergy;
+            int curE = c.drone.Model.CurrentEnergy;
+            int maxE = c.drone.Model.MaxEnergy;
 
             // Determine how many segments are "threatened" by journey or preview
             int journeyCost = c.drone.JourneyEnergyCost;
@@ -672,7 +672,7 @@ public class DroneStatusUI : MonoBehaviour
         panelOutl.effectDistance = new Vector2(2, -2);
 
         // Header
-        var titleGO = MakeText(panelGO.transform, "Title", $"EQUIP {drone.DroneName}", 14, accentColor,
+        var titleGO = MakeText(panelGO.transform, "Title", $"EQUIP {drone.Model.Name}", 14, accentColor,
                                TextAnchor.MiddleCenter);
         titleGO.GetComponent<Text>().fontStyle = FontStyle.Bold;
         var titleRT = titleGO.GetComponent<RectTransform>();
