@@ -28,14 +28,16 @@ public abstract class WallView : MonoBehaviour
 
     /// <summary>
     /// Play a traversal animation: drone passes through this wall over the given duration.
+    /// departing=true: drone moves from park point into the wall (leaving room).
+    /// departing=false: drone moves from wall out to park point (entering room).
     /// Traversals cannot be cancelled — only reversed via ReverseTraversal().
     /// Override in subclasses for custom traversal visuals.
     /// </summary>
-    public virtual void PlayTraversal(Transform drone, float duration, System.Action onComplete)
+    public virtual void PlayTraversal(Transform drone, float duration, bool departing, System.Action onComplete)
     {
         isReversing = false;
         int token = ++animationToken;
-        activeAnimation = StartCoroutine(RunTraversal(drone, duration, token, onComplete));
+        activeAnimation = StartCoroutine(RunTraversal(drone, duration, departing, token, onComplete));
     }
 
     /// <summary>
@@ -77,26 +79,49 @@ public abstract class WallView : MonoBehaviour
         HideBeam();
     }
 
-    protected virtual IEnumerator RunTraversal(Transform drone, float duration, int token, System.Action onComplete)
+    protected virtual IEnumerator RunTraversal(Transform drone, float duration, bool departing, int token, System.Action onComplete)
     {
+        Vector3 parkPoint = DroneParkPoint;
+        Vector3 wallMid = transform.position;
+        parkPoint.y = drone.position.y;
+        wallMid.y = drone.position.y;
+
+        Vector3 start = departing ? parkPoint : wallMid;
+        Vector3 end = departing ? wallMid : parkPoint;
+
         float elapsed = 0f;
         while (elapsed < duration)
         {
             if (isReversing) break;
+            float t = elapsed / duration;
+            drone.position = Vector3.Lerp(start, end, t);
+            // Face direction of travel
+            Vector3 dir = (end - start).normalized;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.001f)
+                drone.rotation = Quaternion.Slerp(drone.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 8f);
             elapsed += Time.deltaTime;
             yield return null;
         }
 
         if (isReversing)
         {
-            // Reverse: take the same elapsed time to go back
+            // Reverse: go back from current position to start
+            Vector3 reverseFrom = drone.position;
             float reverseTime = elapsed;
             float reverseElapsed = 0f;
             while (reverseElapsed < reverseTime)
             {
+                float t = reverseElapsed / reverseTime;
+                drone.position = Vector3.Lerp(reverseFrom, start, t);
+                Vector3 dir = (start - reverseFrom).normalized;
+                dir.y = 0f;
+                if (dir.sqrMagnitude > 0.001f)
+                    drone.rotation = Quaternion.Slerp(drone.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 8f);
                 reverseElapsed += Time.deltaTime;
                 yield return null;
             }
+            drone.position = start;
             activeAnimation = null;
             isReversing = false;
             reverseCallback?.Invoke();
@@ -104,6 +129,7 @@ public abstract class WallView : MonoBehaviour
             yield break;
         }
 
+        drone.position = end;
         activeAnimation = null;
         if (token == animationToken) onComplete?.Invoke();
     }

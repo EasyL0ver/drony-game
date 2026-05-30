@@ -264,7 +264,7 @@ public class RoutePreview
             : Palette.WithAlpha(Palette.PreviewLine, 0.4f);
         previewMat.color = col;
         previewMat.SetColor("_BaseColor", col);
-        DroneController.BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
+        DashedRibbon.Build(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
 
         previewAnchors.Clear();
         prev = drone.CurrentRoom;
@@ -347,7 +347,7 @@ public class RoutePreview
         Color col = Palette.WithAlpha(Palette.PreviewLine, 0.4f);
         previewMat.color = col;
         previewMat.SetColor("_BaseColor", col);
-        DroneController.BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
+        DashedRibbon.Build(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
     }
 
     public void ClearPreview()
@@ -402,7 +402,7 @@ public class RoutePreview
         Color col = Palette.WithAlpha(Palette.PreviewLine, 0.4f);
         previewMat.color = col;
         previewMat.SetColor("_BaseColor", col);
-        DroneController.BuildDashedRibbonInto(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
+        DashedRibbon.Build(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
     }
 
     // ── per-frame update ────────────────────
@@ -453,7 +453,7 @@ public class RoutePreview
             consumed = journeyCumulDist[journeyCumulDist.Count - 1];
         }
 
-        DroneController.BuildDashedRibbonInto(pathMesh, journeyWaypoints, journeyCumulDist, consumed, pathWidth, dashLen, gapLen);
+        DashedRibbon.Build(pathMesh, journeyWaypoints, journeyCumulDist, consumed, pathWidth, dashLen, gapLen);
     }
 
     void EnsurePathLine()

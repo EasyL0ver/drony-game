@@ -73,6 +73,9 @@ public class RoomTile : MonoBehaviour
     GameObject droneLabel;
     TextMesh droneLabelText;
 
+    // World-space center of this room
+    public Vector3 Center { get; private set; }
+
     // Config (set once by builder)
     float fogElevation;
     float outlineRadius;
@@ -87,6 +90,7 @@ public class RoomTile : MonoBehaviour
         RModel = new RoomModel(coord, size, scanDur);
         RModel.OnStateChanged += OnModelStateChanged;
 
+        Center = map.HexCenter(coord);
         fogElevation = fogElev;
         outlineRadius = outlineR;
         matUnknown = unknown;
@@ -448,4 +452,51 @@ public class RoomTile : MonoBehaviour
         return mat;
     }
 
+    // ── Drone navigation within room ────────────
+
+    /// <summary>
+    /// Smoothly move a drone from its current position to a target point within this room.
+    /// Uses smooth-step easing. Calls onComplete when done.
+    /// </summary>
+    public void NavigateDrone(Transform drone, Vector3 target, float duration, System.Action onComplete)
+    {
+        StartCoroutine(RunNavigate(drone, target, duration, onComplete));
+    }
+
+    /// <summary>Navigate drone to this room's center point at the given hover height.</summary>
+    public void NavigateDroneToCenter(Transform drone, float hoverY, float duration, System.Action onComplete)
+    {
+        Vector3 target = new Vector3(Center.x, hoverY, Center.z);
+        NavigateDrone(drone, target, duration, onComplete);
+    }
+
+    /// <summary>Navigate drone to a passage's park point.</summary>
+    public void NavigateDroneToPassage(Transform drone, Passage passage, float hoverY, float duration, System.Action onComplete)
+    {
+        Vector3 target = passage.DroneParkPoint;
+        target.y = hoverY;
+        NavigateDrone(drone, target, duration, onComplete);
+    }
+
+    System.Collections.IEnumerator RunNavigate(Transform drone, Vector3 target, float duration, System.Action onComplete)
+    {
+        Vector3 start = drone.position;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            float t = elapsed / duration;
+            t = t * t * (3f - 2f * t); // smoothstep
+            drone.position = Vector3.Lerp(start, target, t);
+
+            Vector3 dir = (target - start);
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.001f)
+                drone.rotation = Quaternion.Slerp(drone.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 8f);
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        drone.position = target;
+        onComplete?.Invoke();
+    }
 }
