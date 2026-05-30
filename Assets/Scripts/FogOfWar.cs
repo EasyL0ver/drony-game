@@ -86,13 +86,14 @@ public class FogOfWar : MonoBehaviour
             var wi = map.Model.GetSeedWallInteraction(a, b);
 
             var wallAB = tileA.RModel.Walls[edgeAB];
-            wallAB.Neighbor = tileB.RModel;
+            var wallBA = tileB.RModel.Walls[edgeBA];
+
+            wallAB.Neighbor = wallBA;
             wallAB.PassageType = type;
             wallAB.IsBlocked = blocked;
             wallAB.Interaction = wi;
 
-            var wallBA = tileB.RModel.Walls[edgeBA];
-            wallBA.Neighbor = tileA.RModel;
+            wallBA.Neighbor = wallAB;
             wallBA.PassageType = type;
             wallBA.IsBlocked = blocked;
             wallBA.Interaction = wi;

@@ -13,8 +13,8 @@ public class WallModel
     /// <summary>The room this wall belongs to.</summary>
     public RoomModel Owner { get; private set; }
 
-    /// <summary>Neighbor room on the other side, or null if solid wall.</summary>
-    public RoomModel Neighbor { get; set; }
+    /// <summary>The wall on the other side of this edge, or null if solid (no neighbor room).</summary>
+    public WallModel Neighbor { get; set; }
 
     // ── Passage ──────────────────────────────
 
