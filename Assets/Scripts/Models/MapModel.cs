@@ -412,8 +412,8 @@ public class MapModel
         // Update WallModels (authoritative source)
         var wallAB = GetWall(a, b);
         var wallBA = GetWall(b, a);
-        wallAB?.CompleteInteraction();
-        wallBA?.CompleteInteraction();
+        (wallAB as CorridorWallModel)?.CompleteInteraction();
+        (wallBA as CorridorWallModel)?.CompleteInteraction();
 
         // Update legacy data structures
         long key = ConnKey(a, b);

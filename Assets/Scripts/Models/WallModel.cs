@@ -39,9 +39,6 @@ public abstract class WallModel
 
     // ── Convenience ─────────────────────────
 
-    /// <summary>Called when a blocking interaction completes. Override to update state.</summary>
-    public virtual PassageType? CompleteInteraction() => null;
-
     // ── Construction ─────────────────────────
 
     protected WallModel(RoomModel owner, int edgeIndex)
@@ -99,7 +96,8 @@ public class CorridorWallModel : WallModel
         IsBlocked = true;
     }
 
-    public override PassageType? CompleteInteraction()
+    /// <summary>Clear rubble: unblocks passage, removes interaction, returns new passage type.</summary>
+    public PassageType? CompleteInteraction()
     {
         if (_rubbleInteraction == null || !_rubbleInteraction.BlocksPassage) return null;
 
