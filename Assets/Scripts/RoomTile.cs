@@ -399,6 +399,50 @@ public class RoomTile : MonoBehaviour
         }
     }
 
+    void BuildInteractionMeshes(HexMapGenerator map)
+    {
+        Vector3 center = map.HexCenter(Coord);
+        Mesh hex = RoomTileMesh.FlatHex(center, outlineRadius * 0.97f, 0.03f);
+
+        // Hover highlight
+        hoverHighlight = new GameObject("Hover");
+        hoverHighlight.transform.SetParent(transform, false);
+        var mf1 = hoverHighlight.AddComponent<MeshFilter>();
+        hoverRenderer = hoverHighlight.AddComponent<MeshRenderer>();
+        mf1.sharedMesh = hex;
+        matHover = MakeInteractionMat(new Color(1f, 1f, 1f, 0.08f));
+        hoverRenderer.sharedMaterial = matHover;
+        hoverRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        hoverRenderer.receiveShadows = false;
+        hoverHighlight.SetActive(false);
+
+        // Move flash
+        moveFlash = new GameObject("MoveFlash");
+        moveFlash.transform.SetParent(transform, false);
+        var mf2 = moveFlash.AddComponent<MeshFilter>();
+        flashRenderer = moveFlash.AddComponent<MeshRenderer>();
+        mf2.sharedMesh = hex;
+        matFlash = MakeInteractionMat(new Color(1f, 1f, 1f, 0.3f));
+        flashRenderer.sharedMaterial = matFlash;
+        flashRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        flashRenderer.receiveShadows = false;
+        moveFlash.SetActive(false);
+
+        // Drone name label (world-space text on top of fog)
+        droneLabel = new GameObject("DroneLabel");
+        droneLabel.transform.SetParent(transform, false);
+        droneLabel.transform.position = new Vector3(center.x, fogMeshY + 0.05f, center.z);
+        droneLabel.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        droneLabelText = droneLabel.AddComponent<TextMesh>();
+        droneLabelText.fontSize = 32;
+        droneLabelText.characterSize = 0.12f;
+        droneLabelText.anchor = TextAnchor.MiddleCenter;
+        droneLabelText.alignment = TextAlignment.Center;
+        droneLabelText.color = Palette.WithAlpha(Palette.DroneIdle, 0.9f);
+        droneLabelText.text = "";
+        droneLabel.SetActive(false);
+    }
+
     Material MakeInteractionMat(Color c)
     {
         Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
