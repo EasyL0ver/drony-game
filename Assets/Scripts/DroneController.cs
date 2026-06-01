@@ -32,6 +32,11 @@ public class DroneController : MonoBehaviour
     /// <summary>Consistent drone movement speed in world units/second (from model).</summary>
     float DroneSpeed => Model.FullSpeed;
 
+    Color JourneyLineColor => Palette.WithAlpha(Palette.JourneyLine, IsSelected ? 0.55f : 0.2f);
+    Color PreviewLineColor => PreviewExceedsEnergy
+        ? Palette.WithAlpha(Palette.OverBudgetLine, 0.5f)
+        : Palette.WithAlpha(Palette.PreviewLine, 0.4f);
+
     // Active journey
     DroneJourney activeJourney;
     public DroneJourney ActiveJourney => activeJourney;
@@ -43,12 +48,9 @@ public class DroneController : MonoBehaviour
     float stepStartTime;
     float journeyStartTime;
 
-    // Route line segment tracking
-    int moveSegIdx;
-    float moveSegT;
-
-    // Last completed interaction (for IsRefitting)
+    // Last completed interaction (for IsRefitting / repeat logic)
     WallInteractionConfig lastCompletedInteraction;
+    WallView activeInteractionWall;
 
     public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0)
     {
@@ -108,7 +110,7 @@ public class DroneController : MonoBehaviour
         var path = new DronePath(walls, Model);
         activeJourney = new DroneJourney(path);
         previewPath = null;
-        moveSegIdx = 0; moveSegT = 0f;
+        
         routePreview?.ClearPreview();
         routePreview?.SetJourney(rooms, goalWall);
         BuildJourneySteps();
@@ -125,7 +127,7 @@ public class DroneController : MonoBehaviour
         activeJourney = new DroneJourney(previewPath);
         previewPath = null;
         cachedPreviewSteps = null;
-        moveSegIdx = 0; moveSegT = 0f;
+        
         var rooms = RoomsFromWalls(activeJourney.Walls);
         routePreview?.ClearPreview();
         routePreview?.SetJourney(rooms);
@@ -149,7 +151,7 @@ public class DroneController : MonoBehaviour
         activeJourney = new DroneJourney(path);
         previewPath = null;
         cachedPreviewSteps = null;
-        moveSegIdx = 0; moveSegT = 0f;
+        
         routePreview?.ClearPreview();
         routePreview?.SetJourney(rooms);
         BuildJourneySteps();
@@ -187,6 +189,9 @@ public class DroneController : MonoBehaviour
         float dist = Vector3.Distance(transform.position, parkPoint);
 
         state = State.RoomNavigating;
+        activeInteractionWall = wall;
+        currentTile.ShowLine(transform.position, parkPoint, JourneyLineColor);
+        if (wall.Model is StationWallModel stationA) stationA.OccupiedBy = Model;
         currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
         {
             stepStartTime = Time.time;
@@ -200,6 +205,9 @@ public class DroneController : MonoBehaviour
 
     public void Cancel()
     {
+        if (activeInteractionWall != null && activeInteractionWall.Model is StationWallModel stationC)
+            stationC.OccupiedBy = null;
+        activeInteractionWall = null;
         state = State.Idle;
         activeJourney = null;
         ClearJourneySteps();
@@ -511,14 +519,18 @@ public class DroneController : MonoBehaviour
         float arrDur = totalDist > 0.01f ? totalDur * (arrDist / totalDist) : totalDur * 0.5f;
 
         state = State.RoomNavigating;
+        Color lineCol = JourneyLineColor;
+        currentTile.ShowLine(transform.position, parkPoint, lineCol);
         currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(approachDist), () =>
         {
             stepStartTime = Time.time;
             state = State.WallAnimating;
+            capturedDeparture.ShowLine(parkPoint, depMid, lineCol);
             capturedDeparture.PlayTraversal(transform, depDur, true, () =>
             {
                 if (capturedArrival != null)
                 {
+                    capturedArrival.ShowLine(depMid, arrPark, lineCol);
                     capturedArrival.PlayTraversal(transform, arrDur, false, () =>
                     {
                         OnHopComplete(capturedTarget);
@@ -544,6 +556,10 @@ public class DroneController : MonoBehaviour
         float dist = Vector3.Distance(transform.position, parkPoint);
 
         state = State.RoomNavigating;
+        activeInteractionWall = passage;
+        if (wallModel is StationWallModel stationB) stationB.OccupiedBy = Model;
+        Color lineCol = JourneyLineColor;
+        currentTile.ShowLine(transform.position, parkPoint, lineCol);
         currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
         {
             stepStartTime = Time.time;
@@ -572,8 +588,6 @@ public class DroneController : MonoBehaviour
         // Advance journey + UI step + route line segment
         activeJourney.AdvanceHop();
         AdvanceJourneyStep();
-        moveSegIdx += 3; // passA + passB + roomCenter
-        moveSegT = 0f;
 
         // Must scan → go to center first
         bool needsScan = newTile.State == FogState.Unknown && Model.CanScan;
@@ -586,6 +600,7 @@ public class DroneController : MonoBehaviour
             float dist = Vector3.Distance(transform.position, center);
 
             state = State.RoomNavigating;
+            newTile.ShowLine(transform.position, center, JourneyLineColor);
             newTile.NavigateDrone(transform, center, DurationForDistance(dist), () =>
             {
                 if (needsScan)
@@ -623,6 +638,7 @@ public class DroneController : MonoBehaviour
             float dist = Vector3.Distance(transform.position, parkPoint);
 
             state = State.RoomNavigating;
+            newTile.ShowLine(transform.position, parkPoint, JourneyLineColor);
             newTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
             {
                 StartNextHopFromPark(nextWall, nextTargetRoom, nextDeparture);
@@ -661,10 +677,13 @@ public class DroneController : MonoBehaviour
 
         stepStartTime = Time.time;
         state = State.WallAnimating;
+        Color lineCol = JourneyLineColor;
+        departure.ShowLine(parkPos, depMid, lineCol);
         departure.PlayTraversal(transform, depDur, true, () =>
         {
             if (arrival != null)
             {
+                arrival.ShowLine(depMid, arrPark, lineCol);
                 arrival.PlayTraversal(transform, arrDur, false, () =>
                 {
                     OnHopComplete(targetRoom);
@@ -703,6 +722,7 @@ public class DroneController : MonoBehaviour
     void OnInteractionComplete(WallInteractionConfig cfg, WallView wall)
     {
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cfg.EnergyCost);
+        Model.CurrentEnergy = Mathf.Min(Model.MaxEnergy, Model.CurrentEnergy + cfg.EnergyGainPerCycle);
         lastCompletedInteraction = cfg;
 
         // Notify if this was a blocking wall interaction
@@ -724,10 +744,23 @@ public class DroneController : MonoBehaviour
             return;
         }
 
+        // Repeat if the config says so (e.g. charging until full)
+        if (cfg.RepeatCondition != null && cfg.RepeatCondition(Model))
+        {
+            stepStartTime = Time.time;
+            wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
+            {
+                OnInteractionComplete(cfg, wall);
+            });
+            return;
+        }
+
         activeJourney?.AdvanceHop();
         activeJourney = null;
         ClearJourneySteps();
         routePreview?.ClearJourney();
+        if (wall.Model is StationWallModel stationD) stationD.OccupiedBy = null;
+        activeInteractionWall = null;
         state = State.Idle;
     }
 
@@ -759,10 +792,6 @@ public class DroneController : MonoBehaviour
 
     // ── Compat stubs (for UI that hasn't been rewritten yet) ────
 
-    /// <summary>Stub: old API. Use StartInteraction instead.</summary>
-    public void StartStationAction(RoomTile tile, WallView wall) => StartInteraction(tile, wall);
-
-    public bool IsPerformingStationAction => IsPerformingInteraction;
     public bool IsRefitting => lastCompletedInteraction != null && lastCompletedInteraction.EnablesRefit;
 
     public struct JourneyStep
@@ -839,9 +868,4 @@ public class DroneController : MonoBehaviour
     public IReadOnlyList<JourneyStep> PreviewJourney => cachedPreviewSteps;
     public IReadOnlyList<StepAnchor> JourneyAnchors => journeyAnchors;
     public IReadOnlyList<StepAnchor> PreviewAnchors => cachedPreviewAnchors;
-    internal int MoveSegIdx => moveSegIdx;
-    internal float MoveSegT => moveSegT;
-
-    internal static void BuildDashedRibbonInto(Mesh m, List<Vector3> w, List<float> c, float d, float width, float dash, float gap)
-        => DashedRibbon.Build(m, w, c, d, width, dash, gap);
 }

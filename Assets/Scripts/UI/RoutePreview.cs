@@ -13,32 +13,12 @@ public class RoutePreview
     readonly HexMapGenerator map;
     readonly FogOfWar fog;
 
-    // ── journey line (active move) ──────────
-    readonly List<Vector3> journeyWaypoints = new List<Vector3>();
-    readonly List<float> journeyCumulDist = new List<float>();
+    // ── journey ────────────────────────────
     readonly List<StepAnchor> journeyAnchors = new List<StepAnchor>();
-    GameObject pathLineGO;
-    MeshFilter pathMF;
-    MeshRenderer pathMR;
-    Material pathMat;
-    Mesh pathMesh;
 
-    // ── preview line (hover) ────────────────
+    // ── preview (hover) ──────────────────────
     bool isShowing;
-    readonly List<Vector3> previewWaypoints = new List<Vector3>();
-    readonly List<float> previewCumulDist = new List<float>();
     readonly List<StepAnchor> previewAnchors = new List<StepAnchor>();
-    GameObject previewLineGO;
-    MeshFilter previewMF;
-    MeshRenderer previewMR;
-    Material previewMat;
-    Mesh previewMesh;
-
-    // ── shared constants ────────────────────
-    const float pathY = 0.06f;
-    const float pathWidth = 0.12f;
-    const float dashLen = 0.30f;
-    const float gapLen = 0.15f;
 
     public RoutePreview(DroneController drone, HexMapGenerator map, FogOfWar fog)
     {
@@ -60,48 +40,74 @@ public class RoutePreview
 
     // ── journey (active move) ───────────────
 
+    readonly List<WallView> journeyWalls = new List<WallView>();
+    readonly List<RoomTile> journeyRoomLines = new List<RoomTile>();
+
     public void SetJourney(List<Vector2Int> path, WallView station = null)
     {
-        journeyWaypoints.Clear();
-        journeyCumulDist.Clear();
         journeyAnchors.Clear();
+        ClearJourneyLines();
 
         if (path == null || path.Count == 0) return;
 
-        Vector3 origin = map.HexCenter(drone.CurrentRoom);
-        journeyWaypoints.Add(new Vector3(origin.x, pathY, origin.z));
-
+        Color col = Palette.WithAlpha(Palette.JourneyLine, 0.55f);
         Vector2Int prev = drone.CurrentRoom;
-        foreach (var room in path)
+
+        // First room segment: drone → first departure
+        var firstDep = fog?.GetTile(prev)?.GetPassage(path[0]);
+        if (firstDep != null)
         {
-            journeyWaypoints.Add(PassagePoint(prev, room, pathY));
-            journeyWaypoints.Add(PassagePoint(room, prev, pathY));
-            Vector3 rc = map.HexCenter(room);
-            journeyWaypoints.Add(new Vector3(rc.x, pathY, rc.z));
-            prev = room;
+            var roomTile = fog?.GetTile(prev);
+            if (roomTile != null)
+            {
+                roomTile.ShowLine(drone.transform.position, firstDep.DroneParkPoint, col);
+                journeyRoomLines.Add(roomTile);
+            }
         }
 
-        if (station != null)
+        for (int i = 0; i < path.Count; i++)
         {
-            Vector3 wallPt = station.DroneParkPoint;
-            journeyWaypoints.Add(new Vector3(wallPt.x, pathY, wallPt.z));
-        }
+            var room = path[i];
 
-        SmoothRoomCenters(journeyWaypoints);
+            // Corridor segment
+            var dep = fog?.GetTile(prev)?.GetPassage(room);
+            var arr = fog?.GetTile(room)?.GetPassage(prev);
+            if (dep != null && arr != null)
+            {
+                dep.ShowLine(dep.DroneParkPoint, arr.DroneParkPoint, col);
+                journeyWalls.Add(dep);
+            }
+            else if (dep != null)
+            {
+                dep.ShowLine(dep.DroneParkPoint, dep.transform.position, col);
+                journeyWalls.Add(dep);
+            }
 
-        journeyCumulDist.Add(0f);
-        for (int i = 1; i < journeyWaypoints.Count; i++)
-            journeyCumulDist.Add(journeyCumulDist[i - 1]
-                + Vector3.Distance(journeyWaypoints[i - 1], journeyWaypoints[i]));
+            // Room-internal segment to next departure or terminal
+            if (i < path.Count - 1)
+            {
+                var nextRoom = path[i + 1];
+                var nextDep = fog?.GetTile(room)?.GetPassage(nextRoom);
+                var roomTile = fog?.GetTile(room);
+                if (arr != null && nextDep != null && roomTile != null)
+                {
+                    roomTile.ShowLine(arr.DroneParkPoint, nextDep.DroneParkPoint, col);
+                    journeyRoomLines.Add(roomTile);
+                }
+            }
+            else if (station != null)
+            {
+                var roomTile = fog?.GetTile(room);
+                if (arr != null && roomTile != null)
+                {
+                    roomTile.ShowLine(arr.DroneParkPoint, station.DroneParkPoint, col);
+                    journeyRoomLines.Add(roomTile);
+                }
+            }
 
-        // Anchor positions for overlay
-        journeyAnchors.Clear();
-        prev = drone.CurrentRoom;
-        int stepIdx = 0;
-        foreach (var room in path)
-        {
-            Vector3 pA = PassagePoint(prev, room, 0.5f);
-            Vector3 pB = PassagePoint(room, prev, 0.5f);
+            // Anchors
+            Vector3 pA = dep != null ? dep.DroneParkPoint : map.HexCenter(prev);
+            Vector3 pB = arr != null ? arr.DroneParkPoint : map.HexCenter(room);
             journeyAnchors.Add(new StepAnchor
             {
                 worldPos = (pA + pB) * 0.5f,
@@ -109,13 +115,14 @@ public class RoutePreview
                 roomB = room,
                 layer = 0,
             });
-            stepIdx++;
+
             prev = room;
         }
 
+        // Extra anchors for scan/interaction at destination
         var destCoord = path[path.Count - 1];
-        var destTile = fog?.GetTile(destCoord);
         var journey = drone.Journey;
+        int stepIdx = path.Count;
         float destBarY = 0.5f;
         int destLayer = 0;
         while (stepIdx < journey.Count)
@@ -138,9 +145,8 @@ public class RoutePreview
 
     public void SetStationJourney(Vector3 parkPos)
     {
-        journeyWaypoints.Clear();
-        journeyCumulDist.Clear();
         journeyAnchors.Clear();
+        ClearJourneyLines();
 
         journeyAnchors.Add(new StepAnchor
         {
@@ -153,71 +159,107 @@ public class RoutePreview
 
     public void ClearJourney()
     {
-        journeyWaypoints.Clear();
-        journeyCumulDist.Clear();
         journeyAnchors.Clear();
-        if (pathLineGO != null) pathLineGO.SetActive(false);
+        ClearJourneyLines();
+    }
+
+    void ClearJourneyLines()
+    {
+        foreach (var w in journeyWalls) w.HideLine();
+        foreach (var r in journeyRoomLines) r.HideLine();
+        journeyWalls.Clear();
+        journeyRoomLines.Clear();
     }
 
     // ── preview (hover) ─────────────────────
+
+    readonly List<WallView> previewWalls = new List<WallView>();
+    readonly List<RoomTile> previewRooms = new List<RoomTile>();
 
     public void ShowPreview(DroneController.PreviewRequest req)
     {
         ClearPreview();
         isShowing = true;
 
-        // The plan and anchors are already computed by DroneController.BuildStepsFromWalls
-        // We just need to build the visual line from the same data.
-
         var path = req.path;
         bool hasPath = path != null && path.Count > 0;
-
-        // Build waypoints: drone → passage points along path → terminal point
-        previewWaypoints.Clear();
-        previewCumulDist.Clear();
-
-        Vector3 origin = drone.transform.position;
-        previewWaypoints.Add(new Vector3(origin.x, pathY, origin.z));
-
-        Vector2Int prev = drone.CurrentRoom;
-        if (hasPath)
-        {
-            foreach (var room in path)
-            {
-                previewWaypoints.Add(PassagePoint(prev, room, pathY));
-                previewWaypoints.Add(PassagePoint(room, prev, pathY));
-                Vector3 rc = map.HexCenter(room);
-                previewWaypoints.Add(new Vector3(rc.x, pathY, rc.z));
-                prev = room;
-            }
-        }
-
-        // Terminal point — wall's park point
-        if (req.wall != null && req.wall.Model != null)
-        {
-            Vector3 pt = req.wall.DroneParkPoint;
-            previewWaypoints.Add(new Vector3(pt.x, pathY, pt.z));
-        }
-
-        if (hasPath) SmoothRoomCenters(previewWaypoints);
-
-        // Cumulative distances
-        previewCumulDist.Add(0f);
-        for (int i = 1; i < previewWaypoints.Count; i++)
-            previewCumulDist.Add(previewCumulDist[i - 1] + Vector3.Distance(previewWaypoints[i - 1], previewWaypoints[i]));
-
-        // Render
-        EnsurePreviewLine();
-        previewLineGO.SetActive(true);
         bool overBudget = ExceedsEnergy;
         Color col = overBudget
             ? Palette.WithAlpha(Palette.OverBudgetLine, 0.5f)
             : Palette.WithAlpha(Palette.PreviewLine, 0.4f);
-        previewMat.color = col;
-        previewMat.SetColor("_BaseColor", col);
-        DashedRibbon.Build(previewMesh, previewWaypoints, previewCumulDist, 0f, pathWidth, dashLen, gapLen);
 
-        // Anchors for overlay bars — one per step from cachedPreviewAnchors
+        Vector3 dronePos = drone.transform.position;
+        Vector2Int prev = drone.CurrentRoom;
+
+        if (hasPath)
+        {
+            // Room segment: drone → first departure parkPoint
+            var firstDep = fog?.GetTile(prev)?.GetPassage(path[0]);
+            if (firstDep != null)
+            {
+                var roomTile = fog?.GetTile(prev);
+                if (roomTile != null)
+                {
+                    roomTile.ShowLine(dronePos, firstDep.DroneParkPoint, col);
+                    previewRooms.Add(roomTile);
+                }
+            }
+
+            for (int i = 0; i < path.Count; i++)
+            {
+                var room = path[i];
+                // Corridor segment: departure parkPoint → arrival parkPoint
+                var dep = fog?.GetTile(prev)?.GetPassage(room);
+                var arr = fog?.GetTile(room)?.GetPassage(prev);
+                if (dep != null && arr != null)
+                {
+                    dep.ShowLine(dep.DroneParkPoint, arr.DroneParkPoint, col);
+                    previewWalls.Add(dep);
+                }
+                else if (dep != null)
+                {
+                    dep.ShowLine(dep.DroneParkPoint, dep.transform.position, col);
+                    previewWalls.Add(dep);
+                }
+
+                // Room segment within destination: arrival parkPoint → room center (or next departure)
+                if (i < path.Count - 1)
+                {
+                    var nextRoom = path[i + 1];
+                    var nextDep = fog?.GetTile(room)?.GetPassage(nextRoom);
+                    var roomTile = fog?.GetTile(room);
+                    if (arr != null && nextDep != null && roomTile != null)
+                    {
+                        roomTile.ShowLine(arr.DroneParkPoint, nextDep.DroneParkPoint, col);
+                        previewRooms.Add(roomTile);
+                    }
+                }
+                else
+                {
+                    // Last room — line to terminal wall or center
+                    var roomTile = fog?.GetTile(room);
+                    if (req.wall != null && arr != null && roomTile != null)
+                    {
+                        roomTile.ShowLine(arr.DroneParkPoint, req.wall.DroneParkPoint, col);
+                        previewRooms.Add(roomTile);
+                    }
+                }
+
+                prev = room;
+            }
+        }
+        else if (req.wall != null)
+        {
+            // Drone already in room, just line to wall
+            var roomTile = fog?.GetTile(drone.CurrentRoom);
+            if (roomTile != null)
+            {
+                roomTile.ShowLine(dronePos, req.wall.DroneParkPoint, col);
+                previewRooms.Add(roomTile);
+            }
+        }
+
+        // Anchors for overlay bars
         previewAnchors.Clear();
         var cached = drone.PreviewAnchors;
         if (cached != null)
@@ -239,150 +281,20 @@ public class RoutePreview
         if (!isShowing) return;
         isShowing = false;
 
-        if (previewLineGO != null)
-            previewLineGO.SetActive(false);
-
-        previewWaypoints.Clear();
-        previewCumulDist.Clear();
+        foreach (var w in previewWalls) w.HideLine();
+        foreach (var r in previewRooms) r.HideLine();
+        previewWalls.Clear();
+        previewRooms.Clear();
         previewAnchors.Clear();
     }
 
     // ── per-frame update ────────────────────
 
-    public void Update()
-    {
-        UpdatePathLine();
-    }
+    public void Update() { }
 
     public void Destroy()
     {
-        if (pathLineGO != null) Object.Destroy(pathLineGO);
-        if (previewLineGO != null) Object.Destroy(previewLineGO);
+        ClearJourneyLines();
+        ClearPreview();
     }
-
-    // ── private: journey path line ──────────
-
-    void UpdatePathLine()
-    {
-        int journeyIdx = drone.JourneyCurrentIndex;
-        var journey = drone.Journey;
-        bool hasPath = journeyWaypoints.Count > 1 && journeyIdx >= 0;
-
-        if (!hasPath || (journeyIdx < journey.Count
-            && (journey[journeyIdx].isScan || journey[journeyIdx].isInteraction)))
-        {
-            if (pathLineGO != null) pathLineGO.SetActive(false);
-            return;
-        }
-
-        EnsurePathLine();
-        pathLineGO.SetActive(true);
-
-        float alpha = drone.IsSelected ? 0.55f : 0.2f;
-        Color col = Palette.WithAlpha(Palette.JourneyLine, alpha);
-        pathMat.color = col;
-        pathMat.SetColor("_BaseColor", col);
-
-        float consumed = 0f;
-        int segIdx = drone.MoveSegIdx;
-        if (segIdx < journeyCumulDist.Count - 1)
-        {
-            consumed = journeyCumulDist[segIdx]
-                + drone.MoveSegT * (journeyCumulDist[segIdx + 1] - journeyCumulDist[segIdx]);
-        }
-        else if (journeyCumulDist.Count > 0)
-        {
-            consumed = journeyCumulDist[journeyCumulDist.Count - 1];
-        }
-
-        DashedRibbon.Build(pathMesh, journeyWaypoints, journeyCumulDist, consumed, pathWidth, dashLen, gapLen);
-    }
-
-    void EnsurePathLine()
-    {
-        if (pathLineGO != null) return;
-
-        pathLineGO = new GameObject("PathLine_" + drone.Model.Name);
-        pathMF = pathLineGO.AddComponent<MeshFilter>();
-        pathMR = pathLineGO.AddComponent<MeshRenderer>();
-
-        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
-        if (sh == null) sh = Shader.Find("Unlit/Color");
-        pathMat = new Material(sh);
-        Color col = Palette.WithAlpha(Palette.JourneyLine, 0.3f);
-        pathMat.color = col;
-        pathMat.SetColor("_BaseColor", col);
-        pathMat.SetFloat("_Surface", 1f);
-        pathMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        pathMat.SetOverrideTag("RenderType", "Transparent");
-        pathMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        pathMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        pathMat.SetInt("_ZWrite", 0);
-        pathMat.SetFloat("_Cull", 0f);
-        pathMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 1;
-        pathMR.sharedMaterial = pathMat;
-        pathMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-        pathMesh = new Mesh { name = "PathDashed" };
-        pathMF.sharedMesh = pathMesh;
-    }
-
-    // ── private: preview line ───────────────
-
-    void EnsurePreviewLine()
-    {
-        if (previewLineGO != null) return;
-
-        previewLineGO = new GameObject("PreviewLine_" + drone.Model.Name);
-        previewMF = previewLineGO.AddComponent<MeshFilter>();
-        previewMR = previewLineGO.AddComponent<MeshRenderer>();
-
-        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
-        if (sh == null) sh = Shader.Find("Unlit/Color");
-        previewMat = new Material(sh);
-        Color col = Palette.WithAlpha(Palette.PreviewLine, 0.4f);
-        previewMat.color = col;
-        previewMat.SetColor("_BaseColor", col);
-        previewMat.SetFloat("_Surface", 1f);
-        previewMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        previewMat.SetOverrideTag("RenderType", "Transparent");
-        previewMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        previewMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        previewMat.SetInt("_ZWrite", 0);
-        previewMat.SetFloat("_Cull", 0f);
-        previewMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 1;
-        previewMR.sharedMaterial = previewMat;
-        previewMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-        previewMesh = new Mesh { name = "PreviewDashed" };
-        previewMF.sharedMesh = previewMesh;
-    }
-
-    // ── shared helpers ──────────────────────
-
-    /// <summary>
-    /// Smooth pass-through room centers: pull toward the chord between
-    /// neighbors so the line matches the drone's actual curved path.
-    /// Room centers sit at indices 3, 6, 9… (groups of 3 after origin).
-    /// </summary>
-    static void SmoothRoomCenters(List<Vector3> pts)
-    {
-        for (int i = 3; i < pts.Count - 1; i += 3)
-        {
-            Vector3 prev = pts[i - 1];
-            Vector3 next = pts[i + 1];
-            Vector3 mid = (prev + next) * 0.5f;
-            pts[i] = Vector3.Lerp(pts[i], mid, 0.7f);
-        }
-    }
-
-    Vector3 PassagePoint(Vector2Int from, Vector2Int to, float y)
-    {
-        var pass = fog?.GetTile(from)?.GetPassage(to);
-        if (pass != null)
-            return new Vector3(pass.DroneParkPoint.x, y, pass.DroneParkPoint.z);
-        var (mid, _) = map.PassageEndpoints(from, to);
-        return new Vector3(mid.x, y, mid.z);
-    }
-
 }

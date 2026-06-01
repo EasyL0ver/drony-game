@@ -154,6 +154,8 @@ public class StationWallModel : WallModel
 {
     private readonly WallInteractionConfig _interaction;
 
+    public DroneModel OccupiedBy { get; set; }
+
     public StationWallModel(RoomModel owner, int edgeIndex, WallInteractionConfig interaction)
         : base(owner, edgeIndex)
     {
@@ -168,6 +170,7 @@ public class StationWallModel : WallModel
     public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
     {
         var list = new List<WallInteractionConfig>();
+        if (OccupiedBy != null && OccupiedBy != drone) return list;
         if (_interaction != null)
         {
             if (_interaction.RequiredGear == GearType.None || drone.HasGear(_interaction.RequiredGear))

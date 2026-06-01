@@ -486,6 +486,7 @@ public class RoomTile : MonoBehaviour
         {
             float t = elapsed / duration;
             drone.position = Vector3.Lerp(start, target, t);
+            UpdateLineConsumed(t);
 
             Vector3 dir = (target - start);
             dir.y = 0f;
@@ -496,6 +497,84 @@ public class RoomTile : MonoBehaviour
             yield return null;
         }
         drone.position = target;
+        HideLine();
         onComplete?.Invoke();
+    }
+
+    // ── dashed route line ────────────────────────────────────────
+
+    const float lineY = 0.06f;
+    const float lineWidth = 0.12f;
+    const float lineDash = 0.30f;
+    const float lineGap = 0.15f;
+
+    GameObject lineGO;
+    MeshFilter lineMF;
+    MeshRenderer lineMR;
+    Material lineMat;
+    Mesh lineMesh;
+    readonly List<Vector3> lineWaypoints = new List<Vector3>();
+    readonly List<float> lineCumulDist = new List<float>();
+
+    /// <summary>Show a dashed line segment between two points.</summary>
+    public void ShowLine(Vector3 from, Vector3 to, Color color)
+    {
+        EnsureLine();
+        lineGO.SetActive(true);
+
+        lineWaypoints.Clear();
+        lineCumulDist.Clear();
+        lineWaypoints.Add(new Vector3(from.x, lineY, from.z));
+        lineWaypoints.Add(new Vector3(to.x, lineY, to.z));
+        lineCumulDist.Add(0f);
+        lineCumulDist.Add(Vector3.Distance(lineWaypoints[0], lineWaypoints[1]));
+
+        lineMat.color = color;
+        lineMat.SetColor("_BaseColor", color);
+        DashedRibbon.Build(lineMesh, lineWaypoints, lineCumulDist, 0f, lineWidth, lineDash, lineGap);
+    }
+
+    /// <summary>Update consumed distance on the line (for journey animation).</summary>
+    public void UpdateLineConsumed(float t)
+    {
+        if (lineGO == null || !lineGO.activeSelf) return;
+        float totalDist = lineCumulDist.Count > 1 ? lineCumulDist[lineCumulDist.Count - 1] : 0f;
+        float consumed = t * totalDist;
+        DashedRibbon.Build(lineMesh, lineWaypoints, lineCumulDist, consumed, lineWidth, lineDash, lineGap);
+    }
+
+    /// <summary>Hide the dashed line.</summary>
+    public void HideLine()
+    {
+        if (lineGO != null) lineGO.SetActive(false);
+    }
+
+    void EnsureLine()
+    {
+        if (lineGO != null) return;
+
+        lineGO = new GameObject("RoomRouteLine");
+        lineGO.transform.SetParent(transform, true);
+        lineGO.transform.localPosition = Vector3.zero;
+        lineMF = lineGO.AddComponent<MeshFilter>();
+        lineMR = lineGO.AddComponent<MeshRenderer>();
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Unlit/Color");
+        lineMat = new Material(sh);
+        lineMat.SetFloat("_Surface", 1f);
+        lineMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        lineMat.SetOverrideTag("RenderType", "Transparent");
+        lineMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        lineMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        lineMat.SetInt("_ZWrite", 0);
+        lineMat.SetFloat("_Cull", 0f);
+        lineMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 1;
+        lineMR.sharedMaterial = lineMat;
+        lineMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        lineMesh = new Mesh { name = "RoomRouteLine" };
+        lineMF.sharedMesh = lineMesh;
+        lineGO.SetActive(false);
     }
 }

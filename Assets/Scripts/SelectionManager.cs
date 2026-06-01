@@ -335,7 +335,7 @@ public class SelectionManager : MonoBehaviour
             foreach (var d in gm.Drones)
             {
                 if (!d.IsSelected) continue;
-                if (d.IsPerformingStationAction) continue;
+                if (d.IsPerformingInteraction) continue;
                 if (wallModel == null || wallModel.GetInteractions(d.Model).Count == 0) continue;
 
                 // Path to whichever side is reachable (prefer shorter)
@@ -362,12 +362,12 @@ public class SelectionManager : MonoBehaviour
         foreach (var d in gm.Drones)
         {
             if (!d.IsSelected) continue;
-            if (d.IsPerformingStationAction) continue;
+            if (d.IsPerformingInteraction) continue;
 
             // Drone already on this tile — try wall action if structure was clicked
             if (d.CurrentRoom == target && clickedWall != null)
             {
-                d.StartStationAction(tile, clickedWall);
+                d.StartInteraction(tile, clickedWall);
                 continue;
             }
 
