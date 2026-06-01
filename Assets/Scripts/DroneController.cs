@@ -103,6 +103,8 @@ public class DroneController : MonoBehaviour
 
         lastCompletedInteraction = null;
         var walls = BuildWallList(rooms);
+        if (goalWall?.Model != null)
+            walls.Add(goalWall.Model);
         var path = new DronePath(walls, Model);
         activeJourney = new DroneJourney(path);
         previewPath = null;
@@ -339,35 +341,22 @@ public class DroneController : MonoBehaviour
     List<JourneyStep> cachedPreviewSteps;
     List<StepAnchor> cachedPreviewAnchors;
 
-    public void ShowPreviewPath(List<Vector2Int> path, WallView wall = null)
+    public void ShowPreview(PreviewRequest req)
     {
-        if (path == null || path.Count == 0) { ClearPreviewPath(); return; }
-        var walls = BuildWallList(path);
-        previewPath = new DronePath(walls, Model);
-        cachedPreviewAnchors = new List<StepAnchor>();
-        cachedPreviewSteps = BuildStepsFromWalls(walls, cachedPreviewAnchors);
-        routePreview?.ShowPath(path, wall);
-    }
+        var walls = req.path != null && req.path.Count > 0
+            ? BuildWallList(req.path)
+            : new List<WallModel>();
 
-    public void ShowStationPreview(RoomTile tile, WallView wall)
-    {
-        if (tile == null || wall?.Model == null) { ClearPreviewPath(); return; }
-        var walls = new List<WallModel> { wall.Model };
-        previewPath = new DronePath(walls, Model);
-        cachedPreviewAnchors = new List<StepAnchor>();
-        cachedPreviewSteps = BuildStepsFromWalls(walls, cachedPreviewAnchors);
-        routePreview?.ShowStation(tile, wall);
-    }
+        // Append terminal wall if provided and not already the last in path
+        if (req.wall?.Model != null && (walls.Count == 0 || walls[walls.Count - 1] != req.wall.Model))
+            walls.Add(req.wall.Model);
 
-    public void ShowWallInteractionPreview(Vector2Int approach, Vector2Int other, WallInteractionConfig wi)
-    {
-        var wallModel = fog?.GetTile(approach)?.GetPassage(other)?.Model;
-        if (wallModel == null) { ClearPreviewPath(); return; }
-        var walls = new List<WallModel> { wallModel };
+        if (walls.Count == 0) { ClearPreviewPath(); return; }
+
         previewPath = new DronePath(walls, Model);
         cachedPreviewAnchors = new List<StepAnchor>();
         cachedPreviewSteps = BuildStepsFromWalls(walls, cachedPreviewAnchors);
-        routePreview?.ShowWallInteraction(approach, other, wi);
+        routePreview?.ShowPreview(req);
     }
 
     public void ClearPreviewPath()
@@ -546,9 +535,7 @@ public class DroneController : MonoBehaviour
     void StartLastWallInteraction(WallModel wallModel, WallInteractionConfig cfg)
     {
         var currentTile = fog.GetTile(CurrentRoom);
-        // Find the passage view for this wall
-        var targetCoord = wallModel.Neighbor.Owner.Coord;
-        var passage = currentTile.GetPassage(targetCoord);
+        var passage = currentTile.GetWallView(wallModel.EdgeIndex);
 
         if (passage == null) { activeJourney = null; ClearJourneySteps(); state = State.Idle; return; }
 
@@ -618,6 +605,14 @@ public class DroneController : MonoBehaviour
             // More hops ahead — straight line to next departure park point
             newTile.OnDroneArrived(false);
             var nextWall = activeJourney.Walls[activeJourney.CurrentHopIndex];
+
+            // Next wall is an interaction (station/rubble) — no traversal, go to center
+            if (nextWall.Neighbor == null)
+            {
+                StartNextHop();
+                return;
+            }
+
             var nextTargetRoom = nextWall.Neighbor.Owner.Coord;
             var nextDeparture = fog?.GetTile(CurrentRoom)?.GetPassage(nextTargetRoom);
 
@@ -778,6 +773,13 @@ public class DroneController : MonoBehaviour
         public bool isInteraction;
         public WallInteractionConfig interactionConfig;
         public int energyCost;
+    }
+
+    /// <summary>Unified preview request — path + optional terminal wall.</summary>
+    public struct PreviewRequest
+    {
+        public List<Vector2Int> path;   // rooms to traverse (null/empty if already at target)
+        public WallView wall;           // terminal wall (station, rubble, etc.)
     }
 
     public IReadOnlyList<JourneyStep> Journey => journeySteps;

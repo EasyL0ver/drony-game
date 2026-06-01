@@ -199,10 +199,9 @@ public class SelectionManager : MonoBehaviour
             droneLastRoom[d.DroneIndex] = d.CurrentRoom;
             var p = FindPath(d.CurrentRoom, target);
             if (p != null && p.Count > 0)
-                d.ShowPreviewPath(p, wall);
-            else if (d.CurrentRoom == target && targetTile != null
-                     && wall != null)
-                d.ShowStationPreview(targetTile, wall);
+                d.ShowPreview(new DroneController.PreviewRequest { path = p, wall = wall });
+            else if (d.CurrentRoom == target && targetTile != null && wall != null)
+                d.ShowPreview(new DroneController.PreviewRequest { wall = wall });
             else
                 d.ClearPreviewPath();
         }
@@ -210,7 +209,6 @@ public class SelectionManager : MonoBehaviour
 
     void ShowWallInteractionPreviews()
     {
-        // For wall interactions, path to the approach room (the side the drone can reach)
         int edgeAB = gm.hexMap.EdgeToward(hoveredConnA, hoveredConnB);
         var tileA = gm.fog.GetTile(hoveredConnA);
         var wallModel = tileA?.RModel.Walls[edgeAB];
@@ -220,7 +218,6 @@ public class SelectionManager : MonoBehaviour
             if (!d.IsSelected) continue;
             if (wallModel == null || wallModel.GetInteractions(d.Model).Count == 0) { d.ClearPreviewPath(); continue; }
 
-            // Try to path to either side of the blocked connection
             var pA = FindPath(d.CurrentRoom, hoveredConnA);
             var pB = FindPath(d.CurrentRoom, hoveredConnB);
 
@@ -231,15 +228,19 @@ public class SelectionManager : MonoBehaviour
                 best = pA ?? pB;
 
             if (best != null && best.Count > 0)
-                d.ShowPreviewPath(best);
+            {
+                var destRoom = best[best.Count - 1];
+                var otherRoom = (destRoom == hoveredConnA) ? hoveredConnB : hoveredConnA;
+                var iWall = gm.fog.GetTile(destRoom)?.GetPassage(otherRoom);
+                d.ShowPreview(new DroneController.PreviewRequest { path = best, wall = iWall });
+            }
             else if (d.CurrentRoom == hoveredConnA || d.CurrentRoom == hoveredConnB)
             {
-                // Drone is already at the approach room — show wall interaction preview
                 Vector2Int approach = d.CurrentRoom;
                 Vector2Int other = (approach == hoveredConnA) ? hoveredConnB : hoveredConnA;
-                var wi = gm.hexMap.Model.GetWallInteraction(hoveredConnA, hoveredConnB, d.Model);
-                if (wi != null)
-                    d.ShowWallInteractionPreview(approach, other, wi);
+                var iWall = gm.fog.GetTile(approach)?.GetPassage(other);
+                if (iWall != null)
+                    d.ShowPreview(new DroneController.PreviewRequest { wall = iWall });
                 else
                     d.ClearPreviewPath();
             }
