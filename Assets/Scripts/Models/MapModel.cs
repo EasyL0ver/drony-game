@@ -118,16 +118,19 @@ public class MapModel
     {
         var roomA = Vector2Int.zero;
         var roomB = HexDirs[0];
+        var roomC = HexDirs[3];
 
-        RoomList = new List<Vector2Int> { roomA, roomB };
+        RoomList = new List<Vector2Int> { roomA, roomB, roomC };
         RoomSizes = new Dictionary<Vector2Int, RoomSize>
         {
             { roomA, RoomSize.Large },
             { roomB, RoomSize.Small },
+            { roomC, RoomSize.Small },
         };
         Connections = new List<Connection>
         {
             new Connection { roomA = roomA, roomB = roomB, type = PassageType.CrookedVent },
+            new Connection { roomA = roomA, roomB = roomC, type = PassageType.Vent },
         };
     }
 

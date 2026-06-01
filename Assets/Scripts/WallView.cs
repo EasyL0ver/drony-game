@@ -373,6 +373,8 @@ public abstract class WallView : MonoBehaviour
     {
         EnsureLine();
         lineGO.SetActive(true);
+        lineGO.transform.position = Vector3.zero;
+        lineGO.transform.rotation = Quaternion.identity;
 
         lineWaypoints.Clear();
         lineCumulDist.Clear();
@@ -397,7 +399,7 @@ public abstract class WallView : MonoBehaviour
     }
 
     /// <summary>Hide the dashed line.</summary>
-    public void HideLine()
+    public virtual void HideLine()
     {
         if (lineGO != null) lineGO.SetActive(false);
     }

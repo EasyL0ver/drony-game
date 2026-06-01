@@ -97,62 +97,209 @@ public class CrookedVentPassage : WallView
         localWaypoints.AddRange(generated);
     }
 
+    // ── Ring animation fields ───────────────────────────────
+
+    GameObject ringsGO;
+    MeshFilter ringsMF;
+    MeshRenderer ringsMR;
+    Material ringsMat;
+    Mesh ringsMesh;
+    Coroutine ringsAnim;
+    List<Vector3> ringsWaypoints;
+    List<float> ringsCumulDist;
+    const int ringCount = 5;
+    const float ringSpeed = 0.5f;
+    const float ringPipeRadius = 0.22f;
+
     // ── Line drawing ────────────────────────────────────────
 
     public override void ShowLine(Vector3 from, Vector3 to, Color color)
     {
         BuildWaypoints();
 
-        // Determine if we need to reverse waypoints (departing from the far end)
+        // Determine direction
         float distToFirst = Vector3.Distance(new Vector3(from.x, 0, from.z), 
             new Vector3(localWaypoints[0].x, 0, localWaypoints[0].z));
         float distToLast = Vector3.Distance(new Vector3(from.x, 0, from.z), 
             new Vector3(localWaypoints[localWaypoints.Count - 1].x, 0, localWaypoints[localWaypoints.Count - 1].z));
 
-        var orderedWaypoints = new List<Vector3>(localWaypoints);
+        // Build waypoints at pipe height for rings
+        var pipeWaypoints = GenerateWaypoints(storedPipeStart, storedPipeEnd, storedSeed);
         if (distToLast < distToFirst)
-            orderedWaypoints.Reverse();
+            pipeWaypoints.Reverse();
 
-        EnsureLine();
-        lineGO.SetActive(true);
+        // Check if neighbor is fogged — clip rings at midpoint, show dashed line for far half
+        bool neighborFogged = Model?.Neighbor?.Owner?.State == FogState.Unknown;
+        if (neighborFogged)
+        {
+            float totalLen = 0f;
+            for (int i = 1; i < pipeWaypoints.Count; i++)
+                totalLen += Vector3.Distance(pipeWaypoints[i - 1], pipeWaypoints[i]);
+            float halfLen = totalLen * 0.5f;
 
-        // Reset line transform to world origin so mesh vertices are world-space
-        lineGO.transform.position = Vector3.zero;
-        lineGO.transform.rotation = Quaternion.identity;
+            // Find midpoint along path and truncate
+            var clipped = new List<Vector3>();
+            clipped.Add(pipeWaypoints[0]);
+            float accum = 0f;
+            for (int i = 1; i < pipeWaypoints.Count; i++)
+            {
+                float seg = Vector3.Distance(pipeWaypoints[i - 1], pipeWaypoints[i]);
+                if (accum + seg >= halfLen)
+                {
+                    float t = (halfLen - accum) / seg;
+                    clipped.Add(Vector3.Lerp(pipeWaypoints[i - 1], pipeWaypoints[i], t));
+                    break;
+                }
+                clipped.Add(pipeWaypoints[i]);
+                accum += seg;
+            }
+            // Dashed line for far half
+            Vector3 midPt = clipped[clipped.Count - 1];
+            Vector3 endPt = pipeWaypoints[pipeWaypoints.Count - 1];
+            base.ShowLine(new Vector3(midPt.x, lineY, midPt.z), new Vector3(endPt.x, lineY, endPt.z), color);
 
-        lineWaypoints.Clear();
-        lineCumulDist.Clear();
+            pipeWaypoints = clipped;
+        }
+        else
+        {
+            if (lineGO != null) lineGO.SetActive(false);
+        }
 
-        // Start from the 'from' point (e.g. drone park position)
-        var startPt = new Vector3(from.x, lineY, from.z);
-        lineWaypoints.Add(startPt);
-        lineCumulDist.Add(0f);
-
-        // Add crooked waypoints
+        ringsWaypoints = pipeWaypoints;
+        ringsCumulDist = new List<float>();
         float cumul = 0f;
-        for (int i = 0; i < orderedWaypoints.Count; i++)
+        ringsCumulDist.Add(0f);
+        for (int i = 1; i < ringsWaypoints.Count; i++)
         {
-            var pt = new Vector3(orderedWaypoints[i].x, lineY, orderedWaypoints[i].z);
-            cumul += Vector3.Distance(lineWaypoints[lineWaypoints.Count - 1], pt);
-            lineWaypoints.Add(pt);
-            lineCumulDist.Add(cumul);
+            cumul += Vector3.Distance(ringsWaypoints[i - 1], ringsWaypoints[i]);
+            ringsCumulDist.Add(cumul);
         }
 
-        // End at the 'to' point (e.g. arrival park point)
-        var endPt = new Vector3(to.x, lineY, to.z);
-        float endDist = Vector3.Distance(lineWaypoints[lineWaypoints.Count - 1], endPt);
-        if (endDist > 0.01f)
+        EnsureRings();
+        ringsGO.SetActive(true);
+
+        ringsMat.color = color;
+        ringsMat.SetColor("_BaseColor", color);
+        ringsMat.SetColor("_EmissionColor", color * 3f);
+
+        BuildRingsMesh(0f);
+        if (ringsAnim != null) StopCoroutine(ringsAnim);
+        ringsAnim = StartCoroutine(AnimateRings());
+    }
+
+    public override void HideLine()
+    {
+        base.HideLine();
+        if (ringsGO != null) ringsGO.SetActive(false);
+        if (ringsAnim != null) { StopCoroutine(ringsAnim); ringsAnim = null; }
+    }
+
+    void EnsureRings()
+    {
+        if (ringsGO != null) return;
+
+        ringsGO = new GameObject("VentRings");
+        ringsGO.transform.SetParent(transform, true);
+        ringsGO.transform.position = Vector3.zero;
+        ringsGO.transform.rotation = Quaternion.identity;
+
+        ringsMF = ringsGO.AddComponent<MeshFilter>();
+        ringsMR = ringsGO.AddComponent<MeshRenderer>();
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Unlit/Color");
+        ringsMat = new Material(sh);
+        ringsMat.SetFloat("_Surface", 1f);
+        ringsMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        ringsMat.SetOverrideTag("RenderType", "Transparent");
+        ringsMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        ringsMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        ringsMat.SetInt("_ZWrite", 0);
+        ringsMat.SetFloat("_Cull", 0f);
+        ringsMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 2;
+        ringsMR.sharedMaterial = ringsMat;
+        ringsMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        ringsMesh = new Mesh { name = "CrookedVentRings" };
+        ringsMF.sharedMesh = ringsMesh;
+        ringsGO.SetActive(false);
+    }
+
+    IEnumerator AnimateRings()
+    {
+        float phase = 0f;
+        while (true)
         {
-            cumul += endDist;
-            lineWaypoints.Add(endPt);
-            lineCumulDist.Add(cumul);
+            phase += Time.deltaTime * ringSpeed;
+            if (phase >= 1f) phase -= 1f;
+            BuildRingsMesh(phase);
+            yield return null;
+        }
+    }
+
+    void BuildRingsMesh(float phase)
+    {
+        var verts = new List<Vector3>();
+        var tris = new List<int>();
+
+        float totalLen = ringsCumulDist[ringsCumulDist.Count - 1];
+        if (totalLen < 0.01f) return;
+
+        float bandW = ringPipeRadius * 0.5f;
+        float r = ringPipeRadius * 1.01f;
+        int seg = 10;
+
+        for (int ring = 0; ring < ringCount; ring++)
+        {
+            float t = (phase + (float)ring / ringCount) % 1f;
+            float targetDist = t * totalLen;
+
+            // Find position along multi-segment path
+            Vector3 center = ringsWaypoints[0];
+            Vector3 axis = Vector3.forward;
+            for (int i = 0; i < ringsCumulDist.Count - 1; i++)
+            {
+                if (ringsCumulDist[i + 1] >= targetDist)
+                {
+                    float segLen = ringsCumulDist[i + 1] - ringsCumulDist[i];
+                    float segT = segLen > 0.001f ? (targetDist - ringsCumulDist[i]) / segLen : 0f;
+                    center = Vector3.Lerp(ringsWaypoints[i], ringsWaypoints[i + 1], segT);
+                    axis = (ringsWaypoints[i + 1] - ringsWaypoints[i]).normalized;
+                    break;
+                }
+            }
+
+            // Fade at edges
+            float fade = Mathf.SmoothStep(0f, 1f, Mathf.Min(t * 4f, (1f - t) * 4f));
+            if (fade < 0.01f) continue;
+
+            Vector3 up = Vector3.up;
+            if (Mathf.Abs(Vector3.Dot(axis, up)) > 0.99f) up = Vector3.right;
+            Vector3 right = Vector3.Cross(axis, up).normalized;
+            Vector3 fwd = Vector3.Cross(right, axis).normalized;
+            Vector3 halfD = axis * bandW * 0.5f;
+
+            for (int i = 0; i < seg; i++)
+            {
+                float a1 = Mathf.PI * 2f * i / seg;
+                float a2 = Mathf.PI * 2f * ((i + 1) % seg) / seg;
+                Vector3 d1 = (right * Mathf.Cos(a1) + fwd * Mathf.Sin(a1)) * r;
+                Vector3 d2 = (right * Mathf.Cos(a2) + fwd * Mathf.Sin(a2)) * r;
+
+                int vi = verts.Count;
+                verts.Add(center + d1 - halfD);
+                verts.Add(center + d1 + halfD);
+                verts.Add(center + d2 + halfD);
+                verts.Add(center + d2 - halfD);
+
+                tris.Add(vi); tris.Add(vi + 1); tris.Add(vi + 2);
+                tris.Add(vi); tris.Add(vi + 2); tris.Add(vi + 3);
+            }
         }
 
-        lineConsumed = 0f;
-
-        lineMat.color = color;
-        lineMat.SetColor("_BaseColor", color);
-        DashedRibbon.Build(lineMesh, lineWaypoints, lineCumulDist, 0f, lineWidth, lineDash, lineGap);
+        ringsMesh.Clear();
+        ringsMesh.SetVertices(verts);
+        ringsMesh.SetTriangles(tris, 0);
     }
 
     // ── Traversal distance ─────────────────────────────────

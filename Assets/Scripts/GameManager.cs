@@ -77,6 +77,12 @@ public class GameManager : MonoBehaviour
                 Vector3 pipeHoriz = (midB - midA).normalized;
                 Vector3 pipeStart = midA - pipeHoriz * extend;
                 Vector3 pipeEnd = midB + pipeHoriz * extend;
+
+                float pipeY = Mathf.Min(hexMap.RoomWallHeight(hexMap.RoomSizeMap[a]),
+                                        hexMap.RoomWallHeight(hexMap.RoomSizeMap[b])) * 0.5f;
+                pipeStart.y = pipeY;
+                pipeEnd.y = pipeY;
+
                 int seed = a.x * 73 + a.y * 137 + eA * 31 + 12345;
 
                 SpawnCrookedVent(a, b, eA, pipeStart, pipeEnd, seed);
@@ -278,6 +284,31 @@ public class GameManager : MonoBehaviour
         var passage = go.AddComponent<Passage>();
         passage.Init(room, neighbor, edge, type);
         passage.SetModel(tile.RModel.Walls[edge]);
+
+        // For vent passages, provide pipe geometry for ring animation
+        if (type == PassageType.Vent)
+        {
+            Vector3 nCenter = hexMap.HexCenter(neighbor);
+            float nR = hexMap.RoomRadius(hexMap.RoomSizeMap[neighbor]);
+            int nEdge = hexMap.EdgeToward(neighbor, room);
+            Vector3 nc0 = hexMap.Corner(nCenter, nEdge, nR);
+            Vector3 nc1 = hexMap.Corner(nCenter, (nEdge + 1) % 6, nR);
+            Vector3 neighborWallMid = (nc0 + nc1) * 0.5f;
+
+            float extend = hexMap.WallThickness * 0.5f + hexMap.VentPipeRadius * 0.5f;
+            Vector3 pipeHoriz = (neighborWallMid - wallMid).normalized;
+            Vector3 pipeStart = wallMid - pipeHoriz * extend;
+            Vector3 pipeEnd = neighborWallMid + pipeHoriz * extend;
+
+            float smallerWH = Mathf.Min(
+                hexMap.RoomWallHeight(hexMap.RoomSizeMap[room]),
+                hexMap.RoomWallHeight(hexMap.RoomSizeMap[neighbor]));
+            float pipeY = smallerWH * 0.5f;
+            pipeStart.y = pipeY;
+            pipeEnd.y = pipeY;
+
+            passage.SetPipeInfo(pipeStart, pipeEnd, hexMap.VentPipeRadius);
+        }
 
         // Invisible trigger collider so passage is clickable
         float passW = hexMap.Model.PassageWidth(type);
