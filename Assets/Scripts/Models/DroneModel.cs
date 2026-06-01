@@ -67,6 +67,11 @@ public class DroneModel
     public int CurrentEnergy { get; set; } = 10;
     public float EnergyFraction => MaxEnergy > 0 ? (float)CurrentEnergy / MaxEnergy : 0f;
 
+    // ── Movement speed ───────────────────────
+
+    /// <summary>Full movement speed in world units/second. Normalized to corridor speed (~4u in 1s).</summary>
+    public float FullSpeed { get; set; } = 4.0f;
+
     // ── Position / movement ──────────────────
 
     public Vector2Int CurrentRoom { get; set; }

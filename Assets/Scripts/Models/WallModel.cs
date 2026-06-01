@@ -114,11 +114,11 @@ public class CorridorWallModel : WallModel
     {
         switch (type)
         {
-            case PassageType.Corridor: return 1.5f;
-            case PassageType.Duct:     return 2.5f;
-            case PassageType.Vent:     return 3.5f;
+            case PassageType.Corridor: return 1.0f;
+            case PassageType.Duct:     return 2.0f;
+            case PassageType.Vent:     return 3.0f;
             case PassageType.Rubble:   return 2.0f;
-            default:                   return 1.5f;
+            default:                   return 1.0f;
         }
     }
 

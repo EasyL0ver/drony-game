@@ -29,8 +29,8 @@ public class DroneController : MonoBehaviour
     SelectionRing selectionRing;
     RoutePreview routePreview;
 
-    /// <summary>Consistent drone movement speed in world units/second.</summary>
-    const float DroneSpeed = 1.6f;
+    /// <summary>Consistent drone movement speed in world units/second (from model).</summary>
+    float DroneSpeed => Model.FullSpeed;
 
     // Active journey
     DroneJourney activeJourney;
@@ -185,9 +185,9 @@ public class DroneController : MonoBehaviour
         float dist = Vector3.Distance(transform.position, parkPoint);
 
         state = State.RoomNavigating;
-        currentTile.NavigateDrone(transform, parkPoint, Mathf.Max(0.2f, dist * 0.6f), () =>
+        currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
         {
-            stepStartTime = Time.time; // reset when actual interaction starts
+            stepStartTime = Time.time;
             state = State.WallAnimating;
             wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
             {
@@ -316,14 +316,14 @@ public class DroneController : MonoBehaviour
             }
         }
         journeyCurrentIndex = 0;
-        stepStartTime = Time.time;
+        stepStartTime = -1f; // not started yet
         journeyStartTime = Time.time;
     }
 
     void AdvanceJourneyStep()
     {
         journeyCurrentIndex++;
-        stepStartTime = Time.time;
+        stepStartTime = -1f; // will be set when actual traversal/interaction starts
     }
 
     void ClearJourneySteps()
@@ -462,9 +462,6 @@ public class DroneController : MonoBehaviour
 
     float DurationForDistance(float dist) => Mathf.Max(0.08f, dist / DroneSpeed);
 
-    /// <summary>Corridor traversal uses half speed so it doesn't look like a slingshot.</summary>
-    float CorridorDuration(float dist) => Mathf.Max(0.08f, dist / (DroneSpeed * 0.4f));
-
     void StartNextHop()
     {
         if (activeJourney == null) { state = State.Idle; return; }
@@ -510,22 +507,30 @@ public class DroneController : MonoBehaviour
         var capturedTarget = targetRoom;
         var capturedDeparture = departure;
         var capturedArrival = arrival;
+        var pass = wall.GetPassability(Model);
+        float totalDur = pass.Duration;
 
-        // Compute wall traversal duration from actual distance
-        float depDist = Vector3.Distance(parkPoint, departure.transform.position);
-        float arrDist = capturedArrival != null
-            ? Vector3.Distance(capturedArrival.transform.position, capturedArrival.DroneParkPoint)
-            : depDist;
+        // Split duration proportionally to actual distances
+        Vector3 depMid = departure.transform.position;
+        depMid.y = hoverY;
+        Vector3 arrPark = capturedArrival != null ? capturedArrival.DroneParkPoint : depMid;
+        arrPark.y = hoverY;
+        float depDist = Vector3.Distance(parkPoint, depMid);
+        float arrDist = capturedArrival != null ? Vector3.Distance(depMid, arrPark) : depDist;
+        float totalDist = depDist + arrDist;
+        float depDur = totalDist > 0.01f ? totalDur * (depDist / totalDist) : totalDur * 0.5f;
+        float arrDur = totalDist > 0.01f ? totalDur * (arrDist / totalDist) : totalDur * 0.5f;
 
         state = State.RoomNavigating;
         currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(approachDist), () =>
         {
+            stepStartTime = Time.time;
             state = State.WallAnimating;
-            capturedDeparture.PlayTraversal(transform, CorridorDuration(depDist), true, () =>
+            capturedDeparture.PlayTraversal(transform, depDur, true, () =>
             {
                 if (capturedArrival != null)
                 {
-                    capturedArrival.PlayTraversal(transform, CorridorDuration(arrDist), false, () =>
+                    capturedArrival.PlayTraversal(transform, arrDur, false, () =>
                     {
                         OnHopComplete(capturedTarget);
                     });
@@ -554,6 +559,7 @@ public class DroneController : MonoBehaviour
         state = State.RoomNavigating;
         currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
         {
+            stepStartTime = Time.time;
             state = State.WallAnimating;
             passage.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
             {
@@ -644,20 +650,27 @@ public class DroneController : MonoBehaviour
         }
 
         var arrival = fog?.GetTile(targetRoom)?.GetPassage(CurrentRoom);
+        var pass = wall.GetPassability(Model);
+        float totalDur = pass.Duration;
 
-        // Distance-based durations
         Vector3 parkPos = transform.position;
-        float depDist = Vector3.Distance(parkPos, departure.transform.position);
-        float arrDist = arrival != null
-            ? Vector3.Distance(arrival.transform.position, arrival.DroneParkPoint)
-            : depDist;
+        Vector3 depMid = departure.transform.position;
+        depMid.y = hoverY;
+        Vector3 arrPark = arrival != null ? arrival.DroneParkPoint : depMid;
+        arrPark.y = hoverY;
+        float depDist = Vector3.Distance(parkPos, depMid);
+        float arrDist = arrival != null ? Vector3.Distance(depMid, arrPark) : depDist;
+        float totalDist = depDist + arrDist;
+        float depDur = totalDist > 0.01f ? totalDur * (depDist / totalDist) : totalDur * 0.5f;
+        float arrDur = totalDist > 0.01f ? totalDur * (arrDist / totalDist) : totalDur * 0.5f;
 
+        stepStartTime = Time.time;
         state = State.WallAnimating;
-        departure.PlayTraversal(transform, CorridorDuration(depDist), true, () =>
+        departure.PlayTraversal(transform, depDur, true, () =>
         {
             if (arrival != null)
             {
-                arrival.PlayTraversal(transform, CorridorDuration(arrDist), false, () =>
+                arrival.PlayTraversal(transform, arrDur, false, () =>
                 {
                     OnHopComplete(targetRoom);
                 });
@@ -808,6 +821,7 @@ public class DroneController : MonoBehaviour
     public float GetJourneyStepProgress(int i)
     {
         if (i != journeyCurrentIndex || journeyCurrentIndex < 0) return i < journeyCurrentIndex ? 1f : 0f;
+        if (stepStartTime < 0f) return 0f; // not started yet
         float dur = journeySteps[i].duration;
         if (dur <= 0) return 1f;
         return Mathf.Clamp01((Time.time - stepStartTime) / dur);
@@ -816,6 +830,7 @@ public class DroneController : MonoBehaviour
     public float GetJourneyStepElapsed(int i)
     {
         if (i != journeyCurrentIndex || journeyCurrentIndex < 0) return 0f;
+        if (stepStartTime < 0f) return 0f;
         return Time.time - stepStartTime;
     }
 
