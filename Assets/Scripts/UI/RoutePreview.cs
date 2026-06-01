@@ -236,11 +236,14 @@ public class RoutePreview
                 }
                 else
                 {
-                    // Last room — line to terminal wall or center
+                    // Last room — line to terminal wall or room center
                     var roomTile = fog?.GetTile(room);
-                    if (req.wall != null && arr != null && roomTile != null)
+                    if (roomTile != null && arr != null)
                     {
-                        roomTile.ShowLine(arr.DroneParkPoint, req.wall.DroneParkPoint, col);
+                        Vector3 lineTo = req.wall != null
+                            ? req.wall.DroneParkPoint
+                            : map.HexCenter(room);
+                        roomTile.ShowLine(arr.DroneParkPoint, lineTo, col);
                         previewRooms.Add(roomTile);
                     }
                 }

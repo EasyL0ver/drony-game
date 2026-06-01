@@ -24,12 +24,23 @@ public abstract class WallView : MonoBehaviour
 
     protected Coroutine activeAnimation;
     protected int animationToken;
-    bool isReversing;
+    protected bool isReversing;
 
     /// <summary>
     /// Play a traversal animation: drone passes through this wall over the given duration.
     /// departing=true: drone moves from park point into the wall (leaving room).
     /// departing=false: drone moves from wall out to park point (entering room).
+    /// Returns the effective traversal distance from start to wall midpoint.
+    /// Override for non-straight paths (e.g. crooked vents).
+    /// </summary>
+    public virtual float GetTraversalDistance(Vector3 from)
+    {
+        Vector3 mid = transform.position;
+        mid.y = from.y;
+        return Vector3.Distance(from, mid);
+    }
+
+    /// <summary>
     /// Traversals cannot be cancelled — only reversed via ReverseTraversal().
     /// Override in subclasses for custom traversal visuals.
     /// </summary>
@@ -53,7 +64,7 @@ public abstract class WallView : MonoBehaviour
         reverseCallback = onReversed;
     }
 
-    System.Action reverseCallback;
+    protected System.Action reverseCallback;
 
     /// <summary>
     /// Play an interaction animation (charge, refit, clear rubble) over the given duration.
@@ -343,22 +354,22 @@ public abstract class WallView : MonoBehaviour
 
     // ── dashed route line ────────────────────────────────────────
 
-    const float lineY = 0.06f;
-    const float lineWidth = 0.12f;
-    const float lineDash = 0.30f;
-    const float lineGap = 0.15f;
+    protected const float lineY = 0.06f;
+    protected const float lineWidth = 0.12f;
+    protected const float lineDash = 0.30f;
+    protected const float lineGap = 0.15f;
 
-    GameObject lineGO;
+    protected GameObject lineGO;
     MeshFilter lineMF;
     MeshRenderer lineMR;
-    Material lineMat;
-    Mesh lineMesh;
-    readonly System.Collections.Generic.List<Vector3> lineWaypoints = new System.Collections.Generic.List<Vector3>();
-    readonly System.Collections.Generic.List<float> lineCumulDist = new System.Collections.Generic.List<float>();
-    float lineConsumed;
+    protected Material lineMat;
+    protected Mesh lineMesh;
+    protected readonly System.Collections.Generic.List<Vector3> lineWaypoints = new System.Collections.Generic.List<Vector3>();
+    protected readonly System.Collections.Generic.List<float> lineCumulDist = new System.Collections.Generic.List<float>();
+    protected float lineConsumed;
 
     /// <summary>Show a dashed line segment between two points.</summary>
-    public void ShowLine(Vector3 from, Vector3 to, Color color)
+    public virtual void ShowLine(Vector3 from, Vector3 to, Color color)
     {
         EnsureLine();
         lineGO.SetActive(true);
@@ -391,7 +402,7 @@ public abstract class WallView : MonoBehaviour
         if (lineGO != null) lineGO.SetActive(false);
     }
 
-    void EnsureLine()
+    protected void EnsureLine()
     {
         if (lineGO != null) return;
 

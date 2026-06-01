@@ -114,11 +114,12 @@ public class CorridorWallModel : WallModel
     {
         switch (type)
         {
-            case PassageType.Corridor: return 1.0f;
-            case PassageType.Duct:     return 2.0f;
-            case PassageType.Vent:     return 3.0f;
-            case PassageType.Rubble:   return 2.0f;
-            default:                   return 1.0f;
+            case PassageType.Corridor:    return 1.0f;
+            case PassageType.Duct:        return 2.0f;
+            case PassageType.Vent:        return 3.0f;
+            case PassageType.CrookedVent: return 4.0f;
+            case PassageType.Rubble:      return 2.0f;
+            default:                      return 1.0f;
         }
     }
 
@@ -126,11 +127,12 @@ public class CorridorWallModel : WallModel
     {
         switch (type)
         {
-            case PassageType.Corridor: return 1;
-            case PassageType.Rubble:   return 1;
-            case PassageType.Duct:     return 2;
-            case PassageType.Vent:     return 3;
-            default:                   return 1;
+            case PassageType.Corridor:    return 1;
+            case PassageType.Rubble:      return 1;
+            case PassageType.Duct:        return 2;
+            case PassageType.Vent:        return 3;
+            case PassageType.CrookedVent: return 4;
+            default:                      return 1;
         }
     }
 
@@ -138,11 +140,12 @@ public class CorridorWallModel : WallModel
     {
         switch (type)
         {
-            case PassageType.Corridor: return "CORRIDOR";
-            case PassageType.Rubble:   return "RUBBLE";
-            case PassageType.Duct:     return "DUCT";
-            case PassageType.Vent:     return "VENT";
-            default:                   return "TRAVEL";
+            case PassageType.Corridor:    return "CORRIDOR";
+            case PassageType.Rubble:      return "RUBBLE";
+            case PassageType.Duct:        return "DUCT";
+            case PassageType.Vent:        return "VENT";
+            case PassageType.CrookedVent: return "CROOKED VENT";
+            default:                      return "TRAVEL";
         }
     }
 }

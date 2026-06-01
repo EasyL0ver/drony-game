@@ -61,8 +61,32 @@ public class GameManager : MonoBehaviour
         // ── spawn passage wall entities for every connection ──
         foreach (var (a, b, type) in hexMap.ConnectionList)
         {
-            SpawnPassage(a, b, type);
-            SpawnPassage(b, a, type);
+            if (type == PassageType.CrookedVent)
+            {
+                // Compute pipe geometry once, matching EmitCrookedVentPipe
+                int eA = hexMap.EdgeToward(a, b);
+                Vector3 cA = hexMap.HexCenter(a);
+                Vector3 cB = hexMap.HexCenter(b);
+                float rA = hexMap.RoomRadius(hexMap.RoomSizeMap[a]);
+                float rB = hexMap.RoomRadius(hexMap.RoomSizeMap[b]);
+                Vector3 midA = (hexMap.Corner(cA, eA, rA) + hexMap.Corner(cA, (eA + 1) % 6, rA)) * 0.5f;
+                int eB = (eA + 3) % 6;
+                Vector3 midB = (hexMap.Corner(cB, eB, rB) + hexMap.Corner(cB, (eB + 1) % 6, rB)) * 0.5f;
+
+                float extend = hexMap.WallThickness * 0.5f + hexMap.VentPipeRadius * 0.5f;
+                Vector3 pipeHoriz = (midB - midA).normalized;
+                Vector3 pipeStart = midA - pipeHoriz * extend;
+                Vector3 pipeEnd = midB + pipeHoriz * extend;
+                int seed = a.x * 73 + a.y * 137 + eA * 31 + 12345;
+
+                SpawnCrookedVent(a, b, eA, pipeStart, pipeEnd, seed);
+                SpawnCrookedVent(b, a, eB, pipeStart, pipeEnd, seed);
+            }
+            else
+            {
+                SpawnPassage(a, b, type);
+                SpawnPassage(b, a, type);
+            }
         }
 
         // ── spawn rubble barriers for blocked connections ──
@@ -262,6 +286,34 @@ public class GameManager : MonoBehaviour
         col.center = new Vector3(0f, 1f, -0.5f);
     }
 
+    void SpawnCrookedVent(Vector2Int room, Vector2Int neighbor, int edge, Vector3 pipeStart, Vector3 pipeEnd, int seed)
+    {
+        var tile = fog.GetTile(room);
+        if (tile == null) return;
+
+        Vector3 center = hexMap.HexCenter(room);
+        float roomR = hexMap.RoomRadius(hexMap.RoomSizeMap[room]);
+
+        Vector3 c0 = hexMap.Corner(center, edge, roomR);
+        Vector3 c1 = hexMap.Corner(center, (edge + 1) % 6, roomR);
+        Vector3 wallMid = (c0 + c1) * 0.5f;
+        Vector3 inward = (center - wallMid).normalized;
+
+        var go = new GameObject($"Passage_{room}_{neighbor}");
+        go.transform.position = wallMid;
+        go.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
+        go.transform.SetParent(tile.transform, true);
+
+        var crookedVent = go.AddComponent<CrookedVentPassage>();
+        crookedVent.Init(room, neighbor, edge, pipeStart, pipeEnd, seed);
+        crookedVent.SetModel(tile.RModel.Walls[edge]);
+
+        float passW = hexMap.Model.PassageWidth(PassageType.CrookedVent);
+        var col = go.AddComponent<BoxCollider>();
+        col.size = new Vector3(passW, 2f, 1f);
+        col.center = new Vector3(0f, 1f, -0.5f);
+    }
+
     void SpawnRubbleBarrier(Vector2Int roomA, Vector2Int roomB)
     {
         var (midA, midB) = hexMap.Model.PassageEndpoints(roomA, roomB);
@@ -455,7 +507,7 @@ public class GameManager : MonoBehaviour
     {
         var tile = fog.GetTile(room);
         if (tile == null) return;
-        var passage = tile.GetPassage(neighbor);
+        var passage = tile.GetPassage(neighbor) as Passage;
         if (passage != null)
             passage.UpdateType(newType);
     }

@@ -512,8 +512,8 @@ public class DroneController : MonoBehaviour
         depMid.y = hoverY;
         Vector3 arrPark = capturedArrival != null ? capturedArrival.DroneParkPoint : depMid;
         arrPark.y = hoverY;
-        float depDist = Vector3.Distance(parkPoint, depMid);
-        float arrDist = capturedArrival != null ? Vector3.Distance(depMid, arrPark) : depDist;
+        float depDist = departure.GetTraversalDistance(parkPoint);
+        float arrDist = capturedArrival != null ? Vector3.Distance(capturedArrival.transform.position, arrPark) : depDist;
         float totalDist = depDist + arrDist;
         float depDur = totalDist > 0.01f ? totalDur * (depDist / totalDist) : totalDur * 0.5f;
         float arrDur = totalDist > 0.01f ? totalDur * (arrDist / totalDist) : totalDur * 0.5f;
@@ -669,8 +669,8 @@ public class DroneController : MonoBehaviour
         depMid.y = hoverY;
         Vector3 arrPark = arrival != null ? arrival.DroneParkPoint : depMid;
         arrPark.y = hoverY;
-        float depDist = Vector3.Distance(parkPos, depMid);
-        float arrDist = arrival != null ? Vector3.Distance(depMid, arrPark) : depDist;
+        float depDist = departure.GetTraversalDistance(parkPos);
+        float arrDist = arrival != null ? Vector3.Distance(arrival.transform.position, arrPark) : depDist;
         float totalDist = depDist + arrDist;
         float depDur = totalDist > 0.01f ? totalDur * (depDist / totalDist) : totalDur * 0.5f;
         float arrDur = totalDist > 0.01f ? totalDur * (arrDist / totalDist) : totalDur * 0.5f;

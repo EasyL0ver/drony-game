@@ -20,6 +20,7 @@ public class HexMapGenerator : MonoBehaviour
     [SerializeField] int roomCount = 18;
     [SerializeField] int seed = 42;
     [SerializeField] bool testMode = true;
+    [SerializeField] int testMapIndex = 0;
     public bool TestMode => testMode;
 
     [Header("Hex Dimensions")]
@@ -44,6 +45,7 @@ public class HexMapGenerator : MonoBehaviour
     public List<(Vector2Int a, Vector2Int b, PassageType type)> ConnectionList { get; private set; }
     public float WallHeight => wallHeight;
     public float WallThickness => wallThickness;
+    public float VentPipeRadius => ventPipeRadius;
     public float HexRadiusValue => hexRadius;
     public float GridScaleValue => gridScale;
 
@@ -83,10 +85,10 @@ public class HexMapGenerator : MonoBehaviour
             DestroyImmediate(transform.GetChild(0).gameObject);
 
         // --- 1. Layout via MapModel ---
-        Model = new MapModel(testMode ? 3 : roomCount, seed, hexRadius, gridScale, mediumScale, smallScale,
+        Model = new MapModel(roomCount, seed, hexRadius, gridScale, mediumScale, smallScale,
                              wallHeight, corridorWidth, ductWidth, ventPipeRadius);
         if (testMode)
-            Model.GenerateTestLayout();
+            Model.GenerateTestLayout(testMapIndex);
         else
             Model.GenerateLayout();
 
@@ -106,7 +108,7 @@ public class HexMapGenerator : MonoBehaviour
 
         foreach (var (a, b, type) in connections)
         {
-            if (type == PassageType.Vent) continue;
+            if (type == PassageType.Vent || type == PassageType.CrookedVent) continue;
             int ea = EdgeToward(a, b);
             float gapW = PassageWidth(type);
             var info = new PassageInfo { width = gapW, type = type };
@@ -140,6 +142,10 @@ public class HexMapGenerator : MonoBehaviour
             if (type == PassageType.Vent)
             {
                 EmitVentPipe(ventPipeMB, ventGlowMB, a, b, roomSizes[a], roomSizes[b]);
+            }
+            else if (type == PassageType.CrookedVent)
+            {
+                EmitCrookedVentPipe(ventPipeMB, ventGlowMB, a, b, roomSizes[a], roomSizes[b]);
             }
             else
             {
@@ -205,11 +211,12 @@ public class HexMapGenerator : MonoBehaviour
     {
         switch (t)
         {
-            case PassageType.Corridor: return corridorWidth;
-            case PassageType.Rubble:   return corridorWidth;
-            case PassageType.Duct:     return ductWidth;
-            case PassageType.Vent:     return ventPipeRadius * 2f;
-            default:                   return corridorWidth;
+            case PassageType.Corridor:    return corridorWidth;
+            case PassageType.Rubble:      return corridorWidth;
+            case PassageType.Duct:        return ductWidth;
+            case PassageType.Vent:        return ventPipeRadius * 2f;
+            case PassageType.CrookedVent: return ventPipeRadius * 2f;
+            default:                      return corridorWidth;
         }
     }
 
@@ -217,11 +224,12 @@ public class HexMapGenerator : MonoBehaviour
     {
         switch (t)
         {
-            case PassageType.Corridor: return wallHeight * 0.88f;
-            case PassageType.Rubble:   return wallHeight * 0.88f;
-            case PassageType.Duct:     return wallHeight * 0.38f;
-            case PassageType.Vent:     return wallHeight * 0.65f;
-            default:                   return wallHeight;
+            case PassageType.Corridor:    return wallHeight * 0.88f;
+            case PassageType.Rubble:      return wallHeight * 0.88f;
+            case PassageType.Duct:        return wallHeight * 0.38f;
+            case PassageType.Vent:        return wallHeight * 0.65f;
+            case PassageType.CrookedVent: return wallHeight * 0.65f;
+            default:                      return wallHeight;
         }
     }
 
@@ -787,6 +795,52 @@ public class HexMapGenerator : MonoBehaviour
             float t = i / (float)(ringCount + 1);
             Vector3 pos = Vector3.Lerp(startA, startB, t);
             EmitPipeRing(glowMB, pos, pipeDir, ventPipeRadius * 1.02f);
+        }
+    }
+
+    void EmitCrookedVentPipe(MB pipeMB, MB glowMB,
+                             Vector2Int roomA, Vector2Int roomB,
+                             RoomSize sizeA, RoomSize sizeB)
+    {
+        int eA = EdgeToward(roomA, roomB);
+        int eB = (eA + 3) % 6;
+
+        Vector3 cA = HexCenter(roomA);
+        Vector3 cB = HexCenter(roomB);
+
+        float rA = RoomRadius(sizeA);
+        float rB = RoomRadius(sizeB);
+        Vector3 midA = (Corner(cA, eA, rA) + Corner(cA, (eA + 1) % 6, rA)) * 0.5f;
+        Vector3 midB = (Corner(cB, eB, rB) + Corner(cB, (eB + 1) % 6, rB)) * 0.5f;
+
+        float extend = wallThickness * 0.5f + ventPipeRadius * 0.5f;
+        Vector3 pipeHoriz = (midB - midA).normalized;
+        Vector3 pipeA = midA - pipeHoriz * extend;
+        Vector3 pipeB = midB + pipeHoriz * extend;
+
+        float smallerWH = Mathf.Min(RoomWallHeight(sizeA), RoomWallHeight(sizeB));
+        float pipeY = smallerWH * 0.5f;
+
+        Vector3 start = new Vector3(pipeA.x, pipeY, pipeA.z);
+        Vector3 end = new Vector3(pipeB.x, pipeY, pipeB.z);
+
+        int seed = roomA.x * 73 + roomA.y * 137 + eA * 31 + 12345;
+        var waypoints = CrookedVentPassage.GenerateWaypoints(start, end, seed);
+
+        // Emit pipe segments between waypoints
+        for (int i = 0; i < waypoints.Count - 1; i++)
+            EmitPipeSegment(pipeMB, waypoints[i], waypoints[i + 1]);
+
+        // Glow bands at entrances
+        Vector3 pipeDir = end - start;
+        EmitPipeBand(glowMB, start, pipeDir);
+        EmitPipeBand(glowMB, end, pipeDir);
+
+        // Glow rings at each bend
+        for (int i = 1; i < waypoints.Count - 1; i++)
+        {
+            Vector3 dir = waypoints[i + 1] - waypoints[i - 1];
+            EmitPipeRing(glowMB, waypoints[i], dir, ventPipeRadius * 1.02f);
         }
     }
 

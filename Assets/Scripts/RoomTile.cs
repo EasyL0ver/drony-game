@@ -42,12 +42,17 @@ public class RoomTile : MonoBehaviour
     }
 
     /// <summary>
-    /// Get the Passage wall entity for the given neighbor room, or null if none.
+    /// Get the passage WallView for the given neighbor room, or null if none.
     /// </summary>
-    public Passage GetPassage(Vector2Int neighbor)
+    public WallView GetPassage(Vector2Int neighbor)
     {
-        foreach (var p in GetComponentsInChildren<Passage>())
-            if (p.Neighbor == neighbor) return p;
+        foreach (var w in GetComponentsInChildren<WallView>())
+        {
+            if (w.Model == null) continue;
+            if (w.Model.Neighbor != null && w.Model.Neighbor.Owner != null
+                && w.Model.Neighbor.Owner.Coord == neighbor)
+                return w;
+        }
         return null;
     }
 

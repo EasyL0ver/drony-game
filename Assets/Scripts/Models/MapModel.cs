@@ -100,30 +100,67 @@ public class MapModel
     // ── Layout generation ────────────────────
 
     /// <summary>
-    /// Minimal test layout: three rooms — A and B connected by corridor,
-    /// A and C connected by rubbled passage (requires Bomb to clear).
+    /// Generate a test layout by index. Each index is a hand-crafted scenario.
     /// </summary>
-    public void GenerateTestLayout()
+    public void GenerateTestLayout(int index = 0)
+    {
+        wallInteractions.Clear();
+        switch (index)
+        {
+            case 0: TestMap_CrookedVent(); break;
+            case 1: TestMap_AllPassages(); break;
+            default: TestMap_CrookedVent(); break;
+        }
+    }
+
+    /// <summary>Two rooms connected by a crooked vent.</summary>
+    void TestMap_CrookedVent()
     {
         var roomA = Vector2Int.zero;
-        var roomB = HexDirs[0]; // neighbor to the right
-        var roomC = HexDirs[1]; // neighbor upper-right
+        var roomB = HexDirs[0];
 
-        RoomList = new List<Vector2Int> { roomA, roomB, roomC };
+        RoomList = new List<Vector2Int> { roomA, roomB };
+        RoomSizes = new Dictionary<Vector2Int, RoomSize>
+        {
+            { roomA, RoomSize.Large },
+            { roomB, RoomSize.Small },
+        };
+        Connections = new List<Connection>
+        {
+            new Connection { roomA = roomA, roomB = roomB, type = PassageType.CrookedVent },
+        };
+    }
+
+    /// <summary>Central room connected to all passage types + stations.</summary>
+    void TestMap_AllPassages()
+    {
+        var roomA = Vector2Int.zero;
+        var roomB = HexDirs[0]; // corridor
+        var roomC = HexDirs[1]; // duct
+        var roomD = HexDirs[2]; // vent
+        var roomE = HexDirs[3]; // crooked vent
+        var roomF = HexDirs[4]; // rubble
+
+        RoomList = new List<Vector2Int> { roomA, roomB, roomC, roomD, roomE, roomF };
         RoomSizes = new Dictionary<Vector2Int, RoomSize>
         {
             { roomA, RoomSize.Large },
             { roomB, RoomSize.Large },
-            { roomC, RoomSize.Large },
+            { roomC, RoomSize.Medium },
+            { roomD, RoomSize.Small },
+            { roomE, RoomSize.Small },
+            { roomF, RoomSize.Large },
         };
         Connections = new List<Connection>
         {
             new Connection { roomA = roomA, roomB = roomB, type = PassageType.Corridor },
-            new Connection { roomA = roomA, roomB = roomC, type = PassageType.Rubble },
+            new Connection { roomA = roomA, roomB = roomC, type = PassageType.Duct },
+            new Connection { roomA = roomA, roomB = roomD, type = PassageType.Vent },
+            new Connection { roomA = roomA, roomB = roomE, type = PassageType.CrookedVent },
+            new Connection { roomA = roomA, roomB = roomF, type = PassageType.Rubble },
         };
 
-        wallInteractions.Clear();
-        wallInteractions[ConnKey(roomA, roomC)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
+        wallInteractions[ConnKey(roomA, roomF)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
     }
 
     public void GenerateLayout()
@@ -176,12 +213,23 @@ public class MapModel
         RoomSizes = roomSizes;
         Connections = connections;
 
+        // Randomly convert some vents to crooked vents
+        for (int i = 0; i < Connections.Count; i++)
+        {
+            var c = Connections[i];
+            if (c.type == PassageType.Vent && rng.NextDouble() < 0.4)
+            {
+                c.type = PassageType.CrookedVent;
+                Connections[i] = c;
+            }
+        }
+
         // Randomly convert some corridors/ducts to rubble
         wallInteractions.Clear();
         for (int i = 0; i < Connections.Count; i++)
         {
             var c = Connections[i];
-            if (c.type == PassageType.Vent) continue;
+            if (c.type == PassageType.Vent || c.type == PassageType.CrookedVent) continue;
             if (c.roomA == Vector2Int.zero || c.roomB == Vector2Int.zero) continue;
             if (rng.NextDouble() < 0.25)
             {
@@ -309,11 +357,12 @@ public class MapModel
     {
         switch (t)
         {
-            case PassageType.Corridor: return CorridorWidth;
-            case PassageType.Rubble:   return CorridorWidth;
-            case PassageType.Duct:     return DuctWidth;
-            case PassageType.Vent:     return VentPipeRadius * 2f;
-            default:                   return CorridorWidth;
+            case PassageType.Corridor:    return CorridorWidth;
+            case PassageType.Rubble:      return CorridorWidth;
+            case PassageType.Duct:        return DuctWidth;
+            case PassageType.Vent:        return VentPipeRadius * 2f;
+            case PassageType.CrookedVent: return VentPipeRadius * 2f;
+            default:                      return CorridorWidth;
         }
     }
 
@@ -321,11 +370,12 @@ public class MapModel
     {
         switch (t)
         {
-            case PassageType.Corridor: return WallHeight * 0.88f;
-            case PassageType.Rubble:   return WallHeight * 0.88f;
-            case PassageType.Duct:     return WallHeight * 0.38f;
-            case PassageType.Vent:     return WallHeight * 0.65f;
-            default:                   return WallHeight;
+            case PassageType.Corridor:    return WallHeight * 0.88f;
+            case PassageType.Rubble:      return WallHeight * 0.88f;
+            case PassageType.Duct:        return WallHeight * 0.38f;
+            case PassageType.Vent:        return WallHeight * 0.65f;
+            case PassageType.CrookedVent: return WallHeight * 0.65f;
+            default:                      return WallHeight;
         }
     }
 
@@ -438,10 +488,11 @@ public class MapModel
     {
         switch (type)
         {
-            case PassageType.Corridor: return 2f;
-            case PassageType.Rubble:   return 2f;
-            case PassageType.Duct:     return 4f;
-            case PassageType.Vent:     return 6f;
+            case PassageType.Corridor:    return 2f;
+            case PassageType.Rubble:      return 2f;
+            case PassageType.Duct:        return 4f;
+            case PassageType.Vent:        return 6f;
+            case PassageType.CrookedVent: return 8f;
             default: return 2f;
         }
     }
@@ -450,10 +501,11 @@ public class MapModel
     {
         switch (type)
         {
-            case PassageType.Corridor: return 1;
-            case PassageType.Rubble:   return 1;
-            case PassageType.Duct:     return 2;
-            case PassageType.Vent:     return 3;
+            case PassageType.Corridor:    return 1;
+            case PassageType.Rubble:      return 1;
+            case PassageType.Duct:        return 2;
+            case PassageType.Vent:        return 3;
+            case PassageType.CrookedVent: return 4;
             default: return 1;
         }
     }
@@ -462,11 +514,12 @@ public class MapModel
     {
         switch (type)
         {
-            case PassageType.Corridor: return "CORRIDOR";
-            case PassageType.Rubble:   return "RUBBLE";
-            case PassageType.Duct:     return "DUCT";
-            case PassageType.Vent:     return "VENT";
-            default:                   return "TRAVEL";
+            case PassageType.Corridor:    return "CORRIDOR";
+            case PassageType.Rubble:      return "RUBBLE";
+            case PassageType.Duct:        return "DUCT";
+            case PassageType.Vent:        return "VENT";
+            case PassageType.CrookedVent: return "CROOKED VENT";
+            default:                      return "TRAVEL";
         }
     }
 

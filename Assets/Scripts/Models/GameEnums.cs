@@ -4,7 +4,7 @@
 
 public enum FogState { Unknown, Scanning, Discovered, Visible }
 
-public enum PassageType { Corridor, Duct, Vent, Rubble }
+public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent }
 
 public enum RoomSize { Large, Medium, Small }
 
