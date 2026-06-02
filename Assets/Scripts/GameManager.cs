@@ -477,6 +477,20 @@ public class GameManager : MonoBehaviour
             foreach (var w in tile.GetComponentsInChildren<WallView>())
                 w.SetPowered(false);
         }
+
+        // Set initial blast door state (hide barrier + glow when powered)
+        foreach (var (a, b, type) in hexMap.ConnectionList)
+        {
+            if (type != PassageType.BlastDoor) continue;
+            long key = MapModel.ConnKey(a, b);
+            var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
+            bool closed = wall == null || !wall.IsPowered;
+
+            if (rubbleBarriers.TryGetValue(key, out var barrierGO))
+                barrierGO.SetActive(closed);
+            if (rubbleGlowRenderers.TryGetValue(key, out var glowRend))
+                glowRend.enabled = closed;
+        }
     }
 
     void OnPowerStateChanged()
@@ -506,11 +520,13 @@ public class GameManager : MonoBehaviour
         {
             if (type != PassageType.BlastDoor) continue;
             long key = MapModel.ConnKey(a, b);
+            var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
+            bool closed = wall == null || !wall.IsPowered;
+
             if (rubbleBarriers.TryGetValue(key, out var barrierGO))
-            {
-                var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
-                barrierGO.SetActive(wall == null || !wall.IsPowered);
-            }
+                barrierGO.SetActive(closed);
+            if (rubbleGlowRenderers.TryGetValue(key, out var glowRend))
+                glowRend.enabled = closed;
         }
     }
 
