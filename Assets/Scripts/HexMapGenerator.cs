@@ -192,7 +192,7 @@ public class MapView : MonoBehaviour
         var wallMB  = new MB();
         var glowMB  = new MB();
 
-        EmitHalfPassage(floorMB, wallMB, type == PassageType.Rubble ? null : glowMB,
+        EmitHalfPassage(floorMB, wallMB, (type == PassageType.Rubble || type == PassageType.BlastDoor) ? null : glowMB,
                         room, neighbor, w, wh, type, roomSizes[room], roomSizes[neighbor]);
 
         Color glowColor = type == PassageType.Duct ? ductGlow : corridorGlow;
@@ -204,7 +204,7 @@ public class MapView : MonoBehaviour
         SpawnChildUnder(parent, "PassWalls", wallMB.ToMesh("PassWalls"), matWall);
 
         Material matGlow = null;
-        if (type != PassageType.Rubble)
+        if (type != PassageType.Rubble && type != PassageType.BlastDoor)
         {
             matGlow = MakeEmissive(glowColor, glowIntensity);
             SpawnChildUnder(parent, "PassGlow", glowMB.ToMesh("PassGlow"), matGlow);
