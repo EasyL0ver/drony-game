@@ -125,6 +125,20 @@ public class GameManager : MonoBehaviour
                 SpawnRubbleBarrier(a, b);
         }
 
+        // ── link blast door barriers to their passages ──
+        foreach (var (a, b, type) in hexMap.ConnectionList)
+        {
+            if (type != PassageType.BlastDoor) continue;
+            long key = MapModel.ConnKey(a, b);
+            rubbleBarriers.TryGetValue(key, out var barrierGO);
+            rubbleGlowRenderers.TryGetValue(key, out var glowRend);
+
+            var passA = fog.GetTile(a)?.GetPassage(b) as BlastDoorPassage;
+            var passB = fog.GetTile(b)?.GetPassage(a) as BlastDoorPassage;
+            if (passA != null) passA.SetBarrier(barrierGO, glowRend);
+            if (passB != null) passB.SetBarrier(barrierGO, glowRend);
+        }
+
         // ── mark starting room as refitting station ──
         var stationTile = fog.GetTile(Vector2Int.zero);
 
@@ -478,31 +492,6 @@ public class GameManager : MonoBehaviour
                 w.SetPowered(false);
         }
 
-        // Subscribe blast door walls to open/close on traversal
-        foreach (var (a, b, type) in hexMap.ConnectionList)
-        {
-            if (type != PassageType.BlastDoor) continue;
-            long key = MapModel.ConnKey(a, b);
-
-            // Subscribe both directions (wall A→B and wall B→A)
-            var wallAB = hexMap.Model.GetWall(a, b);
-            var wallBA = hexMap.Model.GetWall(b, a);
-            long capturedKey = key;
-
-            System.Action openDoor = () =>
-            {
-                if (rubbleBarriers.TryGetValue(capturedKey, out var go)) go.SetActive(false);
-                if (rubbleGlowRenderers.TryGetValue(capturedKey, out var r)) r.enabled = false;
-            };
-            System.Action closeDoor = () =>
-            {
-                if (rubbleBarriers.TryGetValue(capturedKey, out var go)) go.SetActive(true);
-                if (rubbleGlowRenderers.TryGetValue(capturedKey, out var r)) r.enabled = true;
-            };
-
-            if (wallAB != null) { wallAB.OnBeforeTraversalComplete += openDoor; wallAB.OnTraversalComplete += closeDoor; }
-            if (wallBA != null) { wallBA.OnBeforeTraversalComplete += openDoor; wallBA.OnTraversalComplete += closeDoor; }
-        }
     }
 
     void OnPowerStateChanged()
@@ -563,7 +552,11 @@ public class GameManager : MonoBehaviour
         go.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
         go.transform.SetParent(tile.transform, true);
 
-        var passage = go.AddComponent<Passage>();
+        Passage passage;
+        if (type == PassageType.BlastDoor)
+            passage = go.AddComponent<BlastDoorPassage>();
+        else
+            passage = go.AddComponent<Passage>();
         passage.Init(room, neighbor, edge, type);
         passage.SetModel(tile.RModel.Walls[edge]);
 

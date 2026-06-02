@@ -40,15 +40,6 @@ public abstract class WallModel
     /// <summary>Called before a drone begins traversing this wall. Override for gating logic (e.g. door opening, power draw).</summary>
     public virtual void BeforeTraversal() { }
 
-    /// <summary>Fired when BeforeTraversal completes (for view-layer animations).</summary>
-    public event System.Action OnBeforeTraversalComplete;
-
-    /// <summary>Fired when traversal finishes (drone has passed through).</summary>
-    public event System.Action OnTraversalComplete;
-
-    protected void FireBeforeTraversalComplete() => OnBeforeTraversalComplete?.Invoke();
-    public void FireTraversalComplete() => OnTraversalComplete?.Invoke();
-
     // ── Convenience ─────────────────────────
 
     // ── Construction ─────────────────────────
@@ -289,7 +280,6 @@ public class ObstacleWallModel<T> : CorridorWallModel, IObstacleWall where T : I
     public override void BeforeTraversal()
     {
         Behavior.BeforeTraversal(this);
-        FireBeforeTraversalComplete();
     }
 
     public PassageType? CompleteInteraction()

@@ -587,10 +587,8 @@ public class DroneController : MonoBehaviour
 
     void OnHopComplete(Vector2Int newRoom)
     {
-        // Notify wall model that traversal is done (for door close animations etc.)
         int hopIdx = activeJourney.CurrentHopIndex;
         var wall = activeJourney.Walls[hopIdx];
-        wall.FireTraversalComplete();
 
         // Room transition
         var oldTile = fog?.GetTile(CurrentRoom);
