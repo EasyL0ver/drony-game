@@ -206,13 +206,13 @@ public class MapModel
         {
             { hub,     RoomSize.Large },
             { east,    RoomSize.Large },
-            { farEast, RoomSize.Medium },
+            { farEast, RoomSize.Large },
             { south,   RoomSize.Large },
-            { sEast,   RoomSize.Medium },
+            { sEast,   RoomSize.Large },
             { north,   RoomSize.Small },
             { nWest,   RoomSize.Small },
             { west,    RoomSize.Large },
-            { farWest, RoomSize.Medium },
+            { farWest, RoomSize.Large },
             { fwNorth, RoomSize.Medium },
         };
 
@@ -226,9 +226,9 @@ public class MapModel
             // Bombed path opens west wing
             new Connection { roomA = hub,     roomB = west,    type = PassageType.Rubble },
             new Connection { roomA = west,    roomB = farWest, type = PassageType.Corridor },
-            new Connection { roomA = farWest, roomB = fwNorth, type = PassageType.Corridor },
+            new Connection { roomA = farWest, roomB = fwNorth, type = PassageType.Duct },
             // Scout-only paths
-            new Connection { roomA = hub,     roomB = north,   type = PassageType.Duct },
+            new Connection { roomA = hub,     roomB = north,   type = PassageType.Vent },
             new Connection { roomA = north,   roomB = nWest,   type = PassageType.Vent },
             // Shortcut vent from north to west (scouts can peek behind rubble)
             new Connection { roomA = nWest,   roomB = west,    type = PassageType.Vent },

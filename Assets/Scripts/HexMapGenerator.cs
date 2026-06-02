@@ -74,8 +74,7 @@ public class HexMapGenerator : MonoBehaviour
 
     void OnEnable()
     {
-        if (Application.isPlaying || transform.childCount == 0)
-            Generate();
+        // Generation is driven by GameManager.Setup()
     }
 
     public void SetTestMapIndex(int index) { testMapIndex = index; }

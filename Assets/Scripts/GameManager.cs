@@ -38,6 +38,23 @@ public class GameManager : MonoBehaviour
             Setup();
     }
 
+    [ContextMenu("Load Map 0 - Small")]
+    void LoadMap0() { RestartWithMap(0); }
+    [ContextMenu("Load Map 1 - Medium")]
+    void LoadMap1() { RestartWithMap(1); }
+    [ContextMenu("Load Map 2 - Salvage Run")]
+    void LoadMap2() { RestartWithMap(2); }
+
+    public void RestartWithMap(int mapIndex)
+    {
+        Time.timeScale = 1f;
+        testMapIndex = mapIndex;
+        Drones.Clear();
+        rubbleBarriers.Clear();
+        rubbleGlowRenderers.Clear();
+        Setup();
+    }
+
     // No per-frame fog update needed — RoomTile handles its own state
     // when DroneController calls OnDroneEnter/OnDroneExit.
 
@@ -52,8 +69,7 @@ public class GameManager : MonoBehaviour
         mapGO.transform.SetParent(transform, false);
         hexMap = mapGO.AddComponent<HexMapGenerator>();
         hexMap.SetTestMapIndex(testMapIndex);
-        if (hexMap.Model == null)
-            hexMap.Generate();
+        hexMap.Generate();
 
         // ── fog of war ──
         var fogGO = new GameObject("FogOfWar");
