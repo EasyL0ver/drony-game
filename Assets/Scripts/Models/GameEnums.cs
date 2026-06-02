@@ -8,7 +8,9 @@ public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent }
 
 public enum RoomSize { Large, Medium, Small }
 
-public enum GearType { None, Scanner, Bomb }
+public enum GearType { None, Scanner, Bomb, Cargo }
+
+public enum SlotSize { Small, Medium, Large }
 
 public enum DroneType { Scout, Hauler }
 
@@ -46,6 +48,9 @@ public class WallInteractionConfig
 
     /// <summary>If true, completing this enables gear management (refit).</summary>
     public bool EnablesRefit { get; set; }
+
+    /// <summary>If true, completing this enables selling equipped gear for points.</summary>
+    public bool EnablesSell { get; set; }
 
     /// <summary>Energy gained per cycle (e.g. charging gives +5).</summary>
     public int EnergyGainPerCycle { get; set; }
@@ -102,12 +107,10 @@ public class WallInteractionConfig
         CargoReward = CargoType.FuelCell,
     };
 
-    public static WallInteractionConfig Unload(int pointsReward = 3) => new WallInteractionConfig
+    public static WallInteractionConfig Unload() => new WallInteractionConfig
     {
-        Label = "UNLOAD",
-        BaseDuration = 2f,
-        RequiredDroneType = DroneType.Hauler,
-        RequiresCargo = true,
-        PointsReward = pointsReward,
+        Label = "SELL",
+        BaseDuration = 1f,
+        EnablesSell = true,
     };
 }

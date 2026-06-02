@@ -27,6 +27,8 @@ public class DroneStatusUI : MonoBehaviour
         public List<Text> slotIcons;
         public List<Text> slotLabels;
         public List<Button> slotButtons;
+        public List<Text> slotSizeLabels;
+        public List<Outline> slotOutlines;
         // Journey display (step bar + overall bar)
         public GameObject journeyRow;       // parent container
         public Image stepBarBg;
@@ -68,6 +70,21 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color slotTextCol     = new Color(0.55f, 0.60f, 0.65f, 1f);
     static readonly Color slotGearCol     = Palette.DroneIdle;
     static readonly Color slotHoverCol    = new Color(0.08f, 0.18f, 0.25f, 0.9f);
+
+    // Slot size border colors
+    static readonly Color sizeSmallCol    = new Color(0.3f, 0.8f, 0.4f, 0.8f);   // green
+    static readonly Color sizeMediumCol   = new Color(0.3f, 0.6f, 1.0f, 0.8f);   // blue
+    static readonly Color sizeLargeCol    = new Color(1.0f, 0.7f, 0.2f, 0.8f);   // gold
+
+    static Color SlotSizeColor(SlotSize size)
+    {
+        switch (size)
+        {
+            case SlotSize.Large:  return sizeLargeCol;
+            case SlotSize.Medium: return sizeMediumCol;
+            default:              return sizeSmallCol;
+        }
+    }
 
     // Shop popup colors
     static readonly Color shopBgCol       = new Color(0.02f, 0.02f, 0.04f, 0.95f);
@@ -208,8 +225,10 @@ public class DroneStatusUI : MonoBehaviour
         var cardGO = MakeImage(parent, "Card_" + drone.Model.Name, cardColor);
         var cardImg = cardGO.GetComponent<Image>();
         var le = cardGO.AddComponent<LayoutElement>();
-        le.preferredHeight = baseCardH;
-        le.minHeight = baseCardH;
+        int slotCount = drone.Model != null ? drone.Model.SlotLayout.Length : 2;
+        float cardH = Mathf.Max(baseCardH, cardPad * 2 + slotCount * slotSize + (slotCount - 1) * 2f);
+        le.preferredHeight = cardH;
+        le.minHeight = cardH;
 
         // Click-to-select button (invisible, covers entire card)
         var btn = cardGO.AddComponent<Button>();
@@ -237,44 +256,75 @@ public class DroneStatusUI : MonoBehaviour
         //  Right: name, energy bar, journey bars
         // ════════════════════════════════════
         float pad = cardPad;
-        int maxSlots = drone.Model != null ? drone.Model.MaxSlots : 2;
+        int maxSlots = drone.Model != null ? drone.Model.SlotLayout.Length : 2;
         float slotCol = pad + slotSize + 4f; // left column width (slot + gap)
         float R = -pad;
 
-        // ── LEFT COLUMN: Equipment slots stacked vertically ──
+        // ── LEFT COLUMN: Equipment slots (fixed-size squares, top-aligned) ──
         var slotBgs = new List<Image>();
         var slotIcons = new List<Text>();
         var slotLabels = new List<Text>();
         var slotButtons = new List<Button>();
+        var slotSizeLabels = new List<Text>();
+        var slotOutlines = new List<Outline>();
+
+        float slotGap = 2f;
 
         for (int s = 0; s < maxSlots; s++)
         {
-            // Slots anchored to full card height, split evenly
             var slotGO = MakeImage(cardGO.transform, $"Slot_{s}", slotEmptyCol);
             var slotRT = slotGO.GetComponent<RectTransform>();
-            float yMax = 1f - (float)s / maxSlots;
-            float yMin = 1f - (float)(s + 1) / maxSlots;
-            slotRT.anchorMin = new Vector2(0, yMin);
-            slotRT.anchorMax = new Vector2(0, yMax);
-            slotRT.pivot = new Vector2(0, 0.5f);
-            slotRT.offsetMin = new Vector2(pad, s == maxSlots - 1 ? pad : 1);
-            slotRT.offsetMax = new Vector2(pad + slotSize, s == 0 ? -pad : -1);
+            slotRT.anchorMin = new Vector2(0, 1);
+            slotRT.anchorMax = new Vector2(0, 1);
+            slotRT.pivot = new Vector2(0, 1);
+            float yOff = pad + s * (slotSize + slotGap);
+            slotRT.anchoredPosition = new Vector2(pad, -yOff);
+            slotRT.sizeDelta = new Vector2(slotSize, slotSize);
 
+            // Size-coded border
+            SlotSize slotSz = drone.Model != null ? drone.Model.SlotLayout[s] : SlotSize.Small;
+            Color borderCol = SlotSizeColor(slotSz);
             var slotOutline = slotGO.AddComponent<Outline>();
-            slotOutline.effectColor = new Color(0.25f, 0.35f, 0.40f, 0.6f);
-            slotOutline.effectDistance = new Vector2(1, -1);
+            slotOutline.effectColor = borderCol;
+            slotOutline.effectDistance = new Vector2(1.5f, -1.5f);
 
-            var iconGO = MakeText(slotGO.transform, "Icon", "", 11, slotTextCol,
+            // Icon (upper 60%)
+            var iconGO = MakeText(slotGO.transform, "Icon", "", 12, slotTextCol,
                                   TextAnchor.MiddleCenter);
             var iconRT = iconGO.GetComponent<RectTransform>();
-            iconRT.anchorMin = new Vector2(0, 0.30f); iconRT.anchorMax = Vector2.one;
-            iconRT.offsetMin = new Vector2(1, 0); iconRT.offsetMax = new Vector2(-1, -1);
+            iconRT.anchorMin = new Vector2(0, 0.35f); iconRT.anchorMax = Vector2.one;
+            iconRT.offsetMin = Vector2.zero; iconRT.offsetMax = Vector2.zero;
+            var iconTxt = iconGO.GetComponent<Text>();
+            iconTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            iconTxt.verticalOverflow = VerticalWrapMode.Overflow;
 
-            var lblGO = MakeText(slotGO.transform, "Label", "EMPTY", 5, slotTextCol,
+            // Size letter below icon (lower 35%), same color as border
+            string sizeLetter = slotSz == SlotSize.Large ? "L" : slotSz == SlotSize.Medium ? "M" : "S";
+            var sizeGO = MakeText(slotGO.transform, "SizeLetter", sizeLetter, 8, borderCol,
+                                  TextAnchor.MiddleCenter);
+            var sizeRT = sizeGO.GetComponent<RectTransform>();
+            sizeRT.anchorMin = Vector2.zero; sizeRT.anchorMax = new Vector2(1, 0.35f);
+            sizeRT.offsetMin = Vector2.zero; sizeRT.offsetMax = Vector2.zero;
+            var sizeTxt = sizeGO.GetComponent<Text>();
+            sizeTxt.fontStyle = FontStyle.Bold;
+            sizeTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            sizeTxt.verticalOverflow = VerticalWrapMode.Overflow;
+            sizeTxt.resizeTextForBestFit = true;
+            sizeTxt.resizeTextMinSize = 6;
+            sizeTxt.resizeTextMaxSize = 8;
+
+            // Label (for gear name / sell price, overlays size letter area)
+            var lblGO = MakeText(slotGO.transform, "Label", "", 6, slotTextCol,
                                  TextAnchor.MiddleCenter);
             var lblRT = lblGO.GetComponent<RectTransform>();
-            lblRT.anchorMin = Vector2.zero; lblRT.anchorMax = new Vector2(1, 0.30f);
-            lblRT.offsetMin = new Vector2(1, 0); lblRT.offsetMax = new Vector2(-1, 0);
+            lblRT.anchorMin = Vector2.zero; lblRT.anchorMax = new Vector2(1, 0.35f);
+            lblRT.offsetMin = Vector2.zero; lblRT.offsetMax = Vector2.zero;
+            var lblTxt = lblGO.GetComponent<Text>();
+            lblTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            lblTxt.verticalOverflow = VerticalWrapMode.Overflow;
+            lblTxt.resizeTextForBestFit = true;
+            lblTxt.resizeTextMinSize = 5;
+            lblTxt.resizeTextMaxSize = 7;
 
             var slotBtn = slotGO.AddComponent<Button>();
             var slotNav = slotBtn.navigation;
@@ -288,6 +338,8 @@ public class DroneStatusUI : MonoBehaviour
             slotIcons.Add(iconGO.GetComponent<Text>());
             slotLabels.Add(lblGO.GetComponent<Text>());
             slotButtons.Add(slotBtn);
+            slotSizeLabels.Add(sizeGO.GetComponent<Text>());
+            slotOutlines.Add(slotOutline);
         }
 
         // ── RIGHT COLUMN: Name row ──
@@ -410,6 +462,8 @@ public class DroneStatusUI : MonoBehaviour
             slotIcons = slotIcons,
             slotLabels = slotLabels,
             slotButtons = slotButtons,
+            slotSizeLabels = slotSizeLabels,
+            slotOutlines = slotOutlines,
             journeyRow = jContGO,
             stepBarBg = sBgGO.GetComponent<Image>(),
             stepBarFill = sFillGO.GetComponent<Image>(),
@@ -504,6 +558,7 @@ public class DroneStatusUI : MonoBehaviour
 
             // ── Equipment slots ──
             bool atRefitStation = c.drone.IsRefitting;
+            bool atSellStation = c.drone.IsSelling;
 
             for (int s = 0; s < c.slotBgs.Count; s++)
             {
@@ -514,17 +569,26 @@ public class DroneStatusUI : MonoBehaviour
                 {
                     c.slotIcons[s].text = equip.Icon;
                     c.slotIcons[s].color = slotGearCol;
-                    c.slotLabels[s].text = equip.Name.ToUpper();
-                    c.slotLabels[s].color = slotGearCol;
-                    c.slotBgs[s].color = atRefitStation ? slotFilledCol : slotFilledCol * 0.7f;
+                    if (atSellStation)
+                    {
+                        c.slotLabels[s].text = "+" + equip.SellPrice;
+                        c.slotLabels[s].color = new Color(1f, 0.7f, 0.2f);
+                    }
+                    else
+                    {
+                        c.slotLabels[s].text = equip.Name.Length > 4 ? equip.Name.Substring(0, 4).ToUpper() : equip.Name.ToUpper();
+                        c.slotLabels[s].color = slotGearCol;
+                    }
+                    c.slotBgs[s].color = slotFilledCol;
+                    c.slotSizeLabels[s].enabled = false;
                 }
                 else
                 {
-                    c.slotIcons[s].text = atRefitStation ? "+" : "—";
+                    c.slotIcons[s].text = atRefitStation ? "+" : "";
                     c.slotIcons[s].color = atRefitStation ? accentColor : slotTextCol;
-                    c.slotLabels[s].text = atRefitStation ? "EQUIP" : "EMPTY";
-                    c.slotLabels[s].color = atRefitStation ? accentColor : slotTextCol;
+                    c.slotLabels[s].text = "";
                     c.slotBgs[s].color = atRefitStation ? slotEmptyCol : slotLockedCol;
+                    c.slotSizeLabels[s].enabled = true;
                 }
             }
 
@@ -599,6 +663,20 @@ public class DroneStatusUI : MonoBehaviour
     void OnSlotClicked(DroneController drone, int slotIdx)
     {
         if (drone.Model == null || drone.Model.Equipment == null) return;
+
+        // Sell mode at loading station
+        if (drone.IsSelling)
+        {
+            var item = drone.Model.Equipment[slotIdx];
+            if (item != null)
+            {
+                drone.Model.Unequip(slotIdx);
+                gm.Player.Points += item.SellPrice;
+                if (item.Size == SlotSize.Large)
+                    drone.ClearCargoVisual();
+            }
+            return;
+        }
 
         // Must have completed a refit action
         if (!drone.IsRefitting) return;

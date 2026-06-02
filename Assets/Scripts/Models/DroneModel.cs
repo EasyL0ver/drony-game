@@ -26,12 +26,18 @@ public class DroneModel
 
     // ── Equipment ────────────────────────────
 
-    public int MaxSlots { get; set; } = 2;
+    /// <summary>Slot layout defines what sizes this drone accepts.</summary>
+    public SlotSize[] SlotLayout { get; private set; }
     public GearItem[] Equipment { get; private set; }
 
     public void InitSlots()
     {
-        Equipment = new GearItem[MaxSlots];
+        if (Type == DroneType.Hauler)
+            SlotLayout = new[] { SlotSize.Small, SlotSize.Medium, SlotSize.Large };
+        else
+            SlotLayout = new[] { SlotSize.Small, SlotSize.Small };
+
+        Equipment = new GearItem[SlotLayout.Length];
     }
 
     /// <summary>True if gear of the given type is equipped in any slot.</summary>
@@ -43,13 +49,44 @@ public class DroneModel
         return false;
     }
 
-    /// <summary>Equip gear into the first empty slot. Returns slot index or -1 if full.</summary>
+    /// <summary>True if an item matching type AND size is equipped.</summary>
+    public bool HasGear(GearType type, SlotSize size)
+    {
+        if (Equipment == null) return false;
+        for (int i = 0; i < Equipment.Length; i++)
+            if (Equipment[i] != null && Equipment[i].Type == type && Equipment[i].Size == size) return true;
+        return false;
+    }
+
+    /// <summary>Remove the first equipped item of the given size. Returns it or null.</summary>
+    public GearItem UnequipBySize(SlotSize size)
+    {
+        if (Equipment == null) return null;
+        for (int i = 0; i < Equipment.Length; i++)
+        {
+            if (Equipment[i] != null && Equipment[i].Size == size)
+            {
+                var item = Equipment[i];
+                Equipment[i] = null;
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Can this item fit in a slot of the given size?</summary>
+    static bool FitsInSlot(SlotSize itemSize, SlotSize slotSize)
+    {
+        return itemSize <= slotSize;
+    }
+
+    /// <summary>Equip gear into the first compatible empty slot. Returns slot index or -1 if full.</summary>
     public int Equip(GearItem item)
     {
         if (Equipment == null) InitSlots();
         for (int i = 0; i < Equipment.Length; i++)
         {
-            if (Equipment[i] == null)
+            if (Equipment[i] == null && FitsInSlot(item.Size, SlotLayout[i]))
             {
                 Equipment[i] = item;
                 return i;
@@ -73,11 +110,14 @@ public class DroneModel
     /// <summary>True if the drone has a RubbleClearer and can clear blocked passages.</summary>
     public bool CanClearRubble => HasGear(GearType.Bomb);
 
-    // ── Cargo (hauler only) ─────────────────
-
-    public CargoType Cargo { get; set; } = CargoType.None;
-    public bool HasCargo => Cargo != CargoType.None;
-    public bool CanCarry => Type == DroneType.Hauler && !HasCargo;
+    /// <summary>Check if there's a free slot that can fit the given size.</summary>
+    public bool HasFreeSlot(SlotSize size)
+    {
+        if (Equipment == null) return false;
+        for (int i = 0; i < Equipment.Length; i++)
+            if (Equipment[i] == null && FitsInSlot(size, SlotLayout[i])) return true;
+        return false;
+    }
 
     // ── Energy ───────────────────────────────
 

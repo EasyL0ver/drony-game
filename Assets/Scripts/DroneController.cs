@@ -748,21 +748,12 @@ public class DroneController : MonoBehaviour
         }
 
         // Award cargo if applicable
-        if (cfg.CargoReward != CargoType.None && Model.CanCarry)
+        if (cfg.CargoReward != CargoType.None && Model.HasFreeSlot(SlotSize.Large))
         {
-            Model.Cargo = cfg.CargoReward;
+            Model.Equip(GearCatalog.FuelCell);
             OnCargoPickedUp();
             // Hide the barrel
             if (wall != null) wall.gameObject.SetActive(false);
-        }
-
-        // Unload cargo for points
-        if (cfg.RequiresCargo && Model.HasCargo)
-        {
-            Model.Cargo = CargoType.None;
-            if (cargoVisual != null) { Destroy(cargoVisual); cargoVisual = null; }
-            var gm = GetComponentInParent<GameManager>();
-            if (gm != null) gm.Player.Points += cfg.PointsReward;
         }
 
         // Repeat if the config says so (e.g. charging until full)
@@ -823,6 +814,11 @@ public class DroneController : MonoBehaviour
         LootBarrelMesh.Build(cargoVisual.transform, matBody, matBody, matGlow);
     }
 
+    public void ClearCargoVisual()
+    {
+        if (cargoVisual != null) { Destroy(cargoVisual); cargoVisual = null; }
+    }
+
     // ── Visuals ────────────────────────
 
     void UpdateGlow()
@@ -843,6 +839,7 @@ public class DroneController : MonoBehaviour
     // ── Compat stubs (for UI that hasn't been rewritten yet) ────
 
     public bool IsRefitting => lastCompletedInteraction != null && lastCompletedInteraction.EnablesRefit;
+    public bool IsSelling => lastCompletedInteraction != null && lastCompletedInteraction.EnablesSell;
 
     public struct JourneyStep
     {

@@ -183,9 +183,7 @@ public class StationWallModel : WallModel
                 return list;
             if (_interaction.RequiredDroneType != null && drone.Type != _interaction.RequiredDroneType.Value)
                 return list;
-            if (_interaction.CargoReward != CargoType.None && !drone.CanCarry)
-                return list;
-            if (_interaction.RequiresCargo && !drone.HasCargo)
+            if (_interaction.CargoReward != CargoType.None && !drone.HasFreeSlot(SlotSize.Large))
                 return list;
             list.Add(_interaction);
         }
