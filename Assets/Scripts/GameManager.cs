@@ -26,6 +26,7 @@ public class GameManager : MonoBehaviour
 
     public List<DroneController> Drones { get; private set; } = new List<DroneController>();
     public PlayerModel Player { get; private set; }
+    public PowerNetworkModel PowerNetwork { get; private set; }
 
     // Rubble barrier GOs keyed by ConnKey for cleanup when interaction completes
     readonly Dictionary<long, GameObject> rubbleBarriers = new Dictionary<long, GameObject>();
@@ -216,6 +217,9 @@ public class GameManager : MonoBehaviour
             cacheView.SetModel(barrelTile.RModel.Walls[cacheEdge]);
         }
 
+        // ── power cable network ──
+        SetupPowerNetwork();
+
         // ── player economy ──
         Player = new PlayerModel(startingPoints);
 
@@ -395,6 +399,75 @@ public class GameManager : MonoBehaviour
         go.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
 
         return edge;
+    }
+
+    /// <summary>
+    /// Create the power cable network from map seed data and inject into stations.
+    /// </summary>
+    void SetupPowerNetwork()
+    {
+        var mapModel = hexMap.Model;
+        if (!mapModel.batteryRoom.HasValue) { PowerNetwork = null; return; }
+
+        PowerNetwork = new PowerNetworkModel();
+
+        // Add power source
+        var source = PowerNetwork.AddSource(mapModel.batteryRoom.Value, mapModel.batteryMaxEnergy);
+
+        // Add cable edges
+        foreach (var cable in mapModel.CableConnections)
+        {
+            PowerNetwork.AddCable(cable.roomA, cable.roomB);
+        }
+
+        // Spawn battery building on a wall in the battery room
+        Vector2Int battCoord = mapModel.batteryRoom.Value;
+        var battTile = fog.GetTile(battCoord);
+        if (battTile != null)
+        {
+            var battGO = new GameObject("BatteryStation");
+            battGO.transform.SetParent(battTile.transform, false);
+            int battEdge = PlaceAtWall(battGO, battCoord, battTile.RModel, null);
+            if (battEdge >= 0)
+            {
+                var battView = battGO.AddComponent<BatteryStation>();
+                battView.SetModel(battTile.RModel.Walls[battEdge]);
+                battView.SetPowerSource(source);
+            }
+            else
+            {
+                Destroy(battGO);
+            }
+        }
+
+        // Inject power provider into all station walls
+        foreach (var coord in mapModel.RoomList)
+        {
+            var tile = fog.GetTile(coord);
+            if (tile == null) continue;
+            for (int e = 0; e < 6; e++)
+            {
+                if (tile.RModel.Walls[e] is StationWallModel station)
+                    station.SetPowerProvider(PowerNetwork);
+            }
+        }
+
+        // Visual feedback: dim cable glow when battery dies
+        PowerNetwork.OnPowerStateChanged += OnPowerStateChanged;
+    }
+
+    void OnPowerStateChanged()
+    {
+        if (hexMap == null || hexMap.CableGlowMaterial == null) return;
+
+        if (PowerNetwork.IsActive)
+        {
+            hexMap.CableGlowMaterial.SetColor("_EmissionColor", Palette.CableGlow * 4f);
+        }
+        else
+        {
+            hexMap.CableGlowMaterial.SetColor("_EmissionColor", Palette.CableDead * 0.5f);
+        }
     }
 
     static GearItem RollLoot()

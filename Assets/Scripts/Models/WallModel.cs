@@ -155,10 +155,12 @@ public class CorridorWallModel : WallModel
 
 /// <summary>
 /// A station wall: always passable (corridor), has a station interaction.
+/// Requires power to function (if a power provider is set).
 /// </summary>
 public class StationWallModel : WallModel
 {
     private readonly WallInteractionConfig _interaction;
+    private IPowerProvider _powerProvider;
 
     public DroneModel OccupiedBy { get; set; }
 
@@ -166,6 +168,36 @@ public class StationWallModel : WallModel
         : base(owner, edgeIndex)
     {
         _interaction = interaction;
+    }
+
+    /// <summary>Inject power dependency. Station only works when room is powered.</summary>
+    public void SetPowerProvider(IPowerProvider provider)
+    {
+        _powerProvider = provider;
+    }
+
+    /// <summary>Whether this station's room currently has power.</summary>
+    public bool IsPowered
+    {
+        get
+        {
+            if (_powerProvider == null) return true; // no power system = always on
+            return _powerProvider.IsRoomPowered(Owner.Coord);
+        }
+    }
+
+    /// <summary>
+    /// Attempt to draw power for one interaction cycle.
+    /// Returns true if enough power was drawn (or no power cost).
+    /// </summary>
+    public bool TryDrawPower(WallInteractionConfig cfg)
+    {
+        if (cfg == null || cfg.PowerCost <= 0f) return true;
+        if (_powerProvider == null) return true;
+        if (!_powerProvider.IsRoomPowered(Owner.Coord)) return false;
+
+        float drawn = _powerProvider.Draw(cfg.PowerCost);
+        return drawn >= cfg.PowerCost;
     }
 
     public override WallPassability GetPassability(DroneModel drone)
@@ -177,6 +209,7 @@ public class StationWallModel : WallModel
     {
         var list = new List<WallInteractionConfig>();
         if (OccupiedBy != null && OccupiedBy != drone) return list;
+        if (!IsPowered) return list;
         if (_interaction != null)
         {
             if (_interaction.RequiredGear != GearType.None && !drone.HasGear(_interaction.RequiredGear))

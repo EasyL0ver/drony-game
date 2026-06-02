@@ -197,6 +197,14 @@ public class DroneController : MonoBehaviour
         if (wall.Model is StationWallModel stationA) stationA.OccupiedBy = Model;
         currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
         {
+            // Draw power before starting first cycle
+            if (wall.Model is StationWallModel stationPow && !stationPow.TryDrawPower(cfg))
+            {
+                stationPow.OccupiedBy = null;
+                activeInteractionWall = null;
+                state = State.Idle;
+                return;
+            }
             stepStartTime = Time.time;
             state = State.WallAnimating;
             wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
@@ -772,12 +780,20 @@ public class DroneController : MonoBehaviour
         // Repeat if the config says so (e.g. charging until full)
         if (cfg.RepeatCondition != null && cfg.RepeatCondition(Model))
         {
-            stepStartTime = Time.time;
-            wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
+            // Draw power for next cycle — stop if insufficient
+            if (wall.Model is StationWallModel stationPow2 && !stationPow2.TryDrawPower(cfg))
             {
-                OnInteractionComplete(cfg, wall);
-            });
-            return;
+                // Power ran out — end interaction
+            }
+            else
+            {
+                stepStartTime = Time.time;
+                wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
+                {
+                    OnInteractionComplete(cfg, wall);
+                });
+                return;
+            }
         }
 
         activeJourney?.AdvanceHop();

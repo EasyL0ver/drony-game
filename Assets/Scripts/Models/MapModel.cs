@@ -40,6 +40,23 @@ public class MapModel
     // Room for charging station (null = auto-pick)
     public Vector2Int? chargingStationRoom { get; private set; }
 
+    // ── Power cable seed data ────────────────
+    /// <summary>Cable connections (separate layer from passages).</summary>
+    public List<CableConnection> CableConnections { get; private set; } = new List<CableConnection>();
+
+    /// <summary>Room where the battery power source is placed (null = no power network).</summary>
+    public Vector2Int? batteryRoom { get; private set; }
+
+    /// <summary>Starting energy for the battery.</summary>
+    public float batteryMaxEnergy { get; private set; } = 100f;
+
+    /// <summary>A cable edge between two adjacent rooms.</summary>
+    public struct CableConnection
+    {
+        public Vector2Int roomA;
+        public Vector2Int roomB;
+    }
+
     /// <summary>Read wall interaction from generation data. Used only during initial wiring.</summary>
     public WallInteractionConfig GetSeedWallInteraction(Vector2Int a, Vector2Int b)
     {
@@ -246,6 +263,15 @@ public class MapModel
         // Station placements
         chargingStationRoom = east;
         loadingStationRoom = south;
+
+        // Power cable network: battery in hub, cables to station rooms
+        batteryRoom = hub;
+        batteryMaxEnergy = 120f;
+        CableConnections = new List<CableConnection>
+        {
+            new CableConnection { roomA = hub,  roomB = east },   // powers charging station
+            new CableConnection { roomA = hub,  roomB = south },  // powers loading station
+        };
     }
 
     public void GenerateLayout()

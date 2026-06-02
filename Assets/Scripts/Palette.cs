@@ -23,6 +23,10 @@ public static class Palette
     public static readonly Color ChargingGlow    = Hex("FFB800");
     public static readonly Color RefittingGlow   = Hex("00D0FF");
 
+    // ── power cables ──
+    public static readonly Color CableGlow       = Hex("FFB800");
+    public static readonly Color CableDead       = Hex("332200");
+
     // ── route lines ──
     public static readonly Color JourneyLine     = Hex("3399FF");
     public static readonly Color PreviewLine     = Hex("6688AA");

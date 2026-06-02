@@ -71,6 +71,9 @@ public class WallInteractionConfig
     /// <summary>Points awarded to player on completion.</summary>
     public int PointsReward { get; set; }
 
+    /// <summary>Power drawn from the room's power network per cycle.</summary>
+    public float PowerCost { get; set; }
+
     /// <summary>Specific loot item awarded on pickup (overrides generic CargoReward).</summary>
     public GearItem LootItem { get; set; }
 
@@ -81,6 +84,7 @@ public class WallInteractionConfig
         Label = "CHARGE",
         BaseDuration = 0.6f,
         EnergyGainPerCycle = 5,
+        PowerCost = 3f,
         RepeatCondition = drone => drone.CurrentEnergy < drone.MaxEnergy,
     };
 
@@ -89,6 +93,7 @@ public class WallInteractionConfig
         Label = "REFIT",
         BaseDuration = 2f,
         EnablesRefit = true,
+        PowerCost = 5f,
     };
 
     public static WallInteractionConfig RubbleClear(GearType gear) => new WallInteractionConfig

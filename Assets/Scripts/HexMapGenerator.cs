@@ -57,6 +57,11 @@ public class HexMapGenerator : MonoBehaviour
     Color ventGlow        = Palette.VentGlow;
     [SerializeField] float glowIntensity   = 4f;
 
+    // Cable glow material — exposed so GameManager can dim it when battery dies
+    Material matCableGlow;
+    /// <summary>The emissive material used for cable glow. Swap emission to show power state.</summary>
+    public Material CableGlowMaterial => matCableGlow;
+
     // Flat-top hex: 6 axial neighbor directions
     static readonly Vector2Int[] HexDirs =
     {
@@ -161,6 +166,14 @@ public class HexMapGenerator : MonoBehaviour
             }
         }
 
+        // --- 3b. Power cables (separate visual layer) ---
+        var cablePipeMB = new MB();
+        foreach (var cable in Model.CableConnections)
+        {
+            EmitCablePipe(cablePipeMB, cable.roomA, cable.roomB,
+                          roomSizes[cable.roomA], roomSizes[cable.roomB]);
+        }
+
         // --- 4. Instantiate ---
         var matFloor    = MakeMat(floorColor, 0.25f, 0.40f);
         var matWall     = MakeMat(wallColor, 0.65f, 0.50f);
@@ -168,6 +181,7 @@ public class HexMapGenerator : MonoBehaviour
         var matCorrGlow = MakeEmissive(corridorGlow, glowIntensity);
         var matDuctGlow = MakeEmissive(ductGlow, glowIntensity);
         var matVentGlow = MakeEmissive(ventGlow, glowIntensity);
+        matCableGlow = MakeEmissive(Palette.CableGlow, glowIntensity);
 
         SpawnChild("Floors",       floorMB.ToMesh("FloorMesh"),    matFloor);
         SpawnChild("Walls",        wallMB.ToMesh("WallMesh"),      matWall);
@@ -175,6 +189,7 @@ public class HexMapGenerator : MonoBehaviour
         SpawnChild("Glow_Corridor",corrGlowMB.ToMesh("CorrGlow"), matCorrGlow);
         SpawnChild("Glow_Duct",    ductGlowMB.ToMesh("DuctGlow"), matDuctGlow);
         SpawnChild("Glow_Vent",    ventGlowMB.ToMesh("VentGlow"), matVentGlow);
+        SpawnChild("Cable_Pipes",  cablePipeMB.ToMesh("CablePipe"), matCableGlow);
     }
 
     public float RoomRadius(RoomSize s)
@@ -842,6 +857,88 @@ public class HexMapGenerator : MonoBehaviour
         {
             Vector3 dir = waypoints[i + 1] - waypoints[i - 1];
             EmitPipeRing(glowMB, waypoints[i], dir, ventPipeRadius * 1.02f);
+        }
+    }
+
+    /// <summary>
+    /// Emit a power cable between two rooms. The cable runs OUTSIDE the corridor wall
+    /// with a visible arch/droop for a realistic cable look.
+    /// </summary>
+    void EmitCablePipe(MB pipeMB,
+                       Vector2Int roomA, Vector2Int roomB,
+                       RoomSize sizeA, RoomSize sizeB)
+    {
+        int eA = EdgeToward(roomA, roomB);
+        int eB = (eA + 3) % 6;
+
+        Vector3 cA = HexCenter(roomA);
+        Vector3 cB = HexCenter(roomB);
+
+        float rA = RoomRadius(sizeA);
+        float rB = RoomRadius(sizeB);
+        Vector3 midA = (Corner(cA, eA, rA) + Corner(cA, (eA + 1) % 6, rA)) * 0.5f;
+        Vector3 midB = (Corner(cB, eB, rB) + Corner(cB, (eB + 1) % 6, rB)) * 0.5f;
+
+        float cableRadius = ventPipeRadius * 0.5f;
+
+        // Run far outside the corridor — sticking out beside the passage
+        Vector3 corrDir = (midB - midA).normalized;
+        Vector3 side = Vector3.Cross(corrDir, Vector3.up).normalized;
+        float sideOffset = corridorWidth * 0.5f + wallThickness * 2f + cableRadius * 4f;
+
+        // Attachment height on the wall
+        float attachY = wallHeight * 0.7f;
+
+        Vector3 startA = midA + side * sideOffset + Vector3.up * attachY;
+        Vector3 startB = midB + side * sideOffset + Vector3.up * attachY;
+
+        // Extend slightly past room walls
+        float extend = wallThickness * 0.5f + cableRadius;
+        startA -= corrDir * extend;
+        startB += corrDir * extend;
+
+        // Build arched cable with segments
+        int segments = 12;
+        float droopAmount = Vector3.Distance(startA, startB) * 0.15f;
+
+        Vector3 prev = startA;
+        for (int i = 1; i <= segments; i++)
+        {
+            float t = (float)i / segments;
+            Vector3 linear = Vector3.Lerp(startA, startB, t);
+            float droop = 4f * droopAmount * t * (1f - t);
+            Vector3 point = linear - Vector3.up * droop;
+
+            EmitCableSegment(pipeMB, prev, point, cableRadius);
+            prev = point;
+        }
+    }
+
+    void EmitCableSegment(MB mb, Vector3 from, Vector3 to, float radius)
+    {
+        int seg = 6;
+        Vector3 dir = (to - from).normalized;
+
+        Vector3 up = Vector3.up;
+        if (Mathf.Abs(Vector3.Dot(dir, up)) > 0.99f)
+            up = Vector3.right;
+        Vector3 right = Vector3.Cross(dir, up).normalized;
+        Vector3 fwd   = Vector3.Cross(right, dir).normalized;
+
+        Vector3[] ringA = new Vector3[seg];
+        Vector3[] ringB = new Vector3[seg];
+        for (int i = 0; i < seg; i++)
+        {
+            float a = Mathf.PI * 2f * i / seg;
+            Vector3 offset = (right * Mathf.Cos(a) + fwd * Mathf.Sin(a)) * radius;
+            ringA[i] = from + offset;
+            ringB[i] = to   + offset;
+        }
+
+        for (int i = 0; i < seg; i++)
+        {
+            int n = (i + 1) % seg;
+            mb.Quad(ringA[i], ringB[i], ringB[n], ringA[n]);
         }
     }
 
