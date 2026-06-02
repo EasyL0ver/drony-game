@@ -101,7 +101,18 @@ public class DroneModel
         if (Equipment == null || slot < 0 || slot >= Equipment.Length) return null;
         var item = Equipment[slot];
         Equipment[slot] = null;
+        if (CurrentEnergy > MaxEnergy) CurrentEnergy = MaxEnergy;
         return item;
+    }
+
+    static int BatteryBonus(SlotSize size)
+    {
+        switch (size)
+        {
+            case SlotSize.Large:  return 30;
+            case SlotSize.Medium: return 15;
+            default:              return 5;
+        }
     }
 
     /// <summary>True if the drone has a Scanner and can scan rooms.</summary>
@@ -121,7 +132,23 @@ public class DroneModel
 
     // ── Energy ───────────────────────────────
 
-    public int MaxEnergy { get; set; } = 10;
+    public int BaseEnergy { get; set; } = 10;
+
+    public int MaxEnergy
+    {
+        get
+        {
+            int total = BaseEnergy;
+            if (Equipment != null)
+            {
+                for (int i = 0; i < Equipment.Length; i++)
+                    if (Equipment[i] != null && Equipment[i].Type == GearType.Battery)
+                        total += BatteryBonus(Equipment[i].Size);
+            }
+            return total;
+        }
+    }
+
     public int CurrentEnergy { get; set; } = 10;
     public float EnergyFraction => MaxEnergy > 0 ? (float)CurrentEnergy / MaxEnergy : 0f;
 

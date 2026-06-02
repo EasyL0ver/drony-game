@@ -52,9 +52,67 @@ public static class GearCatalog
     public static readonly GearItem FuelCell = new GearItem(
         GearType.Cargo,
         "Fuel Cell",
-        "Precious cargo. Deliver to a loading station for points.",
+        "Standard cargo. Worth 3 points at loading station.",
         0,
         "\u2B23", // ⬣ hexagon
+        SlotSize.Large,
+        sellPrice: 3
+    );
+
+    public static readonly GearItem DataCore = new GearItem(
+        GearType.Cargo,
+        "Data Core",
+        "Compact salvage. Worth 2 points at loading station.",
+        0,
+        "\u25C8", // ◈ diamond
+        SlotSize.Small,
+        sellPrice: 2
+    );
+
+    public static readonly GearItem HeavySalvage = new GearItem(
+        GearType.Cargo,
+        "Heavy Salvage",
+        "Valuable heavy cargo. Worth 5 points at loading station.",
+        0,
+        "\u2B22", // ⬢ filled hexagon
+        SlotSize.Large,
+        sellPrice: 5
+    );
+
+    /// <summary>All cargo types that can appear in loot caches, with relative weights.</summary>
+    public static readonly (GearItem item, int weight)[] LootTable = new[]
+    {
+        (DataCore, 3),
+        (FuelCell, 4),
+        (HeavySalvage, 1),
+    };
+
+    public static readonly GearItem BatteryS = new GearItem(
+        GearType.Battery,
+        "Battery S",
+        "Small battery pack. +3 max energy.",
+        2,
+        "\u26A1", // ⚡ lightning
+        SlotSize.Small,
+        sellPrice: 1
+    );
+
+    public static readonly GearItem BatteryM = new GearItem(
+        GearType.Battery,
+        "Battery M",
+        "Medium battery pack. +5 max energy.",
+        4,
+        "\u26A1", // ⚡ lightning
+        SlotSize.Medium,
+        sellPrice: 2
+    );
+
+    public static readonly GearItem BatteryL = new GearItem(
+        GearType.Battery,
+        "Battery L",
+        "Large battery pack. +8 max energy.",
+        6,
+        "\u26A1", // ⚡ lightning
         SlotSize.Large,
         sellPrice: 3
     );
@@ -63,6 +121,9 @@ public static class GearCatalog
     {
         Scanner,
         Bomb,
+        BatteryS,
+        BatteryM,
+        BatteryL,
     };
 
     public static GearItem Get(GearType type)

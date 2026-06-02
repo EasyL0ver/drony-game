@@ -31,6 +31,15 @@ public class MapModel
     // Wall interactions (rubble, etc.) — keyed by ConnKey (used during generation only)
     readonly Dictionary<long, WallInteractionConfig> wallInteractions = new Dictionary<long, WallInteractionConfig>();
 
+    // Rooms that should have loot barrels placed (set by test maps)
+    public List<Vector2Int> lootBarrelRooms { get; private set; } = new List<Vector2Int>();
+
+    // Room for loading station (null = auto-pick)
+    public Vector2Int? loadingStationRoom { get; private set; }
+
+    // Room for charging station (null = auto-pick)
+    public Vector2Int? chargingStationRoom { get; private set; }
+
     /// <summary>Read wall interaction from generation data. Used only during initial wiring.</summary>
     public WallInteractionConfig GetSeedWallInteraction(Vector2Int a, Vector2Int b)
     {
@@ -105,10 +114,12 @@ public class MapModel
     public void GenerateTestLayout(int index = 0)
     {
         wallInteractions.Clear();
+        lootBarrelRooms.Clear();
         switch (index)
         {
             case 0: TestMap_CrookedVent(); break;
             case 1: TestMap_AllPassages(); break;
+            case 2: TestMap_SalvageRun(); break;
             default: TestMap_CrookedVent(); break;
         }
     }
@@ -164,6 +175,77 @@ public class MapModel
         };
 
         wallInteractions[ConnKey(roomA, roomF)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
+    }
+
+    /// <summary>
+    /// Salvage Run — a multi-room map designed to use all mechanics:
+    /// corridors for hauler, rubble to bomb-clear, vents/ducts for scouts,
+    /// multiple loot barrels, charging/loading stations, energy management.
+    /// Win condition: sell 10 pts of cargo at the loading station.
+    /// </summary>
+    void TestMap_SalvageRun()
+    {
+        // Room coordinates
+        var hub     = Vector2Int.zero;                         // start — refit station
+        var east    = new Vector2Int(1, 0);                    // charging station
+        var farEast = new Vector2Int(2, 0);                    // barrel #1
+        var south   = new Vector2Int(0, -1);                   // loading station (sell)
+        var sEast   = new Vector2Int(1, -1);                   // barrel #2
+        var north   = new Vector2Int(0, 1);                    // scout peek room
+        var nWest   = new Vector2Int(-1, 1);                   // dead end (empty)
+        var west    = new Vector2Int(-1, 0);                   // behind rubble
+        var farWest = new Vector2Int(-2, 0);                   // barrel #3
+        var fwNorth = new Vector2Int(-2, 1);                   // barrel #4
+
+        RoomList = new List<Vector2Int>
+        {
+            hub, east, farEast, south, sEast, north, nWest, west, farWest, fwNorth
+        };
+
+        RoomSizes = new Dictionary<Vector2Int, RoomSize>
+        {
+            { hub,     RoomSize.Large },
+            { east,    RoomSize.Large },
+            { farEast, RoomSize.Medium },
+            { south,   RoomSize.Large },
+            { sEast,   RoomSize.Medium },
+            { north,   RoomSize.Small },
+            { nWest,   RoomSize.Small },
+            { west,    RoomSize.Large },
+            { farWest, RoomSize.Medium },
+            { fwNorth, RoomSize.Medium },
+        };
+
+        Connections = new List<Connection>
+        {
+            // Hauler highway (corridors)
+            new Connection { roomA = hub,     roomB = east,    type = PassageType.Corridor },
+            new Connection { roomA = east,    roomB = farEast, type = PassageType.Corridor },
+            new Connection { roomA = hub,     roomB = south,   type = PassageType.Corridor },
+            new Connection { roomA = south,   roomB = sEast,   type = PassageType.Corridor },
+            // Bombed path opens west wing
+            new Connection { roomA = hub,     roomB = west,    type = PassageType.Rubble },
+            new Connection { roomA = west,    roomB = farWest, type = PassageType.Corridor },
+            new Connection { roomA = farWest, roomB = fwNorth, type = PassageType.Corridor },
+            // Scout-only paths
+            new Connection { roomA = hub,     roomB = north,   type = PassageType.Duct },
+            new Connection { roomA = north,   roomB = nWest,   type = PassageType.Vent },
+            // Shortcut vent from north to west (scouts can peek behind rubble)
+            new Connection { roomA = nWest,   roomB = west,    type = PassageType.Vent },
+        };
+
+        // Rubble interaction
+        wallInteractions[ConnKey(hub, west)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
+
+        // Barrel placements
+        lootBarrelRooms.Add(farEast);
+        lootBarrelRooms.Add(sEast);
+        lootBarrelRooms.Add(farWest);
+        lootBarrelRooms.Add(fwNorth);
+
+        // Station placements
+        chargingStationRoom = east;
+        loadingStationRoom = south;
     }
 
     public void GenerateLayout()

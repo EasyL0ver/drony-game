@@ -114,6 +114,9 @@ public class DroneStatusUI : MonoBehaviour
 
     // Points display (top of panel)
     Text pointsText;
+    Button pointsButton;
+    const int winPoints = 10;
+    bool gameWon;
 
     // Gear shop popup
     GameObject shopPopupGO;
@@ -201,7 +204,7 @@ public class DroneStatusUI : MonoBehaviour
         var titleLE = titleGO.AddComponent<LayoutElement>();
         titleLE.preferredHeight = 18;
 
-        // Points display
+        // Points display (clickable when win condition met)
         var ptsGO = new GameObject("Points");
         ptsGO.transform.SetParent(panel.transform, false);
         pointsText = ptsGO.AddComponent<Text>();
@@ -213,6 +216,14 @@ public class DroneStatusUI : MonoBehaviour
         pointsText.fontStyle = FontStyle.Bold;
         var ptsLE = ptsGO.AddComponent<LayoutElement>();
         ptsLE.preferredHeight = 16;
+        pointsButton = ptsGO.AddComponent<Button>();
+        pointsButton.targetGraphic = pointsText;
+        var ptsNav = pointsButton.navigation;
+        ptsNav.mode = Navigation.Mode.None;
+        pointsButton.navigation = ptsNav;
+        pointsButton.transition = Selectable.Transition.None;
+        pointsButton.onClick.AddListener(OnWinClicked);
+        pointsButton.interactable = false;
 
         // Drone cards
         foreach (var drone in drones)
@@ -298,20 +309,17 @@ public class DroneStatusUI : MonoBehaviour
             iconTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
             iconTxt.verticalOverflow = VerticalWrapMode.Overflow;
 
-            // Size letter below icon (lower 35%), same color as border
+            // Size letter (full slot, centered — only visible when empty)
             string sizeLetter = slotSz == SlotSize.Large ? "L" : slotSz == SlotSize.Medium ? "M" : "S";
-            var sizeGO = MakeText(slotGO.transform, "SizeLetter", sizeLetter, 8, borderCol,
+            var sizeGO = MakeText(slotGO.transform, "SizeLetter", sizeLetter, 12, borderCol,
                                   TextAnchor.MiddleCenter);
             var sizeRT = sizeGO.GetComponent<RectTransform>();
-            sizeRT.anchorMin = Vector2.zero; sizeRT.anchorMax = new Vector2(1, 0.35f);
+            sizeRT.anchorMin = Vector2.zero; sizeRT.anchorMax = Vector2.one;
             sizeRT.offsetMin = Vector2.zero; sizeRT.offsetMax = Vector2.zero;
             var sizeTxt = sizeGO.GetComponent<Text>();
             sizeTxt.fontStyle = FontStyle.Bold;
             sizeTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
             sizeTxt.verticalOverflow = VerticalWrapMode.Overflow;
-            sizeTxt.resizeTextForBestFit = true;
-            sizeTxt.resizeTextMinSize = 6;
-            sizeTxt.resizeTextMaxSize = 8;
 
             // Label (for gear name / sell price, overlays size letter area)
             var lblGO = MakeText(slotGO.transform, "Label", "", 6, slotTextCol,
@@ -495,6 +503,13 @@ public class DroneStatusUI : MonoBehaviour
             int curE = c.drone.Model.CurrentEnergy;
             int maxE = c.drone.Model.MaxEnergy;
 
+            // Rebuild energy segments if max energy changed
+            if (c.energySegments.Count != maxE)
+            {
+                RebuildEnergySegments(ref c, maxE);
+                cards[i] = c;
+            }
+
             // Determine how many segments are "threatened" by journey or preview
             int journeyCost = c.drone.JourneyEnergyCost;
             int previewCost = c.drone.PreviewEnergyCost;
@@ -636,11 +651,58 @@ public class DroneStatusUI : MonoBehaviour
         }
 
         // ── Points display ──
-        if (pointsText != null && gm != null && gm.Player != null)
-            pointsText.text = $"⬡ {gm.Player.Points} POINTS";
+        if (pointsText != null && pointsButton != null && gm != null && gm.Player != null)
+        {
+            int pts = gm.Player.Points;
+            if (pts >= winPoints && !gameWon)
+            {
+                pointsText.text = $"▶ {pts} POINTS — CLICK TO WIN ◀";
+                pointsText.color = new Color(1f, 1f, 0.3f);
+                pointsButton.interactable = true;
+            }
+            else
+            {
+                pointsText.text = $"⬡ {pts}/{winPoints} POINTS";
+                pointsButton.interactable = false;
+            }
+        }
 
         // ── Bottom hover tooltip ──
         UpdateHoverTooltip();
+    }
+
+    // ── win condition ───────────────────────────
+
+    void OnWinClicked()
+    {
+        if (gameWon) return;
+        if (gm == null || gm.Player == null || gm.Player.Points < winPoints) return;
+        gameWon = true;
+
+        // Full-screen win overlay
+        var overlay = new GameObject("WinOverlay");
+        overlay.transform.SetParent(statusCanvas.transform, false);
+        var overlayImg = overlay.AddComponent<Image>();
+        overlayImg.color = new Color(0f, 0f, 0f, 0.85f);
+        var overlayRT = overlay.GetComponent<RectTransform>();
+        overlayRT.anchorMin = Vector2.zero; overlayRT.anchorMax = Vector2.one;
+        overlayRT.offsetMin = Vector2.zero; overlayRT.offsetMax = Vector2.zero;
+
+        var winText = MakeText(overlay.transform, "WinText", "MISSION COMPLETE", 36,
+                               new Color(1f, 0.85f, 0.2f), TextAnchor.MiddleCenter);
+        var winRT = winText.GetComponent<RectTransform>();
+        winRT.anchorMin = new Vector2(0.2f, 0.45f); winRT.anchorMax = new Vector2(0.8f, 0.6f);
+        winRT.offsetMin = Vector2.zero; winRT.offsetMax = Vector2.zero;
+        winText.GetComponent<Text>().fontStyle = FontStyle.Bold;
+
+        var subText = MakeText(overlay.transform, "SubText",
+            $"Score: {gm.Player.Points} points", 18,
+            Color.white, TextAnchor.MiddleCenter);
+        var subRT = subText.GetComponent<RectTransform>();
+        subRT.anchorMin = new Vector2(0.2f, 0.35f); subRT.anchorMax = new Vector2(0.8f, 0.45f);
+        subRT.offsetMin = Vector2.zero; subRT.offsetMax = Vector2.zero;
+
+        Time.timeScale = 0f;
     }
 
     // ── card click ───────────────────────────
@@ -656,6 +718,31 @@ public class DroneStatusUI : MonoBehaviour
         }
 
         drone.IsSelected = !drone.IsSelected || !additive;
+    }
+
+    // ── dynamic energy segment rebuild ────────
+
+    void RebuildEnergySegments(ref DroneCard c, int maxE)
+    {
+        // Destroy old segments
+        foreach (var seg in c.energySegments)
+            if (seg != null) Destroy(seg.gameObject);
+        c.energySegments.Clear();
+
+        // Create new segments
+        float segGap = 1.5f;
+        for (int s = 0; s < maxE; s++)
+        {
+            var segGO = MakeImage(c.energyContainer.transform, $"Seg_{s}", segFullCol);
+            var segRT = segGO.GetComponent<RectTransform>();
+            float xMin = (float)s / maxE;
+            float xMax = (float)(s + 1) / maxE;
+            segRT.anchorMin = new Vector2(xMin, 0); segRT.anchorMax = new Vector2(xMax, 1);
+            float halfGap = segGap * 0.5f;
+            segRT.offsetMin = new Vector2(s == 0 ? 0 : halfGap, 1);
+            segRT.offsetMax = new Vector2(s == maxE - 1 ? 0 : -halfGap, -1);
+            c.energySegments.Add(segGO.GetComponent<Image>());
+        }
     }
 
     // ── equipment slot click ─────────────────

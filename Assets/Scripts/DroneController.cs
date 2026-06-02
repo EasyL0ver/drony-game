@@ -63,7 +63,7 @@ public class DroneController : MonoBehaviour
         {
             Name = droneName,
             Type = droneType,
-            MaxEnergy = 10,
+            BaseEnergy = 10,
             CurrentEnergy = 10,
         };
         Model.InitSlots();
@@ -748,12 +748,25 @@ public class DroneController : MonoBehaviour
         }
 
         // Award cargo if applicable
-        if (cfg.CargoReward != CargoType.None && Model.HasFreeSlot(SlotSize.Large))
+        if (cfg.LootItem != null && Model.HasFreeSlot(cfg.LootItem.Size))
+        {
+            Model.Equip(cfg.LootItem);
+            if (cfg.LootItem.Size == SlotSize.Large) OnCargoPickedUp();
+            // Hide the cache
+            if (wall != null) wall.gameObject.SetActive(false);
+        }
+        else if (cfg.CargoReward != CargoType.None && cfg.LootItem == null && Model.HasFreeSlot(SlotSize.Large))
         {
             Model.Equip(GearCatalog.FuelCell);
             OnCargoPickedUp();
-            // Hide the barrel
             if (wall != null) wall.gameObject.SetActive(false);
+        }
+
+        // Scan loot cache
+        if (cfg.Label == "SCAN" && wall != null)
+        {
+            var cache = wall.GetComponent<LootCache>();
+            if (cache != null) cache.OnScanned();
         }
 
         // Repeat if the config says so (e.g. charging until full)

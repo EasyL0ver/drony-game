@@ -8,7 +8,7 @@ public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent }
 
 public enum RoomSize { Large, Medium, Small }
 
-public enum GearType { None, Scanner, Bomb, Cargo }
+public enum GearType { None, Scanner, Bomb, Cargo, Battery }
 
 public enum SlotSize { Small, Medium, Large }
 
@@ -71,6 +71,9 @@ public class WallInteractionConfig
     /// <summary>Points awarded to player on completion.</summary>
     public int PointsReward { get; set; }
 
+    /// <summary>Specific loot item awarded on pickup (overrides generic CargoReward).</summary>
+    public GearItem LootItem { get; set; }
+
     // ── Factory presets ─────────────────────
 
     public static WallInteractionConfig Charging() => new WallInteractionConfig
@@ -99,12 +102,20 @@ public class WallInteractionConfig
         DestroysDrone = gear == GearType.Bomb,
     };
 
-    public static WallInteractionConfig LootPickup() => new WallInteractionConfig
+    public static WallInteractionConfig LootPickup(GearItem loot = null) => new WallInteractionConfig
     {
         Label = "PICK UP",
         BaseDuration = 1.5f,
         RequiredDroneType = DroneType.Hauler,
         CargoReward = CargoType.FuelCell,
+        LootItem = loot ?? GearCatalog.FuelCell,
+    };
+
+    public static WallInteractionConfig ScanCache() => new WallInteractionConfig
+    {
+        Label = "SCAN",
+        BaseDuration = 1f,
+        RequiredGear = GearType.Scanner,
     };
 
     public static WallInteractionConfig Unload() => new WallInteractionConfig

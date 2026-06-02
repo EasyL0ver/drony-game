@@ -183,10 +183,59 @@ public class StationWallModel : WallModel
                 return list;
             if (_interaction.RequiredDroneType != null && drone.Type != _interaction.RequiredDroneType.Value)
                 return list;
-            if (_interaction.CargoReward != CargoType.None && !drone.HasFreeSlot(SlotSize.Large))
+            if (_interaction.LootItem != null && !drone.HasFreeSlot(_interaction.LootItem.Size))
+                return list;
+            else if (_interaction.LootItem == null && _interaction.CargoReward != CargoType.None && !drone.HasFreeSlot(SlotSize.Large))
                 return list;
             list.Add(_interaction);
         }
+        return list;
+    }
+}
+
+/// <summary>
+/// Loot cache wall: starts unscanned (unknown content). 
+/// Scouts with scanner can scan to reveal. Hauler can pick up.
+/// </summary>
+public class LootCacheWallModel : WallModel
+{
+    public GearItem Content { get; private set; }
+    public bool IsScanned { get; set; }
+    public DroneModel OccupiedBy { get; set; }
+
+    WallInteractionConfig _scanInteraction;
+    WallInteractionConfig _pickupInteraction;
+
+    public LootCacheWallModel(RoomModel owner, int edgeIndex, GearItem content)
+        : base(owner, edgeIndex)
+    {
+        Content = content;
+        _scanInteraction = WallInteractionConfig.ScanCache();
+        _pickupInteraction = WallInteractionConfig.LootPickup(content);
+    }
+
+    public override WallPassability GetPassability(DroneModel drone)
+    {
+        return WallPassability.Blocked;
+    }
+
+    public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
+    {
+        var list = new List<WallInteractionConfig>();
+        if (OccupiedBy != null && OccupiedBy != drone) return list;
+
+        // Scan: scout with scanner, cache not yet scanned
+        if (!IsScanned && drone.HasGear(GearType.Scanner))
+        {
+            list.Add(_scanInteraction);
+        }
+
+        // Pickup: hauler with free slot of matching size
+        if (drone.Type == DroneType.Hauler && drone.HasFreeSlot(Content.Size))
+        {
+            list.Add(_pickupInteraction);
+        }
+
         return list;
     }
 }

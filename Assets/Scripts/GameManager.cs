@@ -15,7 +15,7 @@ public class GameManager : MonoBehaviour
     public RTSCamera       rtsCamera;
 
     [Header("Map Settings")]
-    [SerializeField] int testMapIndex = 1;
+    [SerializeField] int testMapIndex = 2;
 
     [Header("Drone Settings")]
     [SerializeField] int startingDrones = 3;
@@ -116,20 +116,24 @@ public class GameManager : MonoBehaviour
         var refitView = stationBldgGO.AddComponent<RefittingStation>();
         refitView.SetModel(stationTile.RModel.Walls[refitEdge]);
 
-        // ── spawn loading station (in corridor room — hauler accessible) ──
-        if (hexMap.TestMode)
+        // ── spawn loading station ──
         {
-            Vector2Int loadCoord = Vector2Int.zero;
-            foreach (var conn in hexMap.ConnectionList)
+            Vector2Int loadCoord = hexMap.Model.loadingStationRoom ?? Vector2Int.zero;
+            if (loadCoord == Vector2Int.zero)
             {
-                if (conn.type == PassageType.Corridor)
+                // Fallback: find first corridor neighbor
+                foreach (var conn in hexMap.ConnectionList)
                 {
-                    loadCoord = conn.a == Vector2Int.zero ? conn.b : conn.a;
-                    break;
+                    if (conn.type == PassageType.Corridor)
+                    {
+                        loadCoord = conn.a == Vector2Int.zero ? conn.b : conn.a;
+                        break;
+                    }
                 }
             }
             if (loadCoord != Vector2Int.zero)
             {
+                fog.Reveal(loadCoord);
                 var loadTile = fog.GetTile(loadCoord);
                 var loadGO = new GameObject("LoadingStation");
                 loadGO.transform.SetParent(loadTile.transform, false);
@@ -139,15 +143,18 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // ── place charging station on a neighbor of the starting room ──
-        Vector2Int chargingCoord = Vector2Int.zero;
-        foreach (var conn in hexMap.ConnectionList)
+        // ── place charging station ──
+        Vector2Int chargingCoord = hexMap.Model.chargingStationRoom ?? Vector2Int.zero;
+        if (chargingCoord == Vector2Int.zero)
         {
-            if (conn.a == Vector2Int.zero || conn.b == Vector2Int.zero)
+            // Fallback: first neighbor of starting room
+            foreach (var conn in hexMap.ConnectionList)
             {
-                Vector2Int neighbor = conn.a == Vector2Int.zero ? conn.b : conn.a;
-                chargingCoord = neighbor;
-                break;
+                if (conn.a == Vector2Int.zero || conn.b == Vector2Int.zero)
+                {
+                    chargingCoord = conn.a == Vector2Int.zero ? conn.b : conn.a;
+                    break;
+                }
             }
         }
         if (chargingCoord != Vector2Int.zero)
@@ -162,34 +169,35 @@ public class GameManager : MonoBehaviour
             chargeView.SetModel(chargeTile.RModel.Walls[chargeEdge]);
         }
 
-        // ── loot barrel (test mode — place in corridor-connected room) ──
-        if (hexMap.TestMode && hexMap.ConnectionList.Count > 0)
+        // ── loot barrels ──
+        var barrelRooms = hexMap.Model.lootBarrelRooms;
+        if (barrelRooms.Count == 0 && hexMap.TestMode && hexMap.ConnectionList.Count > 0)
         {
-            // Find a room connected by Corridor (hauler-reachable)
-            Vector2Int barrelCoord = Vector2Int.zero;
+            // Legacy fallback: single barrel in corridor room
             foreach (var conn in hexMap.ConnectionList)
             {
                 if (conn.type == PassageType.Corridor)
                 {
-                    barrelCoord = conn.a == Vector2Int.zero ? conn.b : conn.a;
+                    barrelRooms.Add(conn.a == Vector2Int.zero ? conn.b : conn.a);
                     break;
                 }
             }
-            if (barrelCoord != Vector2Int.zero)
-            {
-                fog.Reveal(barrelCoord);
-                var barrelTile = fog.GetTile(barrelCoord);
-                var barrelGO = new GameObject("LootBarrel");
-                barrelGO.transform.SetParent(barrelTile.transform, false);
-                int barrelEdge = PlaceAtWall(barrelGO, barrelCoord, barrelTile.RModel, WallInteractionConfig.LootPickup());
-                var barrelView = barrelGO.AddComponent<LootBarrel>();
-                barrelView.SetModel(barrelTile.RModel.Walls[barrelEdge]);
-                Debug.Log($"[GameManager] LootBarrel spawned at {barrelCoord} edge {barrelEdge}, pos={barrelGO.transform.position}");
-            }
-            else
-            {
-                Debug.LogWarning("[GameManager] No Corridor connection found for barrel placement!");
-            }
+        }
+        foreach (var barrelCoord in barrelRooms)
+        {
+            var barrelTile = fog.GetTile(barrelCoord);
+            if (barrelTile == null) continue;
+            var cacheGO = new GameObject("LootCache");
+            cacheGO.transform.SetParent(barrelTile.transform, false);
+
+            // Roll random loot content
+            GearItem loot = RollLoot();
+
+            int cacheEdge = PlaceLootCache(cacheGO, barrelCoord, barrelTile.RModel, loot);
+            if (cacheEdge < 0) { Destroy(cacheGO); continue; }
+            var cacheView = cacheGO.AddComponent<LootCache>();
+            cacheView.SetContent(loot);
+            cacheView.SetModel(barrelTile.RModel.Walls[cacheEdge]);
         }
 
         // ── player economy ──
@@ -316,11 +324,12 @@ public class GameManager : MonoBehaviour
         }
 
         // Pick the first edge without a passage or existing station
-        int edge = 0;
+        int edge = -1;
         for (int i = 0; i < 6; i++)
         {
             if (!usedEdges.Contains(i) && !(model.Walls[i] is StationWallModel)) { edge = i; break; }
         }
+        if (edge < 0) return -1;
 
         var stationWall = new StationWallModel(model, edge, interaction);
         model.SetWall(edge, stationWall);
@@ -336,6 +345,56 @@ public class GameManager : MonoBehaviour
         go.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
 
         return edge;
+    }
+
+    /// <summary>Place a loot cache at a free wall edge with LootCacheWallModel.</summary>
+    int PlaceLootCache(GameObject go, Vector2Int coord, RoomModel model, GearItem content)
+    {
+        Vector3 center = hexMap.HexCenter(coord);
+        float roomR = hexMap.RoomRadius(hexMap.RoomSizeMap[coord]);
+
+        var usedEdges = new HashSet<int>();
+        foreach (var (a, b, _) in hexMap.ConnectionList)
+        {
+            if (a == coord) usedEdges.Add(hexMap.EdgeToward(coord, b));
+            else if (b == coord) usedEdges.Add(hexMap.EdgeToward(coord, a));
+        }
+
+        int edge = -1;
+        for (int i = 0; i < 6; i++)
+        {
+            if (!usedEdges.Contains(i) && !(model.Walls[i] is StationWallModel) && !(model.Walls[i] is LootCacheWallModel))
+            { edge = i; break; }
+        }
+        if (edge < 0) return -1;
+
+        var cacheWall = new LootCacheWallModel(model, edge, content);
+        model.SetWall(edge, cacheWall);
+
+        Vector3 c0 = hexMap.Corner(center, edge, roomR);
+        Vector3 c1 = hexMap.Corner(center, (edge + 1) % 6, roomR);
+        Vector3 wallMid = (c0 + c1) * 0.5f;
+        Vector3 inward = (center - wallMid).normalized;
+        go.transform.position = wallMid;
+        go.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
+
+        return edge;
+    }
+
+    static GearItem RollLoot()
+    {
+        int totalWeight = 0;
+        foreach (var (item, weight) in GearCatalog.LootTable)
+            totalWeight += weight;
+
+        int roll = Random.Range(0, totalWeight);
+        int cumulative = 0;
+        foreach (var (item, weight) in GearCatalog.LootTable)
+        {
+            cumulative += weight;
+            if (roll < cumulative) return item;
+        }
+        return GearCatalog.FuelCell;
     }
 
     void SpawnPassage(Vector2Int room, Vector2Int neighbor, PassageType type)
