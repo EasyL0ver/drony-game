@@ -35,7 +35,6 @@ public class FogOfWar : MonoBehaviour
         CreateMaterials();
         BuildTiles();
         RegisterRoomModels();
-        WireTileConnections();
     }
 
     public RoomTile GetTile(Vector2Int coord)
@@ -67,9 +66,14 @@ public class FogOfWar : MonoBehaviour
         }
     }
 
-    /// <summary>Tell each RoomTile about its neighbors (for visual passages, fog spreading).</summary>
-    void WireTileConnections()
+    void RegisterRoomModels()
     {
+        var roomModels = new Dictionary<Vector2Int, RoomModel>();
+        foreach (var kvp in Tiles)
+            roomModels[kvp.Key] = kvp.Value.RModel;
+        map.Model.RegisterRooms(roomModels);
+
+        // Wire tile-level connections (view layer: fog spreading, passage visuals)
         foreach (var (a, b, type) in map.ConnectionList)
         {
             var tileA = GetTile(a);
@@ -82,14 +86,6 @@ public class FogOfWar : MonoBehaviour
             tileA.AddConnection(new TileConnection { neighbor = tileB, passageType = type, edgeIndex = edgeAB });
             tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type, edgeIndex = edgeBA });
         }
-    }
-
-    void RegisterRoomModels()
-    {
-        var roomModels = new Dictionary<Vector2Int, RoomModel>();
-        foreach (var kvp in Tiles)
-            roomModels[kvp.Key] = kvp.Value.RModel;
-        map.Model.RegisterRooms(roomModels);
     }
 
     // ── materials ─────────────────────────
