@@ -519,22 +519,23 @@ public class GameManager : MonoBehaviour
 
     void TryOpenBlastDoors()
     {
-        for (int i = blastDoorWalls.Count - 1; i >= 0; i--)
+        for (int i = 0; i < blastDoorWalls.Count; i++)
         {
             var (a, b, wall) = blastDoorWalls[i];
-            if (!wall.IsPowered) continue;
+            bool powered = wall.IsPowered;
+            bool wasBlocked = wall.IsBlocked;
 
-            // Draw energy from network
-            int cost = 5;
-            int drawn = PowerNetwork.Draw(cost);
-            if (drawn < cost) continue;
+            wall.IsBlocked = !powered;
+            // Update the neighbor side too
+            if (wall.Neighbor is CorridorWallModel neighborWall)
+                neighborWall.IsBlocked = !powered;
 
-            // Complete the interaction (unblocks passage)
-            hexMap.Model.CompleteWallInteraction(a, b);
-            blastDoorWalls.RemoveAt(i);
-
-            // Destroy visual barrier and update passage
-            OnWallInteractionCompleted(a, b);
+            if (wasBlocked == powered) // state changed
+            {
+                long key = MapModel.ConnKey(a, b);
+                if (rubbleBarriers.TryGetValue(key, out var barrierGO))
+                    barrierGO.SetActive(!powered);
+            }
         }
     }
 

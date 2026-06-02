@@ -112,10 +112,8 @@ public class WallInteractionConfig
 
     public static WallInteractionConfig BlastDoorOpen() => new WallInteractionConfig
     {
-        Label = "OPEN",
-        BaseDuration = 2f,
+        Label = "BLAST DOOR",
         RequiresPower = true,
-        PowerCost = 5,
         BlocksPassage = true,
         ResultingPassageType = PassageType.Corridor,
     };
