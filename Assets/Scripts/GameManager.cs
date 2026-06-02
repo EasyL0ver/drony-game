@@ -515,6 +515,18 @@ public class GameManager : MonoBehaviour
             foreach (var w in tile.GetComponentsInChildren<WallView>())
                 w.SetPowered(powered);
         }
+
+        // Toggle blast door glow color: corridor when powered, impassable when not
+        foreach (var (a, b, type) in hexMap.ConnectionList)
+        {
+            if (type != PassageType.BlastDoor) continue;
+            long key = MapModel.ConnKey(a, b);
+            if (!rubbleGlowRenderers.TryGetValue(key, out var rend)) continue;
+            var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
+            bool doorPowered = wall != null && wall.IsPowered;
+            Color col = doorPowered ? Palette.CorridorGlow : Palette.ImpassableGlow;
+            rend.sharedMaterial.SetColor("_EmissionColor", col * 4f);
+        }
     }
 
     static GearItem RollLoot()
@@ -744,14 +756,17 @@ public class GameManager : MonoBehaviour
         stripeGO.transform.rotation = Quaternion.LookRotation(along, Vector3.up);
         stripeGO.GetComponent<Renderer>().sharedMaterial = matStripe;
 
-        // Per-passage glow strip
+        // Per-passage glow strip (corridor color when powered, impassable when not)
         Mesh glowMesh = hexMap.BuildPassageGlowMesh(roomA, roomB, PassageType.BlastDoor);
         if (glowMesh.vertexCount > 0)
         {
             var glowGO = new GameObject("BlastDoorGlow");
             glowGO.transform.SetParent(transform, false);
             glowGO.AddComponent<MeshFilter>().sharedMesh = glowMesh;
-            var glowMat = hexMap.MakeEmissive(Palette.ImpassableGlow, 4f);
+            var wall = hexMap.Model.GetWall(roomA, roomB) as CorridorWallModel;
+            bool powered = wall != null && wall.IsPowered;
+            Color glowCol = powered ? Palette.CorridorGlow : Palette.ImpassableGlow;
+            var glowMat = hexMap.MakeEmissive(glowCol, 4f);
             var rend = glowGO.AddComponent<MeshRenderer>();
             rend.sharedMaterial = glowMat;
 
