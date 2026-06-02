@@ -6,7 +6,7 @@ using System.Collections.Generic;
 ///   Large (cyan) → Corridor/Duct/Vent, Medium (orange) → Duct/Vent, Small (green) → Vent only.
 /// All geometry is code-built meshes. No ceiling (RTS aerial view).
 /// </summary>
-public class HexMapGenerator : MonoBehaviour
+public class MapView : MonoBehaviour
 {
     // Enums now in GameEnums.cs — aliased for backward compatibility in existing code
     public static readonly PassageType PassageType_Corridor = PassageType.Corridor;
@@ -38,7 +38,7 @@ public class HexMapGenerator : MonoBehaviour
     [SerializeField] float ventPipeRadius = 0.22f;
 
     // Public layout data — populated after Generate()
-    // These delegate to MapModel for backward compatibility
+    // Layout lives in MapModel; geometry helpers live on this view.
     public MapModel Model { get; private set; }
     public List<Vector2Int> RoomList => Model.RoomList;
     public Dictionary<Vector2Int, RoomSize> RoomSizeMap => Model.RoomSizes;
@@ -66,15 +66,7 @@ public class HexMapGenerator : MonoBehaviour
     public Material CableGlowMaterial => matCableGlow;
 
     // Flat-top hex: 6 axial neighbor directions
-    static readonly Vector2Int[] HexDirs =
-    {
-        new Vector2Int( 1,  0),
-        new Vector2Int( 0,  1),
-        new Vector2Int(-1,  1),
-        new Vector2Int(-1,  0),
-        new Vector2Int( 0, -1),
-        new Vector2Int( 1, -1),
-    };
+    static readonly Vector2Int[] HexDirs = MapModel.HexDirs;
 
     // ═══════════════════════════════════════
     //  LIFECYCLE
@@ -94,8 +86,7 @@ public class HexMapGenerator : MonoBehaviour
             DestroyImmediate(transform.GetChild(0).gameObject);
 
         // --- 1. Layout via MapModel ---
-        Model = new MapModel(roomCount, seed, hexRadius, gridScale, mediumScale, smallScale,
-                             wallHeight, corridorWidth, ductWidth, ventPipeRadius);
+        Model = new MapModel(roomCount, seed);
         if (testMode)
             Model.ApplyLayout(MapGenerator.GenerateTestLayout(testMapIndex));
         else
@@ -308,7 +299,7 @@ public class HexMapGenerator : MonoBehaviour
         }
     }
 
-    float PassageWallHeight(PassageType t)
+    public float PassageWallHeight(PassageType t)
     {
         switch (t)
         {
@@ -512,6 +503,17 @@ public class HexMapGenerator : MonoBehaviour
         for (int i = 0; i < 6; i++)
             if (HexDirs[i].x == d.x && HexDirs[i].y == d.y) return i;
         return 0;
+    }
+
+    /// <summary>Returns the hex edge index (0-5) nearest to a world-space point.</summary>
+    public int NearestEdge(Vector3 worldPoint, Vector2Int coord)
+    {
+        Vector3 center = HexCenter(coord);
+        float dx = worldPoint.x - center.x;
+        float dz = worldPoint.z - center.z;
+        float angle = Mathf.Atan2(dz, dx) * Mathf.Rad2Deg;
+        if (angle < 0f) angle += 360f;
+        return Mathf.FloorToInt(angle / 60f) % 6;
     }
 
     /// <summary>Returns world-space wall-exit midpoints for a passage between two rooms.</summary>

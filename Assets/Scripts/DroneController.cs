@@ -23,7 +23,7 @@ public class DroneController : MonoBehaviour
     enum State { Idle, RoomNavigating, WallAnimating }
     State state = State.Idle;
 
-    HexMapGenerator map;
+    MapView map;
     FogOfWar fog;
     float hoverY = 1f;
     IDroneVisual droneVisual;
@@ -53,7 +53,7 @@ public class DroneController : MonoBehaviour
     WallInteractionConfig lastCompletedInteraction;
     WallView activeInteractionWall;
 
-    public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0, DroneType droneType = DroneType.Scout)
+    public void Init(MapView mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0, DroneType droneType = DroneType.Scout)
     {
         map = mapGen;
         fog = fogOfWar;

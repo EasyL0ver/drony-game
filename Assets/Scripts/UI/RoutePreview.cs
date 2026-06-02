@@ -10,7 +10,7 @@ using System.Collections.Generic;
 public class RoutePreview
 {
     readonly DroneController drone;
-    readonly HexMapGenerator map;
+    readonly MapView map;
     readonly FogOfWar fog;
 
     // ── journey ────────────────────────────
@@ -20,7 +20,7 @@ public class RoutePreview
     bool isShowing;
     readonly List<StepAnchor> previewAnchors = new List<StepAnchor>();
 
-    public RoutePreview(DroneController drone, HexMapGenerator map, FogOfWar fog)
+    public RoutePreview(DroneController drone, MapView map, FogOfWar fog)
     {
         this.drone = drone;
         this.map = map;

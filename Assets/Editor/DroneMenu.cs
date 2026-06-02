@@ -89,7 +89,7 @@ public static class ProceduralMenu
     static void CreateHexMap()
     {
         GameObject go = new GameObject("HexMap");
-        go.AddComponent<HexMapGenerator>();
+        go.AddComponent<MapView>();
         go.transform.position = Vector3.zero;
 
         Selection.activeGameObject = go;

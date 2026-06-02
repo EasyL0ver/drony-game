@@ -16,7 +16,7 @@ public class FogOfWar : MonoBehaviour
     [Header("Scanning")]
     [SerializeField] float scanDuration = 3f;
 
-    HexMapGenerator map;
+    MapView map;
     Material matUnknown, matDiscovered, matOutline;
     float outlineRadius;
 
@@ -25,7 +25,7 @@ public class FogOfWar : MonoBehaviour
 
     // ── public API ────────────────────────
 
-    public void Init(HexMapGenerator mapGen)
+    public void Init(MapView mapGen)
     {
         map = mapGen;
 

@@ -10,7 +10,7 @@ using System.Collections.Generic;
 public class GameManager : MonoBehaviour
 {
     [Header("References (auto-created if empty)")]
-    public HexMapGenerator hexMap;
+    public MapView hexMap;
     public FogOfWar        fog;
     public RTSCamera       rtsCamera;
 
@@ -68,7 +68,7 @@ public class GameManager : MonoBehaviour
         // ── hex map ──
         var mapGO = new GameObject("HexMap");
         mapGO.transform.SetParent(transform, false);
-        hexMap = mapGO.AddComponent<HexMapGenerator>();
+        hexMap = mapGO.AddComponent<MapView>();
         hexMap.SetTestMapIndex(testMapIndex);
         hexMap.Generate();
 
@@ -587,7 +587,7 @@ public class GameManager : MonoBehaviour
         }
 
         // Invisible trigger collider so passage is clickable
-        float passW = hexMap.Model.PassageWidth(type);
+        float passW = hexMap.PassageWidth(type);
         var col = go.AddComponent<BoxCollider>();
         col.size = new Vector3(passW, 2f, 1f);
         col.center = new Vector3(0f, 1f, -0.5f);
@@ -619,7 +619,7 @@ public class GameManager : MonoBehaviour
         var crookedGlow = hexMap.BuildCrookedVentGeometry(go.transform, room, neighbor);
         crookedVent.SetPassageGlow(crookedGlow);
 
-        float passW = hexMap.Model.PassageWidth(PassageType.CrookedVent);
+        float passW = hexMap.PassageWidth(PassageType.CrookedVent);
         var col = go.AddComponent<BoxCollider>();
         col.size = new Vector3(passW, 2f, 1f);
         col.center = new Vector3(0f, 1f, -0.5f);
@@ -627,10 +627,10 @@ public class GameManager : MonoBehaviour
 
     void SpawnRubbleBarrier(Vector2Int roomA, Vector2Int roomB)
     {
-        var (midA, midB) = hexMap.Model.PassageEndpoints(roomA, roomB);
+        var (midA, midB) = hexMap.PassageEndpoints(roomA, roomB);
         Vector3 center = (midA + midB) * 0.5f;
-        float passW = hexMap.Model.PassageWidth(PassageType.Rubble);
-        float passH = hexMap.Model.PassageWallHeight(PassageType.Rubble);
+        float passW = hexMap.PassageWidth(PassageType.Rubble);
+        float passH = hexMap.PassageWallHeight(PassageType.Rubble);
 
         Vector3 along = (midB - midA).normalized;
         Vector3 across = Vector3.Cross(Vector3.up, along).normalized;
@@ -693,10 +693,10 @@ public class GameManager : MonoBehaviour
 
     void SpawnBlastDoorBarrier(Vector2Int roomA, Vector2Int roomB)
     {
-        var (midA, midB) = hexMap.Model.PassageEndpoints(roomA, roomB);
+        var (midA, midB) = hexMap.PassageEndpoints(roomA, roomB);
         Vector3 center = (midA + midB) * 0.5f;
-        float passW = hexMap.Model.PassageWidth(PassageType.BlastDoor);
-        float passH = hexMap.Model.PassageWallHeight(PassageType.BlastDoor);
+        float passW = hexMap.PassageWidth(PassageType.BlastDoor);
+        float passH = hexMap.PassageWallHeight(PassageType.BlastDoor);
 
         Vector3 along = (midB - midA).normalized;
         Vector3 across = Vector3.Cross(Vector3.up, along).normalized;

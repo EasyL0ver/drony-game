@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// Pure game-logic model for the hex map: topology, spatial math, pathfinding.
+/// Pure game-logic model for the hex map: topology, layout state, pathfinding.
 /// No MonoBehaviour, no meshes, no materials — just data and rules.
 /// </summary>
 public class MapModel
@@ -12,14 +12,6 @@ public class MapModel
 
     public int RoomCount { get; private set; }
     public int Seed { get; private set; }
-    public float HexRadius { get; private set; }
-    public float GridScale { get; private set; }
-    public float MediumScale { get; private set; }
-    public float SmallScale { get; private set; }
-    public float WallHeight { get; private set; }
-    public float CorridorWidth { get; private set; }
-    public float DuctWidth { get; private set; }
-    public float VentPipeRadius { get; private set; }
 
     // ── Layout data ──────────────────────────
 
@@ -83,7 +75,9 @@ public class MapModel
             if (!rooms.TryGetValue(conn.roomA, out var roomA)) continue;
             if (!rooms.TryGetValue(conn.roomB, out var roomB)) continue;
 
-            int edgeAB = EdgeToward(conn.roomA, conn.roomB);
+            Vector2Int delta = conn.roomB - conn.roomA;
+            int edgeAB = Array.FindIndex(HexDirs, dir => dir == delta);
+            if (edgeAB < 0) edgeAB = 0;
             int edgeBA = (edgeAB + 3) % 6;
 
             var wi = GetSeedWallInteraction(conn.roomA, conn.roomB);
@@ -141,23 +135,10 @@ public class MapModel
 
     // ── Constructor ──────────────────────────
 
-    public MapModel(int roomCount = 18, int seed = 42,
-                    float hexRadius = 5f, float gridScale = 1.35f,
-                    float mediumScale = 0.7f, float smallScale = 0.45f,
-                    float wallHeight = 2.5f,
-                    float corridorWidth = 1.8f, float ductWidth = 1.2f,
-                    float ventPipeRadius = 0.22f)
+    public MapModel(int roomCount = 18, int seed = 42)
     {
         RoomCount = roomCount;
         Seed = seed;
-        HexRadius = hexRadius;
-        GridScale = gridScale;
-        MediumScale = mediumScale;
-        SmallScale = smallScale;
-        WallHeight = wallHeight;
-        CorridorWidth = corridorWidth;
-        DuctWidth = ductWidth;
-        VentPipeRadius = ventPipeRadius;
     }
 
     public static long ConnKey(Vector2Int a, Vector2Int b)
@@ -182,137 +163,15 @@ public class MapModel
         }
     }
 
-    // ── Hex math ─────────────────────────────
-
-    public Vector3 HexCenter(Vector2Int h)
-    {
-        float s = HexRadius * GridScale;
-        float x = s * 1.5f * h.x;
-        float z = s * Mathf.Sqrt(3f) * (h.y + h.x * 0.5f);
-        return new Vector3(x, 0f, z);
-    }
-
-    public Vector3 Corner(Vector3 center, int i, float r)
-    {
-        float a = Mathf.Deg2Rad * 60f * i;
-        return center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r;
-    }
-
-    public int EdgeToward(Vector2Int from, Vector2Int to)
-    {
-        Vector2Int d = to - from;
-        for (int i = 0; i < 6; i++)
-            if (HexDirs[i].x == d.x && HexDirs[i].y == d.y) return i;
-        return 0;
-    }
-
-    /// <summary>
-    /// Returns the hex edge index (0-5) nearest to a world-space point
-    /// relative to a given hex cell. Uses angle from hex center.
-    /// </summary>
-    public int NearestEdge(Vector3 worldPoint, Vector2Int coord)
-    {
-        Vector3 center = HexCenter(coord);
-        float dx = worldPoint.x - center.x;
-        float dz = worldPoint.z - center.z;
-        float angle = Mathf.Atan2(dz, dx) * Mathf.Rad2Deg;
-        if (angle < 0f) angle += 360f;
-        return Mathf.FloorToInt(angle / 60f) % 6;
-    }
-
-    /// <summary>
-    /// Returns the world-space midpoint of a hex wall edge for a given room.
-    /// </summary>
-    public Vector3 WallMidpoint(Vector2Int coord, int edge, RoomSize size)
-    {
-        Vector3 center = HexCenter(coord);
-        float r = RoomRadius(size);
-        Vector3 c0 = Corner(center, edge, r);
-        Vector3 c1 = Corner(center, (edge + 1) % 6, r);
-        return (c0 + c1) * 0.5f;
-    }
-
-    public float RoomRadius(RoomSize s)
-    {
-        switch (s)
-        {
-            case RoomSize.Large:  return HexRadius;
-            case RoomSize.Medium: return HexRadius * MediumScale;
-            case RoomSize.Small:  return HexRadius * SmallScale;
-            default:              return HexRadius;
-        }
-    }
-
-    public float RoomWallHeight(RoomSize s)
-    {
-        switch (s)
-        {
-            case RoomSize.Large:  return WallHeight;
-            case RoomSize.Medium: return WallHeight * 0.55f;
-            case RoomSize.Small:  return WallHeight * 0.45f;
-            default:              return WallHeight;
-        }
-    }
-
-    public float PassageWidth(PassageType t)
-    {
-        switch (t)
-        {
-            case PassageType.Corridor:    return CorridorWidth;
-            case PassageType.Rubble:      return CorridorWidth;
-            case PassageType.BlastDoor:   return CorridorWidth;
-            case PassageType.Duct:        return DuctWidth;
-            case PassageType.Vent:        return VentPipeRadius * 2f;
-            case PassageType.CrookedVent: return VentPipeRadius * 2f;
-            default:                      return CorridorWidth;
-        }
-    }
-
-    public float PassageWallHeight(PassageType t)
-    {
-        switch (t)
-        {
-            case PassageType.Corridor:    return WallHeight * 0.88f;
-            case PassageType.Rubble:      return WallHeight * 0.88f;
-            case PassageType.BlastDoor:   return WallHeight * 0.88f;
-            case PassageType.Duct:        return WallHeight * 0.38f;
-            case PassageType.Vent:        return WallHeight * 0.65f;
-            case PassageType.CrookedVent: return WallHeight * 0.65f;
-            default:                      return WallHeight;
-        }
-    }
-
-    public float PassageTopY(PassageType t) => PassageWallHeight(t);
-
-    public float VentTopY(Vector2Int roomA, Vector2Int roomB)
-    {
-        float smallerWH = Mathf.Min(RoomWallHeight(RoomSizes[roomA]),
-                                    RoomWallHeight(RoomSizes[roomB]));
-        float pipeCenter = smallerWH * 0.5f;
-        return pipeCenter + VentPipeRadius;
-    }
-
-    /// <summary>Returns world-space wall-exit midpoints for a passage between two rooms.</summary>
-    public (Vector3 midA, Vector3 midB) PassageEndpoints(Vector2Int roomA, Vector2Int roomB)
-    {
-        int eA = EdgeToward(roomA, roomB);
-        int eB = (eA + 3) % 6;
-        Vector3 cA = HexCenter(roomA);
-        Vector3 cB = HexCenter(roomB);
-        float rA = RoomRadius(RoomSizes[roomA]);
-        float rB = RoomRadius(RoomSizes[roomB]);
-        Vector3 midA = (Corner(cA, eA, rA) + Corner(cA, (eA + 1) % 6, rA)) * 0.5f;
-        Vector3 midB = (Corner(cB, eB, rB) + Corner(cB, (eB + 1) % 6, rB)) * 0.5f;
-        return (midA, midB);
-    }
-
     // ── Passage lookup ───────────────────────
 
     /// <summary>Get the WallModel for the edge from room 'a' toward room 'b', or null.</summary>
     public WallModel GetWall(Vector2Int a, Vector2Int b)
     {
         if (rooms == null || !rooms.TryGetValue(a, out var room)) return null;
-        int edge = EdgeToward(a, b);
+        Vector2Int delta = b - a;
+        int edge = Array.FindIndex(HexDirs, dir => dir == delta);
+        if (edge < 0) edge = 0;
         return room.Walls[edge];
     }
 

@@ -301,7 +301,7 @@ public class SelectionManager : MonoBehaviour
         if (distFromCenter < roomR * 0.45f)
             return (tile, null, false, default, default);
 
-        int edge = gm.hexMap.Model.NearestEdge(hitPoint, tile.Coord);
+        int edge = gm.hexMap.NearestEdge(hitPoint, tile.Coord);
         WallView wallView = tile.GetWallView(edge);
 
         // If the wall at this edge is a passage, check for blocking interaction or resolve to neighbor

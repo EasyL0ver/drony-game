@@ -92,7 +92,7 @@ public class RoomTile : MonoBehaviour
     // ── setup (called by builder) ────────────
 
     public void Init(Vector2Int coord, RoomSize size,
-                     HexMapGenerator map, float fogElev, float outlineR,
+                     MapView map, float fogElev, float outlineR,
                      Material unknown, Material discovered, Material outline,
                      float scanDur = 3f)
     {
@@ -388,7 +388,7 @@ public class RoomTile : MonoBehaviour
 
     // ── mesh builders ────────────────────────
 
-    void BuildFogMesh(HexMapGenerator map)
+    void BuildFogMesh(MapView map)
     {
         fogMeshY = map.WallHeight + fogElevation;
         Vector3 center = map.HexCenter(Coord);
@@ -405,7 +405,7 @@ public class RoomTile : MonoBehaviour
         fogRenderer.receiveShadows = false;
     }
 
-    void BuildOutlineMesh(HexMapGenerator map)
+    void BuildOutlineMesh(MapView map)
     {
         float fogY = map.WallHeight + fogElevation + 0.02f;
         Vector3 center = map.HexCenter(Coord);
@@ -430,7 +430,7 @@ public class RoomTile : MonoBehaviour
         }
     }
 
-    void BuildInteractionMeshes(HexMapGenerator map)
+    void BuildInteractionMeshes(MapView map)
     {
         Vector3 center = map.HexCenter(Coord);
         float fullR = outlineRadius * 0.97f;
