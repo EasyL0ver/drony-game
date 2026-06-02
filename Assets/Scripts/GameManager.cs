@@ -454,10 +454,8 @@ public class GameManager : MonoBehaviour
                 var wall = tile.RModel.Walls[e];
                 if (wall is StationWallModel station)
                     station.SetPowerProvider(PowerNetwork);
-                else if (wall is BlastDoorWallModel blastDoor)
-                    blastDoor.SetPowerProvider(PowerNetwork);
-                else if (wall is ObstacleWallModel obstacle)
-                    obstacle.SetPowerProvider(PowerNetwork);
+                else if (wall is CorridorWallModel corridor)
+                    corridor.SetPowerProvider(PowerNetwork);
             }
         }
 
@@ -510,7 +508,7 @@ public class GameManager : MonoBehaviour
             long key = MapModel.ConnKey(a, b);
             if (rubbleBarriers.TryGetValue(key, out var barrierGO))
             {
-                var wall = hexMap.Model.GetWall(a, b) as BlastDoorWallModel;
+                var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
                 barrierGO.SetActive(wall == null || !wall.IsPowered);
             }
         }

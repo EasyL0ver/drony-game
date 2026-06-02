@@ -84,6 +84,13 @@ public class CorridorWallModel : WallModel
         }
     }
 
+    /// <summary>Draw energy from the power network.</summary>
+    public int DrawPower(int amount)
+    {
+        if (_powerProvider == null) return 0;
+        return _powerProvider.Draw(amount);
+    }
+
     public override WallPassability GetPassability(DroneModel drone)
     {
         if (Neighbor == null)
@@ -149,70 +156,107 @@ public class CorridorWallModel : WallModel
 }
 
 /// <summary>
-/// A corridor blocked by an obstacle (e.g. rubble). Requires an interaction to clear.
+/// Non-generic interface for querying any obstacle wall.
 /// </summary>
-public class ObstacleWallModel : CorridorWallModel
+public interface IObstacleWall
 {
-    public bool IsBlocked { get; private set; }
+    bool IsBlocking { get; }
+    PassageType? CompleteInteraction();
+}
 
+/// <summary>
+/// Defines how an obstacle in a corridor behaves.
+/// </summary>
+public interface IObstacleBehavior
+{
+    /// <summary>Is the obstacle currently blocking passage?</summary>
+    bool IsBlocking(CorridorWallModel wall);
+
+    /// <summary>Can this drone interact with the obstacle? Returns config or null.</summary>
+    WallInteractionConfig GetInteraction(CorridorWallModel wall, DroneModel drone);
+
+    /// <summary>Called before a drone traverses (e.g. power draw). Only called if not blocking.</summary>
+    void BeforeTraversal(CorridorWallModel wall);
+
+    /// <summary>Complete the interaction (e.g. clear rubble). Returns resulting passage type or null.</summary>
+    PassageType? Complete(CorridorWallModel wall);
+}
+
+/// <summary>
+/// Rubble: blocked until cleared via interaction requiring a gear item.
+/// </summary>
+public class RubbleBehavior : IObstacleBehavior
+{
     private WallInteractionConfig _interaction;
+    private bool _cleared;
 
-    public ObstacleWallModel(RoomModel owner, int edgeIndex, PassageType passageType, WallInteractionConfig interaction)
-        : base(owner, edgeIndex, passageType)
+    public RubbleBehavior(WallInteractionConfig interaction)
     {
         _interaction = interaction;
-        IsBlocked = true;
     }
 
-    public override WallPassability GetPassability(DroneModel drone)
-    {
-        if (IsBlocked) return WallPassability.Blocked;
-        return base.GetPassability(drone);
-    }
+    public bool IsBlocking(CorridorWallModel wall) => !_cleared;
 
-    public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
+    public WallInteractionConfig GetInteraction(CorridorWallModel wall, DroneModel drone)
     {
-        var list = new List<WallInteractionConfig>();
-        if (!IsBlocked || _interaction == null) return list;
-
+        if (_cleared || _interaction == null) return null;
         if (_interaction.RequiredGear != GearType.None && !drone.HasGear(_interaction.RequiredGear))
-            return list;
-        if (_interaction.RequiresPower && !IsPowered)
-            return list;
-
-        list.Add(_interaction);
-        return list;
+            return null;
+        return _interaction;
     }
 
-    /// <summary>Clear obstacle: unblocks passage, removes interaction, returns resulting passage type.</summary>
-    public PassageType? CompleteInteraction()
+    public void BeforeTraversal(CorridorWallModel wall) { }
+
+    public PassageType? Complete(CorridorWallModel wall)
     {
         if (_interaction == null || !_interaction.BlocksPassage) return null;
-
         var resultType = _interaction.ResultingPassageType;
         _interaction = null;
-        IsBlocked = false;
-        PassageType = resultType;
+        _cleared = true;
         return resultType;
     }
 }
 
 /// <summary>
-/// A blast door wall: passable only when either neighboring room is powered.
-/// Draws energy from the network on each traversal.
+/// Blast door: blocked when unpowered, passable when powered, draws energy on traversal.
 /// </summary>
-public class BlastDoorWallModel : CorridorWallModel
+public class BlastDoorBehavior : IObstacleBehavior
 {
     public const int TraversalCost = 5;
 
-    public BlastDoorWallModel(RoomModel owner, int edgeIndex)
-        : base(owner, edgeIndex, PassageType.BlastDoor)
+    public bool IsBlocking(CorridorWallModel wall) => !wall.IsPowered;
+
+    public WallInteractionConfig GetInteraction(CorridorWallModel wall, DroneModel drone) => null;
+
+    public void BeforeTraversal(CorridorWallModel wall)
     {
+        wall.DrawPower(TraversalCost);
     }
+
+    public PassageType? Complete(CorridorWallModel wall) => null;
+}
+
+/// <summary>
+/// A corridor with an obstacle. Behavior is defined by the generic type parameter.
+/// </summary>
+public class ObstacleWallModel<T> : CorridorWallModel, IObstacleWall where T : IObstacleBehavior
+{
+    public T Behavior { get; }
+
+    public ObstacleWallModel(RoomModel owner, int edgeIndex, PassageType passageType, T behavior)
+        : base(owner, edgeIndex, passageType)
+    {
+        Behavior = behavior;
+    }
+
+    public bool IsBlocking => Behavior.IsBlocking(this);
 
     public override WallPassability GetPassability(DroneModel drone)
     {
-        if (Neighbor == null || !IsPowered)
+        if (Neighbor == null || Behavior.IsBlocking(this))
+            return WallPassability.Blocked;
+
+        if (!drone.CanTraverse(PassageType))
             return WallPassability.Blocked;
 
         return new WallPassability
@@ -220,15 +264,30 @@ public class BlastDoorWallModel : CorridorWallModel
             CanPass = true,
             Duration = PassageBaseDuration(PassageType),
             EnergyCost = PassageEnergyCost(PassageType),
-            Label = "BLAST DOOR",
+            Label = PassageLabel(PassageType),
         };
     }
 
-    /// <summary>Opens the door, drawing network power.</summary>
+    public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
+    {
+        var list = new List<WallInteractionConfig>();
+        var interaction = Behavior.GetInteraction(this, drone);
+        if (interaction != null)
+            list.Add(interaction);
+        return list;
+    }
+
     public override void BeforeTraversal()
     {
-        if (_powerProvider == null) return;
-        _powerProvider.Draw(TraversalCost);
+        Behavior.BeforeTraversal(this);
+    }
+
+    public PassageType? CompleteInteraction()
+    {
+        var result = Behavior.Complete(this);
+        if (result.HasValue)
+            PassageType = result.Value;
+        return result;
     }
 }
 

@@ -34,8 +34,8 @@ public class FogOfWar : MonoBehaviour
 
         CreateMaterials();
         BuildTiles();
-        WireConnections();
         RegisterRoomModels();
+        WireTileConnections();
     }
 
     public RoomTile GetTile(Vector2Int coord)
@@ -67,7 +67,8 @@ public class FogOfWar : MonoBehaviour
         }
     }
 
-    void WireConnections()
+    /// <summary>Tell each RoomTile about its neighbors (for visual passages, fog spreading).</summary>
+    void WireTileConnections()
     {
         foreach (var (a, b, type) in map.ConnectionList)
         {
@@ -80,36 +81,6 @@ public class FogOfWar : MonoBehaviour
 
             tileA.AddConnection(new TileConnection { neighbor = tileB, passageType = type, edgeIndex = edgeAB });
             tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type, edgeIndex = edgeBA });
-
-            // Create appropriate wall models
-            var wi = map.Model.GetSeedWallInteraction(a, b);
-            CorridorWallModel wallAB, wallBA;
-
-            if (type == PassageType.BlastDoor)
-            {
-                wallAB = new BlastDoorWallModel(tileA.RModel, edgeAB);
-                wallBA = new BlastDoorWallModel(tileB.RModel, edgeBA);
-                tileA.RModel.SetWall(edgeAB, wallAB);
-                tileB.RModel.SetWall(edgeBA, wallBA);
-            }
-            else if (wi != null && wi.BlocksPassage)
-            {
-                wallAB = new ObstacleWallModel(tileA.RModel, edgeAB, type, wi);
-                wallBA = new ObstacleWallModel(tileB.RModel, edgeBA, type, wi);
-                tileA.RModel.SetWall(edgeAB, wallAB);
-                tileB.RModel.SetWall(edgeBA, wallBA);
-            }
-            else
-            {
-                wallAB = tileA.RModel.Walls[edgeAB] as CorridorWallModel;
-                wallBA = tileB.RModel.Walls[edgeBA] as CorridorWallModel;
-            }
-
-            wallAB.Neighbor = wallBA;
-            wallAB.PassageType = type;
-
-            wallBA.Neighbor = wallAB;
-            wallBA.PassageType = type;
         }
     }
 

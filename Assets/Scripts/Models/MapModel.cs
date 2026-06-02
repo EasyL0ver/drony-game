@@ -75,12 +75,53 @@ public class MapModel
     Dictionary<Vector2Int, RoomModel> rooms;
 
     /// <summary>
-    /// Register room models so that IsBlocked/GetWallInteraction/GetPassageType
-    /// delegate to WallModel as the single source of truth.
+    /// Register room models and wire wall connections between them.
+    /// Creates appropriate wall model subclasses (ObstacleWallModel, etc.) based on connection data.
     /// </summary>
     public void RegisterRooms(Dictionary<Vector2Int, RoomModel> roomModels)
     {
         rooms = roomModels;
+
+        foreach (var conn in Connections)
+        {
+            if (!rooms.TryGetValue(conn.roomA, out var roomA)) continue;
+            if (!rooms.TryGetValue(conn.roomB, out var roomB)) continue;
+
+            int edgeAB = EdgeToward(conn.roomA, conn.roomB);
+            int edgeBA = (edgeAB + 3) % 6;
+
+            var wi = GetSeedWallInteraction(conn.roomA, conn.roomB);
+            CorridorWallModel wallAB, wallBA;
+
+            if (conn.type == PassageType.BlastDoor)
+            {
+                var behaviorA = new BlastDoorBehavior();
+                var behaviorB = new BlastDoorBehavior();
+                wallAB = new ObstacleWallModel<BlastDoorBehavior>(roomA, edgeAB, conn.type, behaviorA);
+                wallBA = new ObstacleWallModel<BlastDoorBehavior>(roomB, edgeBA, conn.type, behaviorB);
+                roomA.SetWall(edgeAB, wallAB);
+                roomB.SetWall(edgeBA, wallBA);
+            }
+            else if (wi != null && wi.BlocksPassage)
+            {
+                var behaviorA = new RubbleBehavior(wi);
+                var behaviorB = new RubbleBehavior(wi);
+                wallAB = new ObstacleWallModel<RubbleBehavior>(roomA, edgeAB, conn.type, behaviorA);
+                wallBA = new ObstacleWallModel<RubbleBehavior>(roomB, edgeBA, conn.type, behaviorB);
+                roomA.SetWall(edgeAB, wallAB);
+                roomB.SetWall(edgeBA, wallBA);
+            }
+            else
+            {
+                wallAB = roomA.Walls[edgeAB] as CorridorWallModel;
+                wallBA = roomB.Walls[edgeBA] as CorridorWallModel;
+            }
+
+            wallAB.Neighbor = wallBA;
+            wallAB.PassageType = conn.type;
+            wallBA.Neighbor = wallAB;
+            wallBA.PassageType = conn.type;
+        }
     }
 
     /// <summary>One directional passage between two rooms.</summary>
@@ -558,7 +599,7 @@ public class MapModel
     public bool IsBlocked(Vector2Int a, Vector2Int b)
     {
         var wall = GetWall(a, b);
-        if (wall is ObstacleWallModel obs) return obs.IsBlocked;
+        if (wall is IObstacleWall obs) return obs.IsBlocking;
         return false;
     }
 
@@ -570,11 +611,11 @@ public class MapModel
         return interactions.Count > 0 ? interactions[0] : null;
     }
 
-    /// <summary>Check if a connection has any obstacle (no drone context needed — structural query for spawning).</summary>
+    /// <summary>Check if a connection has any obstacle (structural query for spawning).</summary>
     public bool HasBlockingInteraction(Vector2Int a, Vector2Int b)
     {
         var wall = GetWall(a, b);
-        if (wall is ObstacleWallModel obs) return obs.IsBlocked;
+        if (wall is IObstacleWall obs) return obs.IsBlocking;
         return false;
     }
 
@@ -588,8 +629,8 @@ public class MapModel
         // Update WallModels (authoritative source)
         var wallAB = GetWall(a, b);
         var wallBA = GetWall(b, a);
-        (wallAB as ObstacleWallModel)?.CompleteInteraction();
-        (wallBA as ObstacleWallModel)?.CompleteInteraction();
+        (wallAB as IObstacleWall)?.CompleteInteraction();
+        (wallBA as IObstacleWall)?.CompleteInteraction();
 
         // Update legacy data structures
         long key = ConnKey(a, b);
