@@ -51,6 +51,11 @@ public static class Palette
     public static readonly Color PreviewLabel    = Hex("8899AA");
     public static readonly Color OverBudgetLabel = Hex("FF4433");
 
+    // ── hover indicators ──
+    public static readonly Color HoverUnknown    = new Color(1f, 1f, 1f, 0.08f);     // full hex, subtle
+    public static readonly Color HoverCenter     = new Color(0.2f, 0.6f, 1f, 0.12f); // blue inner hex
+    public static readonly Color HoverWall       = new Color(0.2f, 0.6f, 1f, 0.18f); // blue edge wedge (matches center)
+
     // ── selection ──
     public static readonly Color SelectionRing   = Color.white;
     public static readonly Color SelectionBoxFill   = new Color(1f, 1f, 1f, 0.10f);

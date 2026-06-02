@@ -62,13 +62,15 @@ public class RoomTile : MonoBehaviour
     bool outlineShown;
     Material matUnknown, matDiscovered, matOutline, matOutlineHover;
 
-    // Interaction
-    GameObject hoverHighlight;
+    // Interaction — hover indicators
+    GameObject hoverUnknown;    // full hex for unknown rooms
+    GameObject hoverCenter;     // small inner hex for move-to-center
+    GameObject[] hoverWedges = new GameObject[6]; // per-edge wedge for wall hover
     GameObject moveFlash;
-    MeshRenderer hoverRenderer;
     MeshRenderer flashRenderer;
-    Material matHover, matFlash;
+    Material matHoverUnknown, matHoverCenter, matHoverWall, matFlash;
     bool isHovered;
+    int activeWedgeEdge = -1;
     float flashTimer;
     const float flashDuration = 0.5f;
     float fogMeshY;
@@ -258,19 +260,49 @@ public class RoomTile : MonoBehaviour
 
     // ── interaction ──────────────────────────
 
-    public void SetHovered(bool hovered, WallView hoveredWall = null)
+    public void SetHovered(bool hovered, WallView hoveredWall = null, int hoverEdge = -1)
     {
         isHovered = hovered;
-        if (hoverHighlight != null)
+
+        // Resolve which edge to highlight
+        int wallEdge = hoverEdge;
+        if (wallEdge < 0 && hoveredWall != null && hoveredWall.Model != null)
+            wallEdge = hoveredWall.Model.EdgeIndex;
+
+        // Determine which hover indicator to show
+        if (hovered)
         {
-            hoverHighlight.SetActive(hovered);
-            if (hovered)
+            bool isUnknown = State == FogState.Unknown || State == FogState.Scanning;
+
+            // Unknown room: full hex
+            if (hoverUnknown != null)
             {
-                // Above fog for hidden tiles, at floor level for discovered/visible
-                bool opaqueHidden = State == FogState.Unknown || State == FogState.Scanning;
-                float yOff = opaqueHidden ? fogMeshY : 0f;
-                hoverHighlight.transform.localPosition = new Vector3(0f, yOff, 0f);
+                hoverUnknown.SetActive(isUnknown);
+                if (isUnknown)
+                {
+                    float yOff = fogMeshY;
+                    hoverUnknown.transform.localPosition = new Vector3(0f, yOff, 0f);
+                }
             }
+
+            // Visible room center: small inner hex
+            if (hoverCenter != null)
+                hoverCenter.SetActive(!isUnknown && wallEdge < 0);
+
+            // Wall edge wedge
+            if (activeWedgeEdge >= 0 && activeWedgeEdge < 6 && hoverWedges[activeWedgeEdge] != null)
+                hoverWedges[activeWedgeEdge].SetActive(false);
+            activeWedgeEdge = (!isUnknown && wallEdge >= 0) ? wallEdge : -1;
+            if (activeWedgeEdge >= 0 && hoverWedges[activeWedgeEdge] != null)
+                hoverWedges[activeWedgeEdge].SetActive(true);
+        }
+        else
+        {
+            if (hoverUnknown != null) hoverUnknown.SetActive(false);
+            if (hoverCenter != null) hoverCenter.SetActive(false);
+            if (activeWedgeEdge >= 0 && activeWedgeEdge < 6 && hoverWedges[activeWedgeEdge] != null)
+                hoverWedges[activeWedgeEdge].SetActive(false);
+            activeWedgeEdge = -1;
         }
 
         // Brighten outline edges on hover
@@ -324,13 +356,6 @@ public class RoomTile : MonoBehaviour
 
     void Update()
     {
-        if (isHovered && matHover != null)
-        {
-            Color c = new Color(1f, 1f, 1f, 0.08f);
-            matHover.color = c;
-            matHover.SetColor("_BaseColor", c);
-        }
-
         if (flashTimer > 0f)
         {
             flashTimer -= Time.deltaTime;
@@ -397,26 +422,34 @@ public class RoomTile : MonoBehaviour
     void BuildInteractionMeshes(HexMapGenerator map)
     {
         Vector3 center = map.HexCenter(Coord);
-        Mesh hex = RoomTileMesh.FlatHex(center, outlineRadius * 0.97f, 0.03f);
+        float fullR = outlineRadius * 0.97f;
+        Mesh fullHex = RoomTileMesh.FlatHex(center, fullR, 0.03f);
 
-        // Hover highlight
-        hoverHighlight = new GameObject("Hover");
-        hoverHighlight.transform.SetParent(transform, false);
-        var mf1 = hoverHighlight.AddComponent<MeshFilter>();
-        hoverRenderer = hoverHighlight.AddComponent<MeshRenderer>();
-        mf1.sharedMesh = hex;
-        matHover = MakeInteractionMat(new Color(1f, 1f, 1f, 0.08f));
-        hoverRenderer.sharedMaterial = matHover;
-        hoverRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        hoverRenderer.receiveShadows = false;
-        hoverHighlight.SetActive(false);
+        // ── Unknown room hover: full hex (subtle white) ──
+        matHoverUnknown = MakeInteractionMat(Palette.HoverUnknown);
+        hoverUnknown = MakeHoverObject("HoverUnknown", fullHex, matHoverUnknown);
 
-        // Move flash
+        // ── Center hover: small inner hex (blue tint) ──
+        Mesh innerHex = RoomTileMesh.FlatHex(center, fullR * 0.5f, 0.03f);
+        matHoverCenter = MakeInteractionMat(Palette.HoverCenter);
+        hoverCenter = MakeHoverObject("HoverCenter", innerHex, matHoverCenter);
+
+        // ── Wall hover: per-edge wedge (amber) ──
+        matHoverWall = MakeInteractionMat(Palette.HoverWall);
+        float wedgeOuter = fullR;
+        float wedgeInner = fullR * 0.55f;
+        for (int i = 0; i < 6; i++)
+        {
+            Mesh wedge = RoomTileMesh.EdgeWedge(center, wedgeOuter, wedgeInner, 0.03f, i);
+            hoverWedges[i] = MakeHoverObject($"HoverWedge_{i}", wedge, matHoverWall);
+        }
+
+        // ── Move flash ──
         moveFlash = new GameObject("MoveFlash");
         moveFlash.transform.SetParent(transform, false);
         var mf2 = moveFlash.AddComponent<MeshFilter>();
         flashRenderer = moveFlash.AddComponent<MeshRenderer>();
-        mf2.sharedMesh = hex;
+        mf2.sharedMesh = fullHex;
         matFlash = MakeInteractionMat(new Color(1f, 1f, 1f, 0.3f));
         flashRenderer.sharedMaterial = matFlash;
         flashRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -436,6 +469,20 @@ public class RoomTile : MonoBehaviour
         droneLabelText.color = Palette.WithAlpha(Palette.DroneIdle, 0.9f);
         droneLabelText.text = "";
         droneLabel.SetActive(false);
+    }
+
+    GameObject MakeHoverObject(string name, Mesh mesh, Material mat)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        var mf = go.AddComponent<MeshFilter>();
+        var mr = go.AddComponent<MeshRenderer>();
+        mf.sharedMesh = mesh;
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+        go.SetActive(false);
+        return go;
     }
 
     Material MakeInteractionMat(Color c)

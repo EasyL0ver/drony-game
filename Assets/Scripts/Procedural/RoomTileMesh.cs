@@ -72,6 +72,28 @@ public static class RoomTileMesh
         return mesh;
     }
 
+    /// <summary>Wider edge wedge for wall-hover highlight (covers one hex sector).</summary>
+    public static Mesh EdgeWedge(Vector3 center, float outerR, float innerR, float y, int edgeIndex)
+    {
+        // Wedge covers the sector between two adjacent hex vertices with slight angular padding
+        float a1 = Mathf.Deg2Rad * 60f * edgeIndex;
+        float a2 = Mathf.Deg2Rad * 60f * ((edgeIndex + 1) % 6);
+        float c1 = Mathf.Cos(a1), s1 = Mathf.Sin(a1);
+        float c2 = Mathf.Cos(a2), s2 = Mathf.Sin(a2);
+
+        Vector3 o1 = new Vector3(center.x + c1 * outerR, y, center.z + s1 * outerR);
+        Vector3 o2 = new Vector3(center.x + c2 * outerR, y, center.z + s2 * outerR);
+        Vector3 i1 = new Vector3(center.x + c1 * innerR, y, center.z + s1 * innerR);
+        Vector3 i2 = new Vector3(center.x + c2 * innerR, y, center.z + s2 * innerR);
+
+        var mesh = new Mesh { name = $"Wedge{edgeIndex}" };
+        mesh.SetVertices(new List<Vector3> { o1, i1, i2, o2 });
+        mesh.SetTriangles(new List<int> { 0, 1, 2, 0, 2, 3 }, 0);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
+    }
+
     /// <summary>Flat hex mesh for hover/flash interaction overlays.</summary>
     public static Mesh FlatHex(Vector3 center, float radius, float y)
     {

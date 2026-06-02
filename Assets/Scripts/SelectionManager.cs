@@ -181,7 +181,11 @@ public class SelectionManager : MonoBehaviour
             hoveredConnB = connB;
             if (hoveredTile != null)
             {
-                hoveredTile.SetHovered(true, hoveredWallView);
+                int wiEdge = -1;
+                if (hoveredHasWallInteraction)
+                    wiEdge = gm.hexMap.EdgeToward(hoveredConnA, hoveredConnB);
+
+                hoveredTile.SetHovered(true, hoveredWallView, wiEdge);
                 if (hoveredHasWallInteraction)
                     ShowWallInteractionPreviews();
                 else
