@@ -83,6 +83,16 @@ public class CorridorWallModel : WallModel
         }
     }
 
+    /// <summary>Whether this is a blast door (draws network power on traversal).</summary>
+    public bool IsBlastDoor => _rubbleInteraction != null && _rubbleInteraction.RequiresPower;
+
+    /// <summary>Draw network power when a drone passes through a blast door. Returns energy drawn.</summary>
+    public int OnTraversed()
+    {
+        if (!IsBlastDoor || _powerProvider == null) return 0;
+        return _powerProvider.Draw(5);
+    }
+
     public override WallPassability GetPassability(DroneModel drone)
     {
         if (Neighbor == null || IsBlocked)

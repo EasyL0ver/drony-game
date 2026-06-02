@@ -597,8 +597,13 @@ public class DroneController : MonoBehaviour
 
         // Energy — use the wall's cost
         int hopIdx = activeJourney.CurrentHopIndex;
-        int cost = activeJourney.Walls[hopIdx].GetPassability(Model).EnergyCost;
+        var wall = activeJourney.Walls[hopIdx];
+        int cost = wall.GetPassability(Model).EnergyCost;
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cost);
+
+        // Blast door draws from power network on each pass
+        if (wall is CorridorWallModel cw)
+            cw.OnTraversed();
 
         // Advance journey + UI step + route line segment
         activeJourney.AdvanceHop();
