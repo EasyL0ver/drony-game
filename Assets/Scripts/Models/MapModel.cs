@@ -558,7 +558,7 @@ public class MapModel
     public bool IsBlocked(Vector2Int a, Vector2Int b)
     {
         var wall = GetWall(a, b);
-        if (wall is CorridorWallModel cw) return cw.IsBlocked;
+        if (wall is ObstacleWallModel obs) return obs.IsBlocked;
         return false;
     }
 
@@ -570,11 +570,11 @@ public class MapModel
         return interactions.Count > 0 ? interactions[0] : null;
     }
 
-    /// <summary>Check if a connection has any rubble (no drone context needed — structural query for spawning).</summary>
+    /// <summary>Check if a connection has any obstacle (no drone context needed — structural query for spawning).</summary>
     public bool HasBlockingInteraction(Vector2Int a, Vector2Int b)
     {
         var wall = GetWall(a, b);
-        if (wall is CorridorWallModel cw) return cw.IsBlocked;
+        if (wall is ObstacleWallModel obs) return obs.IsBlocked;
         return false;
     }
 
@@ -588,8 +588,8 @@ public class MapModel
         // Update WallModels (authoritative source)
         var wallAB = GetWall(a, b);
         var wallBA = GetWall(b, a);
-        (wallAB as CorridorWallModel)?.CompleteInteraction();
-        (wallBA as CorridorWallModel)?.CompleteInteraction();
+        (wallAB as ObstacleWallModel)?.CompleteInteraction();
+        (wallBA as ObstacleWallModel)?.CompleteInteraction();
 
         // Update legacy data structures
         long key = ConnKey(a, b);

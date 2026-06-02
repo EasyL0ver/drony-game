@@ -451,10 +451,13 @@ public class GameManager : MonoBehaviour
             if (tile == null) continue;
             for (int e = 0; e < 6; e++)
             {
-                if (tile.RModel.Walls[e] is StationWallModel station)
+                var wall = tile.RModel.Walls[e];
+                if (wall is StationWallModel station)
                     station.SetPowerProvider(PowerNetwork);
-                if (tile.RModel.Walls[e] is CorridorWallModel cw && cw.IsBlocked)
-                    cw.SetPowerProvider(PowerNetwork);
+                else if (wall is BlastDoorWallModel blastDoor)
+                    blastDoor.SetPowerProvider(PowerNetwork);
+                else if (wall is ObstacleWallModel obstacle)
+                    obstacle.SetPowerProvider(PowerNetwork);
             }
         }
 

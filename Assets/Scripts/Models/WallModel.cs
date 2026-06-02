@@ -52,14 +52,12 @@ public abstract class WallModel
 }
 
 /// <summary>
-/// A corridor wall: passable with a given passage type. Optionally blocked by rubble.
+/// A corridor wall: passable with a given passage type.
 /// </summary>
 public class CorridorWallModel : WallModel
 {
     public PassageType PassageType { get; set; }
-    public bool IsBlocked { get; set; }
 
-    private WallInteractionConfig _rubbleInteraction;
     protected IPowerProvider _powerProvider;
 
     public CorridorWallModel(RoomModel owner, int edgeIndex, PassageType passageType = PassageType.Corridor)
@@ -88,7 +86,7 @@ public class CorridorWallModel : WallModel
 
     public override WallPassability GetPassability(DroneModel drone)
     {
-        if (Neighbor == null || IsBlocked)
+        if (Neighbor == null)
             return WallPassability.Blocked;
 
         if (!drone.CanTraverse(PassageType))
@@ -105,35 +103,7 @@ public class CorridorWallModel : WallModel
 
     public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
     {
-        var list = new List<WallInteractionConfig>();
-        if (_rubbleInteraction != null)
-        {
-            if (_rubbleInteraction.RequiredGear != GearType.None && !drone.HasGear(_rubbleInteraction.RequiredGear))
-                return list;
-            if (_rubbleInteraction.RequiresPower && !IsPowered)
-                return list;
-            list.Add(_rubbleInteraction);
-        }
-        return list;
-    }
-
-    /// <summary>Set rubble blocking this corridor.</summary>
-    public void SetRubble(WallInteractionConfig rubbleConfig)
-    {
-        _rubbleInteraction = rubbleConfig;
-        IsBlocked = true;
-    }
-
-    /// <summary>Clear rubble: unblocks passage, removes interaction, returns new passage type.</summary>
-    public PassageType? CompleteInteraction()
-    {
-        if (_rubbleInteraction == null || !_rubbleInteraction.BlocksPassage) return null;
-
-        var resultType = _rubbleInteraction.ResultingPassageType;
-        _rubbleInteraction = null;
-        IsBlocked = false;
-        PassageType = resultType;
-        return resultType;
+        return new List<WallInteractionConfig>();
     }
 
     // ── Static helpers ──────────────────────
@@ -179,6 +149,55 @@ public class CorridorWallModel : WallModel
 }
 
 /// <summary>
+/// A corridor blocked by an obstacle (e.g. rubble). Requires an interaction to clear.
+/// </summary>
+public class ObstacleWallModel : CorridorWallModel
+{
+    public bool IsBlocked { get; private set; }
+
+    private WallInteractionConfig _interaction;
+
+    public ObstacleWallModel(RoomModel owner, int edgeIndex, PassageType passageType, WallInteractionConfig interaction)
+        : base(owner, edgeIndex, passageType)
+    {
+        _interaction = interaction;
+        IsBlocked = true;
+    }
+
+    public override WallPassability GetPassability(DroneModel drone)
+    {
+        if (IsBlocked) return WallPassability.Blocked;
+        return base.GetPassability(drone);
+    }
+
+    public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
+    {
+        var list = new List<WallInteractionConfig>();
+        if (!IsBlocked || _interaction == null) return list;
+
+        if (_interaction.RequiredGear != GearType.None && !drone.HasGear(_interaction.RequiredGear))
+            return list;
+        if (_interaction.RequiresPower && !IsPowered)
+            return list;
+
+        list.Add(_interaction);
+        return list;
+    }
+
+    /// <summary>Clear obstacle: unblocks passage, removes interaction, returns resulting passage type.</summary>
+    public PassageType? CompleteInteraction()
+    {
+        if (_interaction == null || !_interaction.BlocksPassage) return null;
+
+        var resultType = _interaction.ResultingPassageType;
+        _interaction = null;
+        IsBlocked = false;
+        PassageType = resultType;
+        return resultType;
+    }
+}
+
+/// <summary>
 /// A blast door wall: passable only when either neighboring room is powered.
 /// Draws energy from the network on each traversal.
 /// </summary>
@@ -203,11 +222,6 @@ public class BlastDoorWallModel : CorridorWallModel
             EnergyCost = PassageEnergyCost(PassageType),
             Label = "BLAST DOOR",
         };
-    }
-
-    public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
-    {
-        return new List<WallInteractionConfig>();
     }
 
     /// <summary>Opens the door, drawing network power.</summary>

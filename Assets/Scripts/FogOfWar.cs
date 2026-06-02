@@ -82,11 +82,20 @@ public class FogOfWar : MonoBehaviour
             tileB.AddConnection(new TileConnection { neighbor = tileA, passageType = type, edgeIndex = edgeBA });
 
             // Create appropriate wall models
+            var wi = map.Model.GetSeedWallInteraction(a, b);
             CorridorWallModel wallAB, wallBA;
+
             if (type == PassageType.BlastDoor)
             {
                 wallAB = new BlastDoorWallModel(tileA.RModel, edgeAB);
                 wallBA = new BlastDoorWallModel(tileB.RModel, edgeBA);
+                tileA.RModel.SetWall(edgeAB, wallAB);
+                tileB.RModel.SetWall(edgeBA, wallBA);
+            }
+            else if (wi != null && wi.BlocksPassage)
+            {
+                wallAB = new ObstacleWallModel(tileA.RModel, edgeAB, type, wi);
+                wallBA = new ObstacleWallModel(tileB.RModel, edgeBA, type, wi);
                 tileA.RModel.SetWall(edgeAB, wallAB);
                 tileB.RModel.SetWall(edgeBA, wallBA);
             }
@@ -101,14 +110,6 @@ public class FogOfWar : MonoBehaviour
 
             wallBA.Neighbor = wallAB;
             wallBA.PassageType = type;
-
-            // Wire rubble interactions
-            var wi = map.Model.GetSeedWallInteraction(a, b);
-            if (wi != null && wi.BlocksPassage)
-            {
-                wallAB.SetRubble(wi);
-                wallBA.SetRubble(wi);
-            }
         }
     }
 
