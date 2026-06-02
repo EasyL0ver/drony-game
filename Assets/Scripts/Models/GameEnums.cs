@@ -60,6 +60,12 @@ public class WallInteractionConfig
     /// <summary>Cargo type awarded on pickup (if any).</summary>
     public CargoType CargoReward { get; set; } = CargoType.None;
 
+    /// <summary>If true, drone must be carrying cargo to interact.</summary>
+    public bool RequiresCargo { get; set; }
+
+    /// <summary>Points awarded to player on completion.</summary>
+    public int PointsReward { get; set; }
+
     // ── Factory presets ─────────────────────
 
     public static WallInteractionConfig Charging() => new WallInteractionConfig
@@ -94,5 +100,14 @@ public class WallInteractionConfig
         BaseDuration = 1.5f,
         RequiredDroneType = DroneType.Hauler,
         CargoReward = CargoType.FuelCell,
+    };
+
+    public static WallInteractionConfig Unload(int pointsReward = 3) => new WallInteractionConfig
+    {
+        Label = "UNLOAD",
+        BaseDuration = 2f,
+        RequiredDroneType = DroneType.Hauler,
+        RequiresCargo = true,
+        PointsReward = pointsReward,
     };
 }

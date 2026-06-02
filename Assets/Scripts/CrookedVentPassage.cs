@@ -89,17 +89,17 @@ public class CrookedVentPassage : Passage
 
     // ── Ring animation fields ───────────────────────────────
 
-    GameObject ringsGO;
-    MeshFilter ringsMF;
-    MeshRenderer ringsMR;
-    Material ringsMat;
-    Mesh ringsMesh;
-    Coroutine ringsAnim;
-    List<Vector3> ringsWaypoints;
-    List<float> ringsCumulDist;
-    const int ringCount = 5;
-    const float ringSpeed = 0.5f;
-    const float ringPipeRadius = 0.22f;
+    GameObject cvRingsGO;
+    MeshFilter cvRingsMF;
+    MeshRenderer cvRingsMR;
+    Material cvRingsMat;
+    Mesh cvRingsMesh;
+    Coroutine cvRingsAnim;
+    List<Vector3> cvRingsWaypoints;
+    List<float> cvRingsCumulDist;
+    const int cvRingCount = 5;
+    const float cvRingSpeed = 0.5f;
+    const float cvRingPipeRadius = 0.22f;
 
     // ── Line drawing ────────────────────────────────────────
 
@@ -155,64 +155,64 @@ public class CrookedVentPassage : Passage
             if (lineGO != null) lineGO.SetActive(false);
         }
 
-        ringsWaypoints = pipeWaypoints;
-        ringsCumulDist = new List<float>();
+        cvRingsWaypoints = pipeWaypoints;
+        cvRingsCumulDist = new List<float>();
         float cumul = 0f;
-        ringsCumulDist.Add(0f);
-        for (int i = 1; i < ringsWaypoints.Count; i++)
+        cvRingsCumulDist.Add(0f);
+        for (int i = 1; i < cvRingsWaypoints.Count; i++)
         {
-            cumul += Vector3.Distance(ringsWaypoints[i - 1], ringsWaypoints[i]);
-            ringsCumulDist.Add(cumul);
+            cumul += Vector3.Distance(cvRingsWaypoints[i - 1], cvRingsWaypoints[i]);
+            cvRingsCumulDist.Add(cumul);
         }
 
         EnsureRings();
-        ringsGO.SetActive(true);
+        cvRingsGO.SetActive(true);
 
-        ringsMat.color = color;
-        ringsMat.SetColor("_BaseColor", color);
-        ringsMat.SetColor("_EmissionColor", color * 3f);
+        cvRingsMat.color = color;
+        cvRingsMat.SetColor("_BaseColor", color);
+        cvRingsMat.SetColor("_EmissionColor", color * 3f);
 
         BuildRingsMesh(0f);
-        if (ringsAnim != null) StopCoroutine(ringsAnim);
-        ringsAnim = StartCoroutine(AnimateRings());
+        if (cvRingsAnim != null) StopCoroutine(cvRingsAnim);
+        cvRingsAnim = StartCoroutine(AnimateRings());
     }
 
     public override void HideLine()
     {
         base.HideLine();
-        if (ringsGO != null) ringsGO.SetActive(false);
-        if (ringsAnim != null) { StopCoroutine(ringsAnim); ringsAnim = null; }
+        if (cvRingsGO != null) cvRingsGO.SetActive(false);
+        if (cvRingsAnim != null) { StopCoroutine(cvRingsAnim); cvRingsAnim = null; }
     }
 
     void EnsureRings()
     {
-        if (ringsGO != null) return;
+        if (cvRingsGO != null) return;
 
-        ringsGO = new GameObject("VentRings");
-        ringsGO.transform.SetParent(transform, true);
-        ringsGO.transform.position = Vector3.zero;
-        ringsGO.transform.rotation = Quaternion.identity;
+        cvRingsGO = new GameObject("VentRings");
+        cvRingsGO.transform.SetParent(transform, true);
+        cvRingsGO.transform.position = Vector3.zero;
+        cvRingsGO.transform.rotation = Quaternion.identity;
 
-        ringsMF = ringsGO.AddComponent<MeshFilter>();
-        ringsMR = ringsGO.AddComponent<MeshRenderer>();
+        cvRingsMF = cvRingsGO.AddComponent<MeshFilter>();
+        cvRingsMR = cvRingsGO.AddComponent<MeshRenderer>();
 
         Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
         if (sh == null) sh = Shader.Find("Unlit/Color");
-        ringsMat = new Material(sh);
-        ringsMat.SetFloat("_Surface", 1f);
-        ringsMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        ringsMat.SetOverrideTag("RenderType", "Transparent");
-        ringsMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        ringsMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        ringsMat.SetInt("_ZWrite", 0);
-        ringsMat.SetFloat("_Cull", 0f);
-        ringsMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 2;
-        ringsMR.sharedMaterial = ringsMat;
-        ringsMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        cvRingsMat = new Material(sh);
+        cvRingsMat.SetFloat("_Surface", 1f);
+        cvRingsMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        cvRingsMat.SetOverrideTag("RenderType", "Transparent");
+        cvRingsMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        cvRingsMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        cvRingsMat.SetInt("_ZWrite", 0);
+        cvRingsMat.SetFloat("_Cull", 0f);
+        cvRingsMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 2;
+        cvRingsMR.sharedMaterial = cvRingsMat;
+        cvRingsMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-        ringsMesh = new Mesh { name = "CrookedVentRings" };
-        ringsMF.sharedMesh = ringsMesh;
-        ringsGO.SetActive(false);
+        cvRingsMesh = new Mesh { name = "CrookedVentRings" };
+        cvRingsMF.sharedMesh = cvRingsMesh;
+        cvRingsGO.SetActive(false);
     }
 
     IEnumerator AnimateRings()
@@ -220,7 +220,7 @@ public class CrookedVentPassage : Passage
         float phase = 0f;
         while (true)
         {
-            phase += Time.deltaTime * ringSpeed;
+            phase += Time.deltaTime * cvRingSpeed;
             if (phase >= 1f) phase -= 1f;
             BuildRingsMesh(phase);
             yield return null;
@@ -232,29 +232,29 @@ public class CrookedVentPassage : Passage
         var verts = new List<Vector3>();
         var tris = new List<int>();
 
-        float totalLen = ringsCumulDist[ringsCumulDist.Count - 1];
+        float totalLen = cvRingsCumulDist[cvRingsCumulDist.Count - 1];
         if (totalLen < 0.01f) return;
 
-        float bandW = ringPipeRadius * 0.5f;
-        float r = ringPipeRadius * 1.01f;
+        float bandW = cvRingPipeRadius * 0.5f;
+        float r = cvRingPipeRadius * 1.01f;
         int seg = 10;
 
-        for (int ring = 0; ring < ringCount; ring++)
+        for (int ring = 0; ring < cvRingCount; ring++)
         {
-            float t = (phase + (float)ring / ringCount) % 1f;
+            float t = (phase + (float)ring / cvRingCount) % 1f;
             float targetDist = t * totalLen;
 
             // Find position along multi-segment path
-            Vector3 center = ringsWaypoints[0];
+            Vector3 center = cvRingsWaypoints[0];
             Vector3 axis = Vector3.forward;
-            for (int i = 0; i < ringsCumulDist.Count - 1; i++)
+            for (int i = 0; i < cvRingsCumulDist.Count - 1; i++)
             {
-                if (ringsCumulDist[i + 1] >= targetDist)
+                if (cvRingsCumulDist[i + 1] >= targetDist)
                 {
-                    float segLen = ringsCumulDist[i + 1] - ringsCumulDist[i];
-                    float segT = segLen > 0.001f ? (targetDist - ringsCumulDist[i]) / segLen : 0f;
-                    center = Vector3.Lerp(ringsWaypoints[i], ringsWaypoints[i + 1], segT);
-                    axis = (ringsWaypoints[i + 1] - ringsWaypoints[i]).normalized;
+                    float segLen = cvRingsCumulDist[i + 1] - cvRingsCumulDist[i];
+                    float segT = segLen > 0.001f ? (targetDist - cvRingsCumulDist[i]) / segLen : 0f;
+                    center = Vector3.Lerp(cvRingsWaypoints[i], cvRingsWaypoints[i + 1], segT);
+                    axis = (cvRingsWaypoints[i + 1] - cvRingsWaypoints[i]).normalized;
                     break;
                 }
             }
@@ -287,9 +287,9 @@ public class CrookedVentPassage : Passage
             }
         }
 
-        ringsMesh.Clear();
-        ringsMesh.SetVertices(verts);
-        ringsMesh.SetTriangles(tris, 0);
+        cvRingsMesh.Clear();
+        cvRingsMesh.SetVertices(verts);
+        cvRingsMesh.SetTriangles(tris, 0);
     }
 
     // ── Traversal distance ─────────────────────────────────

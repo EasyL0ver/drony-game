@@ -116,6 +116,29 @@ public class GameManager : MonoBehaviour
         var refitView = stationBldgGO.AddComponent<RefittingStation>();
         refitView.SetModel(stationTile.RModel.Walls[refitEdge]);
 
+        // ── spawn loading station (in corridor room — hauler accessible) ──
+        if (hexMap.TestMode)
+        {
+            Vector2Int loadCoord = Vector2Int.zero;
+            foreach (var conn in hexMap.ConnectionList)
+            {
+                if (conn.type == PassageType.Corridor)
+                {
+                    loadCoord = conn.a == Vector2Int.zero ? conn.b : conn.a;
+                    break;
+                }
+            }
+            if (loadCoord != Vector2Int.zero)
+            {
+                var loadTile = fog.GetTile(loadCoord);
+                var loadGO = new GameObject("LoadingStation");
+                loadGO.transform.SetParent(loadTile.transform, false);
+                int loadEdge = PlaceAtWall(loadGO, loadCoord, loadTile.RModel, WallInteractionConfig.Unload());
+                var loadView = loadGO.AddComponent<LoadingStation>();
+                loadView.SetModel(loadTile.RModel.Walls[loadEdge]);
+            }
+        }
+
         // ── place charging station on a neighbor of the starting room ──
         Vector2Int chargingCoord = Vector2Int.zero;
         foreach (var conn in hexMap.ConnectionList)

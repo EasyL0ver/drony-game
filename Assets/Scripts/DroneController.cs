@@ -756,6 +756,15 @@ public class DroneController : MonoBehaviour
             if (wall != null) wall.gameObject.SetActive(false);
         }
 
+        // Unload cargo for points
+        if (cfg.RequiresCargo && Model.HasCargo)
+        {
+            Model.Cargo = CargoType.None;
+            if (cargoVisual != null) { Destroy(cargoVisual); cargoVisual = null; }
+            var gm = GetComponentInParent<GameManager>();
+            if (gm != null) gm.Player.Points += cfg.PointsReward;
+        }
+
         // Repeat if the config says so (e.g. charging until full)
         if (cfg.RepeatCondition != null && cfg.RepeatCondition(Model))
         {

@@ -185,6 +185,8 @@ public class StationWallModel : WallModel
                 return list;
             if (_interaction.CargoReward != CargoType.None && !drone.CanCarry)
                 return list;
+            if (_interaction.RequiresCargo && !drone.HasCargo)
+                return list;
             list.Add(_interaction);
         }
         return list;
