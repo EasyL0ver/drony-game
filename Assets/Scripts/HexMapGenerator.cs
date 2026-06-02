@@ -97,9 +97,9 @@ public class HexMapGenerator : MonoBehaviour
         Model = new MapModel(roomCount, seed, hexRadius, gridScale, mediumScale, smallScale,
                              wallHeight, corridorWidth, ductWidth, ventPipeRadius);
         if (testMode)
-            Model.GenerateTestLayout(testMapIndex);
+            Model.ApplyLayout(MapGenerator.GenerateTestLayout(testMapIndex));
         else
-            Model.GenerateLayout();
+            Model.ApplyLayout(MapGenerator.GenerateRandom(roomCount, seed));
 
         // Build tuple list for backward compatibility
         ConnectionList = new List<(Vector2Int, Vector2Int, PassageType)>();

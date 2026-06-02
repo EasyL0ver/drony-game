@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// Pure game-logic model for the hex map: topology, spatial math, layout generation, pathfinding.
+/// Pure game-logic model for the hex map: topology, spatial math, pathfinding.
 /// No MonoBehaviour, no meshes, no materials — just data and rules.
 /// </summary>
 public class MapModel
@@ -21,33 +21,21 @@ public class MapModel
     public float DuctWidth { get; private set; }
     public float VentPipeRadius { get; private set; }
 
-    // ── Layout data (populated after Generate) ──
+    // ── Layout data ──────────────────────────
 
     public List<Vector2Int> RoomList { get; private set; } = new List<Vector2Int>();
     public Dictionary<Vector2Int, RoomSize> RoomSizes { get; private set; }
         = new Dictionary<Vector2Int, RoomSize>();
     public List<Connection> Connections { get; private set; } = new List<Connection>();
 
-    // Wall interactions (rubble, etc.) — keyed by ConnKey (used during generation only)
-    readonly Dictionary<long, WallInteractionConfig> wallInteractions = new Dictionary<long, WallInteractionConfig>();
+    // Seed data (consumed during RegisterRooms, then discarded)
+    Dictionary<long, WallInteractionConfig> wallInteractions = new Dictionary<long, WallInteractionConfig>();
 
-    // Rooms that should have loot barrels placed (set by test maps)
     public List<Vector2Int> lootBarrelRooms { get; private set; } = new List<Vector2Int>();
-
-    // Room for loading station (null = auto-pick)
     public Vector2Int? loadingStationRoom { get; private set; }
-
-    // Room for charging station (null = auto-pick)
     public Vector2Int? chargingStationRoom { get; private set; }
-
-    // ── Power cable seed data ────────────────
-    /// <summary>Cable connections (separate layer from passages).</summary>
     public List<CableConnection> CableConnections { get; private set; } = new List<CableConnection>();
-
-    /// <summary>Room where the battery power source is placed (null = no power network).</summary>
     public Vector2Int? batteryRoom { get; private set; }
-
-    /// <summary>Starting energy for the battery.</summary>
     public int batteryMaxEnergy { get; private set; } = 100;
 
     /// <summary>A cable edge between two adjacent rooms.</summary>
@@ -57,18 +45,26 @@ public class MapModel
         public Vector2Int roomB;
     }
 
+    /// <summary>Apply a generated layout to this model.</summary>
+    public void ApplyLayout(MapLayout layout)
+    {
+        RoomList = layout.RoomList;
+        RoomSizes = layout.RoomSizes;
+        Connections = layout.Connections;
+        wallInteractions = layout.WallInteractions;
+        lootBarrelRooms = layout.LootBarrelRooms;
+        loadingStationRoom = layout.LoadingStationRoom;
+        chargingStationRoom = layout.ChargingStationRoom;
+        CableConnections = layout.CableConnections;
+        batteryRoom = layout.BatteryRoom;
+        batteryMaxEnergy = layout.BatteryMaxEnergy;
+    }
+
     /// <summary>Read wall interaction from generation data. Used only during initial wiring.</summary>
     public WallInteractionConfig GetSeedWallInteraction(Vector2Int a, Vector2Int b)
     {
         long key = ConnKey(a, b);
         return wallInteractions.TryGetValue(key, out var wi) ? wi : null;
-    }
-
-    /// <summary>Read blocked state from generation data. Used only during initial wiring.</summary>
-    public bool IsSeedBlocked(Vector2Int a, Vector2Int b)
-    {
-        long key = ConnKey(a, b);
-        return wallInteractions.TryGetValue(key, out var wi) && wi.BlocksPassage;
     }
 
     // Room models — set after tile creation so WallModels become authoritative
@@ -164,256 +160,13 @@ public class MapModel
         VentPipeRadius = ventPipeRadius;
     }
 
-    // ── Layout generation ────────────────────
-
-    /// <summary>
-    /// Generate a test layout by index. Each index is a hand-crafted scenario.
-    /// </summary>
-    public void GenerateTestLayout(int index = 0)
+    public static long ConnKey(Vector2Int a, Vector2Int b)
     {
-        wallInteractions.Clear();
-        lootBarrelRooms.Clear();
-        switch (index)
-        {
-            case 0: TestMap_CrookedVent(); break;
-            case 1: TestMap_AllPassages(); break;
-            case 2: TestMap_SalvageRun(); break;
-            default: TestMap_CrookedVent(); break;
-        }
-    }
-
-    /// <summary>Two rooms connected by a crooked vent.</summary>
-    void TestMap_CrookedVent()
-    {
-        var roomA = Vector2Int.zero;
-        var roomB = HexDirs[0];
-        var roomC = HexDirs[3];
-
-        RoomList = new List<Vector2Int> { roomA, roomB, roomC };
-        RoomSizes = new Dictionary<Vector2Int, RoomSize>
-        {
-            { roomA, RoomSize.Large },
-            { roomB, RoomSize.Small },
-            { roomC, RoomSize.Small },
-        };
-        Connections = new List<Connection>
-        {
-            new Connection { roomA = roomA, roomB = roomB, type = PassageType.CrookedVent },
-            new Connection { roomA = roomA, roomB = roomC, type = PassageType.Vent },
-        };
-    }
-
-    /// <summary>Central room connected to all passage types + stations.</summary>
-    void TestMap_AllPassages()
-    {
-        var roomA = Vector2Int.zero;
-        var roomB = HexDirs[0]; // corridor
-        var roomC = HexDirs[1]; // duct
-        var roomD = HexDirs[2]; // vent
-        var roomE = HexDirs[3]; // crooked vent
-        var roomF = HexDirs[4]; // rubble
-
-        RoomList = new List<Vector2Int> { roomA, roomB, roomC, roomD, roomE, roomF };
-        RoomSizes = new Dictionary<Vector2Int, RoomSize>
-        {
-            { roomA, RoomSize.Large },
-            { roomB, RoomSize.Large },
-            { roomC, RoomSize.Medium },
-            { roomD, RoomSize.Small },
-            { roomE, RoomSize.Small },
-            { roomF, RoomSize.Large },
-        };
-        Connections = new List<Connection>
-        {
-            new Connection { roomA = roomA, roomB = roomB, type = PassageType.Corridor },
-            new Connection { roomA = roomA, roomB = roomC, type = PassageType.Duct },
-            new Connection { roomA = roomA, roomB = roomD, type = PassageType.Vent },
-            new Connection { roomA = roomA, roomB = roomE, type = PassageType.CrookedVent },
-            new Connection { roomA = roomA, roomB = roomF, type = PassageType.Rubble },
-        };
-
-        wallInteractions[ConnKey(roomA, roomF)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
-    }
-
-    /// <summary>
-    /// Salvage Run — a multi-room map designed to use all mechanics:
-    /// corridors for hauler, rubble to bomb-clear, vents/ducts for scouts,
-    /// multiple loot barrels, charging/loading stations, energy management.
-    /// Win condition: sell 10 pts of cargo at the loading station.
-    /// </summary>
-    void TestMap_SalvageRun()
-    {
-        // Room coordinates
-        var hub     = Vector2Int.zero;                         // start — refit station
-        var east    = new Vector2Int(1, 0);                    // charging station
-        var farEast = new Vector2Int(2, 0);                    // barrel #1
-        var south   = new Vector2Int(0, -1);                   // loading station (sell)
-        var sEast   = new Vector2Int(1, -1);                   // barrel #2
-        var north   = new Vector2Int(0, 1);                    // scout peek room
-        var nWest   = new Vector2Int(-1, 1);                   // dead end (empty)
-        var west    = new Vector2Int(-1, 0);                   // behind rubble
-        var farWest = new Vector2Int(-2, 0);                   // barrel #3
-        var fwNorth = new Vector2Int(-2, 1);                   // barrel #4
-
-        RoomList = new List<Vector2Int>
-        {
-            hub, east, farEast, south, sEast, north, nWest, west, farWest, fwNorth
-        };
-
-        RoomSizes = new Dictionary<Vector2Int, RoomSize>
-        {
-            { hub,     RoomSize.Large },
-            { east,    RoomSize.Large },
-            { farEast, RoomSize.Large },
-            { south,   RoomSize.Large },
-            { sEast,   RoomSize.Large },
-            { north,   RoomSize.Small },
-            { nWest,   RoomSize.Small },
-            { west,    RoomSize.Large },
-            { farWest, RoomSize.Large },
-            { fwNorth, RoomSize.Medium },
-        };
-
-        Connections = new List<Connection>
-        {
-            // Hauler highway (corridors)
-            new Connection { roomA = hub,     roomB = east,    type = PassageType.Corridor },
-            new Connection { roomA = east,    roomB = farEast, type = PassageType.BlastDoor },
-            new Connection { roomA = hub,     roomB = south,   type = PassageType.Corridor },
-            new Connection { roomA = south,   roomB = sEast,   type = PassageType.Corridor },
-            // Bombed path opens west wing
-            new Connection { roomA = hub,     roomB = west,    type = PassageType.Rubble },
-            new Connection { roomA = west,    roomB = farWest, type = PassageType.Corridor },
-            new Connection { roomA = farWest, roomB = fwNorth, type = PassageType.Duct },
-            // Scout-only paths
-            new Connection { roomA = hub,     roomB = north,   type = PassageType.Vent },
-            new Connection { roomA = north,   roomB = nWest,   type = PassageType.Vent },
-            // Shortcut vent from north to west (scouts can peek behind rubble)
-            new Connection { roomA = nWest,   roomB = west,    type = PassageType.Vent },
-        };
-
-        // Rubble interaction
-        wallInteractions[ConnKey(hub, west)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
-
-        // Barrel placements
-        lootBarrelRooms.Add(farEast);
-        lootBarrelRooms.Add(sEast);
-        lootBarrelRooms.Add(farWest);
-        lootBarrelRooms.Add(fwNorth);
-
-        // Station placements
-        chargingStationRoom = east;
-        loadingStationRoom = south;
-
-        // Power cable network: battery in hub, cables to station rooms
-        batteryRoom = hub;
-        batteryMaxEnergy = 120;
-        CableConnections = new List<CableConnection>
-        {
-            new CableConnection { roomA = hub,  roomB = east },   // powers charging station
-            new CableConnection { roomA = hub,  roomB = south },  // powers loading station
-        };
-    }
-
-    public void GenerateLayout()
-    {
-        var rng = new System.Random(Seed);
-
-        var rooms = new HashSet<Vector2Int>();
-        var roomSizes = new Dictionary<Vector2Int, RoomSize>();
-        var connections = new List<Connection>();
-        var connSet = new HashSet<long>();
-        var list = new List<Vector2Int>();
-
-        rooms.Add(Vector2Int.zero);
-        roomSizes[Vector2Int.zero] = RoomSize.Large;
-        list.Add(Vector2Int.zero);
-
-        int tries = 0;
-        while (rooms.Count < RoomCount && tries < RoomCount * 50)
-        {
-            tries++;
-            Vector2Int src = list[rng.Next(list.Count)];
-            Vector2Int nb = src + HexDirs[rng.Next(6)];
-            if (!rooms.Contains(nb))
-            {
-                rooms.Add(nb);
-                RoomSize sz = RandomRoomSize(rng);
-                roomSizes[nb] = sz;
-                list.Add(nb);
-
-                PassageType pt = DerivePassageType(roomSizes[src], sz);
-                TryAddConn(connections, connSet, src, nb, pt);
-            }
-        }
-
-        // Extra neighbor connections for loops
-        foreach (var r in list)
-        {
-            for (int d = 0; d < 6; d++)
-            {
-                Vector2Int nb = r + HexDirs[d];
-                if (rooms.Contains(nb) && rng.NextDouble() < 0.20)
-                {
-                    PassageType pt = DerivePassageType(roomSizes[r], roomSizes[nb]);
-                    TryAddConn(connections, connSet, r, nb, pt);
-                }
-            }
-        }
-
-        RoomList = new List<Vector2Int>(rooms);
-        RoomSizes = roomSizes;
-        Connections = connections;
-
-        // Randomly convert some vents to crooked vents
-        for (int i = 0; i < Connections.Count; i++)
-        {
-            var c = Connections[i];
-            if (c.type == PassageType.Vent && rng.NextDouble() < 0.4)
-            {
-                c.type = PassageType.CrookedVent;
-                Connections[i] = c;
-            }
-        }
-
-        // Randomly convert some corridors/ducts to rubble
-        wallInteractions.Clear();
-        for (int i = 0; i < Connections.Count; i++)
-        {
-            var c = Connections[i];
-            if (c.type == PassageType.Vent || c.type == PassageType.CrookedVent) continue;
-            if (c.roomA == Vector2Int.zero || c.roomB == Vector2Int.zero) continue;
-            if (rng.NextDouble() < 0.25)
-            {
-                var originalType = c.type;
-                c.type = PassageType.Rubble;
-                Connections[i] = c;
-                var interaction = WallInteractionConfig.RubbleClear(GearType.Bomb);
-                interaction.ResultingPassageType = originalType;
-                wallInteractions[ConnKey(c.roomA, c.roomB)] = interaction;
-            }
-        }
-
-        // Randomly place blast doors on some remaining corridors/ducts
-        for (int i = 0; i < Connections.Count; i++)
-        {
-            var c = Connections[i];
-            if (c.type != PassageType.Corridor && c.type != PassageType.Duct) continue;
-            if (c.roomA == Vector2Int.zero || c.roomB == Vector2Int.zero) continue;
-            if (rng.NextDouble() < 0.15)
-            {
-                c.type = PassageType.BlastDoor;
-                Connections[i] = c;
-            }
-        }
-    }
-
-    static RoomSize RandomRoomSize(System.Random rng)
-    {
-        double r = rng.NextDouble();
-        if (r < 0.50) return RoomSize.Large;
-        if (r < 0.80) return RoomSize.Medium;
-        return RoomSize.Small;
+        if (a.x > b.x || (a.x == b.x && a.y > b.y))
+        { var t = a; a = b; b = t; }
+        long ax = a.x + 500, ay = a.y + 500;
+        long bx = b.x + 500, by = b.y + 500;
+        return (ax << 30) | (ay << 20) | (bx << 10) | by;
     }
 
     /// <summary>Passage type determined by smallest room on either end.</summary>
@@ -427,23 +180,6 @@ public class MapModel
             case RoomSize.Small:  return PassageType.Vent;
             default:              return PassageType.Corridor;
         }
-    }
-
-    static void TryAddConn(List<Connection> list, HashSet<long> set,
-                           Vector2Int a, Vector2Int b, PassageType type)
-    {
-        long k = ConnKey(a, b);
-        if (set.Add(k))
-            list.Add(new Connection { roomA = a, roomB = b, type = type });
-    }
-
-    public static long ConnKey(Vector2Int a, Vector2Int b)
-    {
-        if (a.x > b.x || (a.x == b.x && a.y > b.y))
-        { var t = a; a = b; b = t; }
-        long ax = a.x + 500, ay = a.y + 500;
-        long bx = b.x + 500, by = b.y + 500;
-        return (ax << 30) | (ay << 20) | (bx << 10) | by;
     }
 
     // ── Hex math ─────────────────────────────
