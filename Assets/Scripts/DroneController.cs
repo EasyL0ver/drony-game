@@ -602,8 +602,8 @@ public class DroneController : MonoBehaviour
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cost);
 
         // Blast door draws from power network on each pass
-        if (wall is CorridorWallModel cw)
-            cw.OnTraversed();
+        if (wall is BlastDoorWallModel blastDoor)
+            blastDoor.OnTraversed();
 
         // Advance journey + UI step + route line segment
         activeJourney.AdvanceHop();

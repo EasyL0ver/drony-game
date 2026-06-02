@@ -57,7 +57,7 @@ public class CorridorWallModel : WallModel
     public bool IsBlocked { get; set; }
 
     private WallInteractionConfig _rubbleInteraction;
-    private IPowerProvider _powerProvider;
+    protected IPowerProvider _powerProvider;
 
     public CorridorWallModel(RoomModel owner, int edgeIndex, PassageType passageType = PassageType.Corridor)
         : base(owner, edgeIndex)
@@ -83,31 +83,10 @@ public class CorridorWallModel : WallModel
         }
     }
 
-    /// <summary>Draw network power when a drone passes through a blast door. Returns energy drawn.</summary>
-    public int OnTraversed()
-    {
-        if (!IsBlastDoor || _powerProvider == null) return 0;
-        return _powerProvider.Draw(5);
-    }
-
     public override WallPassability GetPassability(DroneModel drone)
     {
-        if (Neighbor == null) return WallPassability.Blocked;
-
-        // Blast doors: passable only when powered, never use IsBlocked
-        if (IsBlastDoor)
-        {
-            if (!IsPowered) return WallPassability.Blocked;
-            return new WallPassability
-            {
-                CanPass = true,
-                Duration = PassageBaseDuration(PassageType),
-                EnergyCost = PassageEnergyCost(PassageType),
-                Label = "BLAST DOOR",
-            };
-        }
-
-        if (IsBlocked) return WallPassability.Blocked;
+        if (Neighbor == null || IsBlocked)
+            return WallPassability.Blocked;
 
         if (!drone.CanTraverse(PassageType))
             return WallPassability.Blocked;
@@ -124,7 +103,6 @@ public class CorridorWallModel : WallModel
     public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
     {
         var list = new List<WallInteractionConfig>();
-        if (IsBlastDoor) return list; // blast doors have no interaction
         if (_rubbleInteraction != null)
         {
             if (_rubbleInteraction.RequiredGear != GearType.None && !drone.HasGear(_rubbleInteraction.RequiredGear))
@@ -142,9 +120,6 @@ public class CorridorWallModel : WallModel
         _rubbleInteraction = rubbleConfig;
         IsBlocked = true;
     }
-
-    /// <summary>Whether this is a blast door (derived from passage type).</summary>
-    public bool IsBlastDoor => PassageType == PassageType.BlastDoor;
 
     /// <summary>Clear rubble: unblocks passage, removes interaction, returns new passage type.</summary>
     public PassageType? CompleteInteraction()
@@ -197,6 +172,46 @@ public class CorridorWallModel : WallModel
             case PassageType.CrookedVent: return "CROOKED VENT";
             default:                      return "TRAVEL";
         }
+    }
+}
+
+/// <summary>
+/// A blast door wall: passable only when either neighboring room is powered.
+/// Draws energy from the network on each traversal.
+/// </summary>
+public class BlastDoorWallModel : CorridorWallModel
+{
+    public const int TraversalCost = 5;
+
+    public BlastDoorWallModel(RoomModel owner, int edgeIndex)
+        : base(owner, edgeIndex, PassageType.BlastDoor)
+    {
+    }
+
+    public override WallPassability GetPassability(DroneModel drone)
+    {
+        if (Neighbor == null || !IsPowered)
+            return WallPassability.Blocked;
+
+        return new WallPassability
+        {
+            CanPass = true,
+            Duration = PassageBaseDuration(PassageType),
+            EnergyCost = PassageEnergyCost(PassageType),
+            Label = "BLAST DOOR",
+        };
+    }
+
+    public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
+    {
+        return new List<WallInteractionConfig>();
+    }
+
+    /// <summary>Draw network power when a drone passes through. Returns energy drawn.</summary>
+    public int OnTraversed()
+    {
+        if (_powerProvider == null) return 0;
+        return _powerProvider.Draw(TraversalCost);
     }
 }
 

@@ -507,7 +507,7 @@ public class GameManager : MonoBehaviour
             long key = MapModel.ConnKey(a, b);
             if (rubbleBarriers.TryGetValue(key, out var barrierGO))
             {
-                var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
+                var wall = hexMap.Model.GetWall(a, b) as BlastDoorWallModel;
                 barrierGO.SetActive(wall == null || !wall.IsPowered);
             }
         }
