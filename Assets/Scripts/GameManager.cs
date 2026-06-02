@@ -478,18 +478,30 @@ public class GameManager : MonoBehaviour
                 w.SetPowered(false);
         }
 
-        // Set initial blast door state (hide barrier + glow when powered)
+        // Subscribe blast door walls to open/close on traversal
         foreach (var (a, b, type) in hexMap.ConnectionList)
         {
             if (type != PassageType.BlastDoor) continue;
             long key = MapModel.ConnKey(a, b);
-            var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
-            bool closed = wall == null || !wall.IsPowered;
 
-            if (rubbleBarriers.TryGetValue(key, out var barrierGO))
-                barrierGO.SetActive(closed);
-            if (rubbleGlowRenderers.TryGetValue(key, out var glowRend))
-                glowRend.enabled = closed;
+            // Subscribe both directions (wall A→B and wall B→A)
+            var wallAB = hexMap.Model.GetWall(a, b);
+            var wallBA = hexMap.Model.GetWall(b, a);
+            long capturedKey = key;
+
+            System.Action openDoor = () =>
+            {
+                if (rubbleBarriers.TryGetValue(capturedKey, out var go)) go.SetActive(false);
+                if (rubbleGlowRenderers.TryGetValue(capturedKey, out var r)) r.enabled = false;
+            };
+            System.Action closeDoor = () =>
+            {
+                if (rubbleBarriers.TryGetValue(capturedKey, out var go)) go.SetActive(true);
+                if (rubbleGlowRenderers.TryGetValue(capturedKey, out var r)) r.enabled = true;
+            };
+
+            if (wallAB != null) { wallAB.OnBeforeTraversalComplete += openDoor; wallAB.OnTraversalComplete += closeDoor; }
+            if (wallBA != null) { wallBA.OnBeforeTraversalComplete += openDoor; wallBA.OnTraversalComplete += closeDoor; }
         }
     }
 
@@ -513,20 +525,6 @@ public class GameManager : MonoBehaviour
             tile.SetPowered(powered);
             foreach (var w in tile.GetComponentsInChildren<WallView>())
                 w.SetPowered(powered);
-        }
-
-        // Toggle blast door barriers visibility
-        foreach (var (a, b, type) in hexMap.ConnectionList)
-        {
-            if (type != PassageType.BlastDoor) continue;
-            long key = MapModel.ConnKey(a, b);
-            var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
-            bool closed = wall == null || !wall.IsPowered;
-
-            if (rubbleBarriers.TryGetValue(key, out var barrierGO))
-                barrierGO.SetActive(closed);
-            if (rubbleGlowRenderers.TryGetValue(key, out var glowRend))
-                glowRend.enabled = closed;
         }
     }
 

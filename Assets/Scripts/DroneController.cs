@@ -587,6 +587,11 @@ public class DroneController : MonoBehaviour
 
     void OnHopComplete(Vector2Int newRoom)
     {
+        // Notify wall model that traversal is done (for door close animations etc.)
+        int hopIdx = activeJourney.CurrentHopIndex;
+        var wall = activeJourney.Walls[hopIdx];
+        wall.FireTraversalComplete();
+
         // Room transition
         var oldTile = fog?.GetTile(CurrentRoom);
         oldTile?.OnDroneExit(this);
@@ -597,8 +602,6 @@ public class DroneController : MonoBehaviour
         OnRoomChanged?.Invoke(this, newRoom);
 
         // Energy — use the wall's cost
-        int hopIdx = activeJourney.CurrentHopIndex;
-        var wall = activeJourney.Walls[hopIdx];
         int cost = wall.GetPassability(Model).EnergyCost;
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cost);
 
