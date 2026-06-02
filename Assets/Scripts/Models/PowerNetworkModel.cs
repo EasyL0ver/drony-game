@@ -243,6 +243,12 @@ public class PowerNetworkModel : IPowerProvider
     /// <summary>BFS from all source rooms through cable edges to find connected rooms.</summary>
     public void RecomputeNetwork()
     {
+        // Snapshot previous state to detect changes
+        int prevCount = connectedRooms.Count;
+        int prevHash = 0;
+        foreach (var r in connectedRooms)
+            prevHash ^= r.GetHashCode();
+
         connectedRooms.Clear();
 
         var queue = new Queue<Vector2Int>();
@@ -266,6 +272,12 @@ public class PowerNetworkModel : IPowerProvider
             }
         }
 
-        OnPowerStateChanged?.Invoke();
+        // Only fire event if connected rooms actually changed
+        int newHash = 0;
+        foreach (var r in connectedRooms)
+            newHash ^= r.GetHashCode();
+
+        if (connectedRooms.Count != prevCount || newHash != prevHash)
+            OnPowerStateChanged?.Invoke();
     }
 }
