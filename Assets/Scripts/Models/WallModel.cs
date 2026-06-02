@@ -37,6 +37,9 @@ public abstract class WallModel
     /// <summary>What interactions are available for this drone at this wall?</summary>
     public abstract List<WallInteractionConfig> GetInteractions(DroneModel drone);
 
+    /// <summary>Called before a drone begins traversing this wall. Override for gating logic (e.g. door opening, power draw).</summary>
+    public virtual void BeforeTraversal() { }
+
     // ── Convenience ─────────────────────────
 
     // ── Construction ─────────────────────────
@@ -207,11 +210,11 @@ public class BlastDoorWallModel : CorridorWallModel
         return new List<WallInteractionConfig>();
     }
 
-    /// <summary>Draw network power when a drone passes through. Returns energy drawn.</summary>
-    public int OnTraversed()
+    /// <summary>Opens the door, drawing network power.</summary>
+    public override void BeforeTraversal()
     {
-        if (_powerProvider == null) return 0;
-        return _powerProvider.Draw(TraversalCost);
+        if (_powerProvider == null) return;
+        _powerProvider.Draw(TraversalCost);
     }
 }
 

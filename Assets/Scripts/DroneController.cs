@@ -497,6 +497,7 @@ public class DroneController : MonoBehaviour
         }
 
         // Normal traversal
+        wall.BeforeTraversal();
         var targetRoom = wall.Neighbor.Owner.Coord;
         var departure = fog?.GetTile(CurrentRoom)?.GetPassage(targetRoom);
         var arrival = fog?.GetTile(targetRoom)?.GetPassage(CurrentRoom);
@@ -600,10 +601,6 @@ public class DroneController : MonoBehaviour
         var wall = activeJourney.Walls[hopIdx];
         int cost = wall.GetPassability(Model).EnergyCost;
         Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cost);
-
-        // Blast door draws from power network on each pass
-        if (wall is BlastDoorWallModel blastDoor)
-            blastDoor.OnTraversed();
 
         // Advance journey + UI step + route line segment
         activeJourney.AdvanceHop();
