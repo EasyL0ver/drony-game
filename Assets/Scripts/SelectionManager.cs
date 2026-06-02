@@ -197,7 +197,7 @@ public class SelectionManager : MonoBehaviour
         {
             if (!d.IsSelected) continue;
             droneLastRoom[d.DroneIndex] = d.CurrentRoom;
-            var p = FindPath(d.CurrentRoom, target);
+            var p = FindPath(d.CurrentRoom, target, d.Model);
             if (p != null && p.Count > 0)
                 d.ShowPreview(new DroneController.PreviewRequest { path = p, wall = wall });
             else if (d.CurrentRoom == target && targetTile != null && wall != null)
@@ -218,8 +218,8 @@ public class SelectionManager : MonoBehaviour
             if (!d.IsSelected) continue;
             if (wallModel == null || wallModel.GetInteractions(d.Model).Count == 0) { d.ClearPreviewPath(); continue; }
 
-            var pA = FindPath(d.CurrentRoom, hoveredConnA);
-            var pB = FindPath(d.CurrentRoom, hoveredConnB);
+            var pA = FindPath(d.CurrentRoom, hoveredConnA, d.Model);
+            var pB = FindPath(d.CurrentRoom, hoveredConnB, d.Model);
 
             List<Vector2Int> best = null;
             if (pA != null && pB != null)
@@ -290,6 +290,13 @@ public class SelectionManager : MonoBehaviour
         if (tile.State == FogState.Unknown || tile.State == FogState.Scanning)
             return (tile, null, false, default, default);
 
+        // If click is close to room center, target the room itself (not an edge)
+        Vector3 roomCenter = gm.hexMap.HexCenter(tile.Coord);
+        float roomR = gm.hexMap.RoomRadius(gm.hexMap.RoomSizeMap[tile.Coord]);
+        float distFromCenter = new Vector2(hitPoint.x - roomCenter.x, hitPoint.z - roomCenter.z).magnitude;
+        if (distFromCenter < roomR * 0.45f)
+            return (tile, null, false, default, default);
+
         int edge = gm.hexMap.Model.NearestEdge(hitPoint, tile.Coord);
         WallView wallView = tile.GetWallView(edge);
 
@@ -339,8 +346,8 @@ public class SelectionManager : MonoBehaviour
                 if (wallModel == null || wallModel.GetInteractions(d.Model).Count == 0) continue;
 
                 // Path to whichever side is reachable (prefer shorter)
-                var pA = FindPath(d.CurrentRoom, connA);
-                var pB = FindPath(d.CurrentRoom, connB);
+                var pA = FindPath(d.CurrentRoom, connA, d.Model);
+                var pB = FindPath(d.CurrentRoom, connB, d.Model);
                 List<Vector2Int> best = null;
                 if (pA != null && pB != null)
                     best = pA.Count <= pB.Count ? pA : pB;
@@ -371,7 +378,7 @@ public class SelectionManager : MonoBehaviour
                 continue;
             }
 
-            var p = FindPath(d.CurrentRoom, target);
+            var p = FindPath(d.CurrentRoom, target, d.Model);
             if (p != null && p.Count > 0)
                 d.SetPath(p, clickedWall);
         }
@@ -379,14 +386,14 @@ public class SelectionManager : MonoBehaviour
 
     // ── pathfinding (Dijkstra) ───────────────
 
-    List<Vector2Int> FindPath(Vector2Int from, Vector2Int to)
+    List<Vector2Int> FindPath(Vector2Int from, Vector2Int to, DroneModel drone = null)
     {
         var fog = gm.fog;
         return gm.hexMap.Model.FindPath(from, to, coord =>
         {
             var tile = fog.GetTile(coord);
             return tile != null ? tile.State : FogState.Unknown;
-        });
+        }, drone);
     }
 
     // ── selection box GUI ────────────────────

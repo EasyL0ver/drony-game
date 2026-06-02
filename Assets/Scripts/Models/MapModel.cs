@@ -537,7 +537,8 @@ public class MapModel
     /// <param name="to">Destination (always allowed).</param>
     /// <param name="getRoomState">Returns FogState for a given room coord.</param>
     public List<Vector2Int> FindPath(Vector2Int from, Vector2Int to,
-                                     Func<Vector2Int, FogState> getRoomState)
+                                     Func<Vector2Int, FogState> getRoomState,
+                                     DroneModel drone = null)
     {
         if (from == to) return null;
 
@@ -584,6 +585,7 @@ public class MapModel
         {
             if (!traversable.Contains(c.roomA) || !traversable.Contains(c.roomB)) continue;
             if (IsBlocked(c.roomA, c.roomB)) continue;
+            if (drone != null && !drone.CanTraverse(c.type)) continue;
             float cost = TravelTime(c.type);
             adj[c.roomA].Add((c.roomB, cost));
             adj[c.roomB].Add((c.roomA, cost));

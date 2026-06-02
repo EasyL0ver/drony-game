@@ -4,7 +4,7 @@ using UnityEngine;
 /// Low-poly procedural drone that matches the hex-map art style.
 /// Tiny geometric shapes — hex body, thin arms, flat 2-blade rotors.
 /// </summary>
-public class LowPolyDrone : MonoBehaviour
+public class LowPolyDrone : MonoBehaviour, IDroneVisual
 {
     [Header("Scale")]
     [SerializeField] float bodyRadius = 0.15f;

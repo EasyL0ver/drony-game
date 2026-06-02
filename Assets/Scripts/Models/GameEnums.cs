@@ -10,6 +10,10 @@ public enum RoomSize { Large, Medium, Small }
 
 public enum GearType { None, Scanner, Bomb }
 
+public enum DroneType { Scout, Hauler }
+
+public enum CargoType { None, FuelCell }
+
 /// <summary>
 /// Describes a wall interaction: anything a drone can do at a wall
 /// (charge, refit, clear rubble, bomb, etc.). Configured per-wall.
@@ -27,6 +31,9 @@ public class WallInteractionConfig
 
     /// <summary>Required gear to perform this interaction (None = no gear needed).</summary>
     public GearType RequiredGear { get; set; } = GearType.None;
+
+    /// <summary>Required drone type (null = any drone can do it).</summary>
+    public DroneType? RequiredDroneType { get; set; }
 
     /// <summary>If true, this interaction blocks passage until completed.</summary>
     public bool BlocksPassage { get; set; }
@@ -49,6 +56,9 @@ public class WallInteractionConfig
     /// If null, interaction is one-shot.
     /// </summary>
     public System.Func<DroneModel, bool> RepeatCondition { get; set; }
+
+    /// <summary>Cargo type awarded on pickup (if any).</summary>
+    public CargoType CargoReward { get; set; } = CargoType.None;
 
     // ── Factory presets ─────────────────────
 
@@ -76,5 +86,13 @@ public class WallInteractionConfig
         BlocksPassage = true,
         ResultingPassageType = PassageType.Corridor,
         DestroysDrone = gear == GearType.Bomb,
+    };
+
+    public static WallInteractionConfig LootPickup() => new WallInteractionConfig
+    {
+        Label = "PICK UP",
+        BaseDuration = 1.5f,
+        RequiredDroneType = DroneType.Hauler,
+        CargoReward = CargoType.FuelCell,
     };
 }

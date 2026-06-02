@@ -69,6 +69,9 @@ public class CorridorWallModel : WallModel
         if (Neighbor == null || IsBlocked)
             return WallPassability.Blocked;
 
+        if (!drone.CanTraverse(PassageType))
+            return WallPassability.Blocked;
+
         return new WallPassability
         {
             CanPass = true,
@@ -176,8 +179,13 @@ public class StationWallModel : WallModel
         if (OccupiedBy != null && OccupiedBy != drone) return list;
         if (_interaction != null)
         {
-            if (_interaction.RequiredGear == GearType.None || drone.HasGear(_interaction.RequiredGear))
-                list.Add(_interaction);
+            if (_interaction.RequiredGear != GearType.None && !drone.HasGear(_interaction.RequiredGear))
+                return list;
+            if (_interaction.RequiredDroneType != null && drone.Type != _interaction.RequiredDroneType.Value)
+                return list;
+            if (_interaction.CargoReward != CargoType.None && !drone.CanCarry)
+                return list;
+            list.Add(_interaction);
         }
         return list;
     }

@@ -20,7 +20,7 @@ public class HexMapGenerator : MonoBehaviour
     [SerializeField] int roomCount = 18;
     [SerializeField] int seed = 42;
     [SerializeField] bool testMode = true;
-    [SerializeField] int testMapIndex = 0;
+    [SerializeField] int testMapIndex = 1;
     public bool TestMode => testMode;
 
     [Header("Hex Dimensions")]
@@ -74,9 +74,11 @@ public class HexMapGenerator : MonoBehaviour
 
     void OnEnable()
     {
-        if (transform.childCount == 0)
+        if (Application.isPlaying || transform.childCount == 0)
             Generate();
     }
+
+    public void SetTestMapIndex(int index) { testMapIndex = index; }
 
     [ContextMenu("Regenerate Map")]
     public void Generate()

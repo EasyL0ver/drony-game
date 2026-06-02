@@ -243,8 +243,9 @@ public class Passage : WallView
         impactPos.y = hoverY;
 
         // Get drone glow material for flashing
-        var droneModel = drone.GetComponentInChildren<LowPolyDrone>();
-        Material glowMat = droneModel?.GlowMaterial;
+        IDroneVisual droneVisual = drone.GetComponentInChildren<LowPolyDrone>() as IDroneVisual
+                                ?? drone.GetComponentInChildren<HaulerDrone>() as IDroneVisual;
+        Material glowMat = droneVisual?.GlowMaterial;
         Color originalGlow = glowMat != null ? glowMat.GetColor("_EmissionColor") : Color.black;
 
         // ── Phase 1: Arc backward ──

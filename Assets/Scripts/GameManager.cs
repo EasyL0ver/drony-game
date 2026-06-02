@@ -14,6 +14,9 @@ public class GameManager : MonoBehaviour
     public FogOfWar        fog;
     public RTSCamera       rtsCamera;
 
+    [Header("Map Settings")]
+    [SerializeField] int testMapIndex = 1;
+
     [Header("Drone Settings")]
     [SerializeField] int startingDrones = 3;
     [SerializeField] string[] droneNames = { "Hornet-1", "Hornet-2", "Hornet-3", "Hornet-4", "Hornet-5" };
@@ -48,6 +51,7 @@ public class GameManager : MonoBehaviour
         var mapGO = new GameObject("HexMap");
         mapGO.transform.SetParent(transform, false);
         hexMap = mapGO.AddComponent<HexMapGenerator>();
+        hexMap.SetTestMapIndex(testMapIndex);
         if (hexMap.Model == null)
             hexMap.Generate();
 
@@ -135,6 +139,36 @@ public class GameManager : MonoBehaviour
             chargeView.SetModel(chargeTile.RModel.Walls[chargeEdge]);
         }
 
+        // ── loot barrel (test mode — place in corridor-connected room) ──
+        if (hexMap.TestMode && hexMap.ConnectionList.Count > 0)
+        {
+            // Find a room connected by Corridor (hauler-reachable)
+            Vector2Int barrelCoord = Vector2Int.zero;
+            foreach (var conn in hexMap.ConnectionList)
+            {
+                if (conn.type == PassageType.Corridor)
+                {
+                    barrelCoord = conn.a == Vector2Int.zero ? conn.b : conn.a;
+                    break;
+                }
+            }
+            if (barrelCoord != Vector2Int.zero)
+            {
+                fog.Reveal(barrelCoord);
+                var barrelTile = fog.GetTile(barrelCoord);
+                var barrelGO = new GameObject("LootBarrel");
+                barrelGO.transform.SetParent(barrelTile.transform, false);
+                int barrelEdge = PlaceAtWall(barrelGO, barrelCoord, barrelTile.RModel, WallInteractionConfig.LootPickup());
+                var barrelView = barrelGO.AddComponent<LootBarrel>();
+                barrelView.SetModel(barrelTile.RModel.Walls[barrelEdge]);
+                Debug.Log($"[GameManager] LootBarrel spawned at {barrelCoord} edge {barrelEdge}, pos={barrelGO.transform.position}");
+            }
+            else
+            {
+                Debug.LogWarning("[GameManager] No Corridor connection found for barrel placement!");
+            }
+        }
+
         // ── player economy ──
         Player = new PlayerModel(startingPoints);
 
@@ -167,6 +201,25 @@ public class GameManager : MonoBehaviour
             // Listen for wall interaction completion (rubble clear, etc.)
             controller.OnWallInteractionCompleted += OnWallInteractionCompleted;
             controller.OnDroneDestroyed += OnDroneDestroyed;
+        }
+
+        // ── hauler drone (test mode) ──
+        if (hexMap.TestMode)
+        {
+            int hIdx = Drones.Count;
+            var haulerGO = new GameObject($"Drone_{hIdx}");
+            haulerGO.transform.SetParent(transform, false);
+
+            var hController = haulerGO.AddComponent<DroneController>();
+            hController.Init(hexMap, fog, Vector2Int.zero, "Mule-1", hIdx, DroneType.Hauler);
+
+            var hModelGO = new GameObject("Model");
+            hModelGO.transform.SetParent(haulerGO.transform, false);
+            hModelGO.AddComponent<HaulerDrone>();
+
+            Drones.Add(hController);
+            hController.OnWallInteractionCompleted += OnWallInteractionCompleted;
+            hController.OnDroneDestroyed += OnDroneDestroyed;
         }
 
         // ── selection manager ──
@@ -239,11 +292,11 @@ public class GameManager : MonoBehaviour
                 usedEdges.Add(hexMap.EdgeToward(coord, a));
         }
 
-        // Pick the first edge without a passage
+        // Pick the first edge without a passage or existing station
         int edge = 0;
         for (int i = 0; i < 6; i++)
         {
-            if (!usedEdges.Contains(i)) { edge = i; break; }
+            if (!usedEdges.Contains(i) && !(model.Walls[i] is StationWallModel)) { edge = i; break; }
         }
 
         var stationWall = new StationWallModel(model, edge, interaction);

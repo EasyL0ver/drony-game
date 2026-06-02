@@ -11,6 +11,18 @@ public class DroneModel
     // ── Identity ─────────────────────────────
 
     public string Name { get; set; } = "Drone";
+    public DroneType Type { get; set; } = DroneType.Scout;
+
+    /// <summary>Height at which this drone moves (ground for wheeled, hover for flying).</summary>
+    public float TravelHeight => Type == DroneType.Hauler ? 0.12f : 1f;
+
+    /// <summary>Can this drone fit through the given passage type?</summary>
+    public bool CanTraverse(PassageType passage)
+    {
+        if (Type == DroneType.Hauler)
+            return passage == PassageType.Corridor;
+        return true;
+    }
 
     // ── Equipment ────────────────────────────
 
@@ -60,6 +72,12 @@ public class DroneModel
 
     /// <summary>True if the drone has a RubbleClearer and can clear blocked passages.</summary>
     public bool CanClearRubble => HasGear(GearType.Bomb);
+
+    // ── Cargo (hauler only) ─────────────────
+
+    public CargoType Cargo { get; set; } = CargoType.None;
+    public bool HasCargo => Cargo != CargoType.None;
+    public bool CanCarry => Type == DroneType.Hauler && !HasCargo;
 
     // ── Energy ───────────────────────────────
 

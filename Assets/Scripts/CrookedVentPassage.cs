@@ -6,24 +6,14 @@ using System.Collections.Generic;
 /// A crooked vent passage: drone navigates through multiple turns.
 /// Overrides traversal and line drawing to follow a zigzag path between rooms.
 /// </summary>
-public class CrookedVentPassage : WallView
+public class CrookedVentPassage : Passage
 {
-    public override float ParkOffset => 0.5f;
-
-    public PassageType Type { get; private set; }
-    public Vector2Int Room { get; private set; }
-    public Vector2Int Neighbor { get; private set; }
-    public int Edge { get; private set; }
-
     /// <summary>Local-space waypoints defining the crooked path (from park point to wall center).</summary>
     readonly List<Vector3> localWaypoints = new List<Vector3>();
 
     public void Init(Vector2Int room, Vector2Int neighbor, int edge, Vector3 pipeStart, Vector3 pipeEnd, int waypointSeed)
     {
-        Room = room;
-        Neighbor = neighbor;
-        Edge = edge;
-        Type = PassageType.CrookedVent;
+        base.Init(room, neighbor, edge, PassageType.CrookedVent);
         storedPipeStart = pipeStart;
         storedPipeEnd = pipeEnd;
         storedSeed = waypointSeed;

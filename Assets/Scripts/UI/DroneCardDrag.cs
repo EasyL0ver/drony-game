@@ -77,7 +77,7 @@ public class DroneCardDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 {
                     var t = GM.fog.GetTile(coord);
                     return t != null ? t.State : FogState.Unknown;
-                });
+                }, Drone.Model);
                 if (path != null && path.Count > 0)
                     Drone.SetPath(path);
             }

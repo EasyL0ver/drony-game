@@ -25,7 +25,7 @@ public class DroneController : MonoBehaviour
     HexMapGenerator map;
     FogOfWar fog;
     float hoverY = 1f;
-    LowPolyDrone droneVisual;
+    IDroneVisual droneVisual;
     SelectionRing selectionRing;
     RoutePreview routePreview;
 
@@ -52,7 +52,7 @@ public class DroneController : MonoBehaviour
     WallInteractionConfig lastCompletedInteraction;
     WallView activeInteractionWall;
 
-    public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0)
+    public void Init(HexMapGenerator mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0, DroneType droneType = DroneType.Scout)
     {
         map = mapGen;
         fog = fogOfWar;
@@ -62,10 +62,12 @@ public class DroneController : MonoBehaviour
         Model = new DroneModel
         {
             Name = droneName,
+            Type = droneType,
             MaxEnergy = 10,
             CurrentEnergy = 10,
         };
         Model.InitSlots();
+        hoverY = Model.TravelHeight;
 
         var tile = fog.GetTile(startRoom);
         transform.position = new Vector3(tile.Center.x, hoverY, tile.Center.z);
@@ -76,7 +78,8 @@ public class DroneController : MonoBehaviour
 
     void Start()
     {
-        droneVisual = GetComponentInChildren<LowPolyDrone>();
+        droneVisual = GetComponentInChildren<LowPolyDrone>() as IDroneVisual
+                   ?? GetComponentInChildren<HaulerDrone>() as IDroneVisual;
         selectionRing = gameObject.AddComponent<SelectionRing>();
         selectionRing.Init(hoverY);
     }
@@ -744,6 +747,15 @@ public class DroneController : MonoBehaviour
             return;
         }
 
+        // Award cargo if applicable
+        if (cfg.CargoReward != CargoType.None && Model.CanCarry)
+        {
+            Model.Cargo = cfg.CargoReward;
+            OnCargoPickedUp();
+            // Hide the barrel
+            if (wall != null) wall.gameObject.SetActive(false);
+        }
+
         // Repeat if the config says so (e.g. charging until full)
         if (cfg.RepeatCondition != null && cfg.RepeatCondition(Model))
         {
@@ -771,6 +783,35 @@ public class DroneController : MonoBehaviour
         tile?.OnDroneExit(this);
         OnDroneDestroyed?.Invoke(this);
         Destroy(gameObject);
+    }
+
+    // ── Cargo visual ────────────────────
+
+    GameObject cargoVisual;
+
+    void OnCargoPickedUp()
+    {
+        if (cargoVisual != null) return;
+        var hauler = GetComponentInChildren<HaulerDrone>();
+        if (hauler == null) return;
+
+        // Build a small crate in the cargo bay
+        cargoVisual = new GameObject("CargoItem");
+        cargoVisual.transform.SetParent(hauler.transform, false);
+        // Position in cargo bay (top of chassis, slightly back)
+        cargoVisual.transform.localPosition = new Vector3(0, 0.12f, -0.05f);
+        cargoVisual.transform.localScale = Vector3.one;
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Lit");
+        if (sh == null) sh = Shader.Find("Standard");
+
+        var matBody = new Material(sh) { color = new Color(0.25f, 0.22f, 0.15f) };
+        Color glowCol = new Color(1f, 0.6f, 0.05f);
+        var matGlow = new Material(sh) { color = glowCol };
+        matGlow.EnableKeyword("_EMISSION");
+        matGlow.SetColor("_EmissionColor", glowCol * 4f);
+
+        LootBarrelMesh.Build(cargoVisual.transform, matBody, matBody, matGlow);
     }
 
     // ── Visuals ────────────────────────
