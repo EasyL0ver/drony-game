@@ -32,8 +32,6 @@ public class GameManager : MonoBehaviour
     readonly Dictionary<long, GameObject> rubbleBarriers = new Dictionary<long, GameObject>();
     // Per-rubble glow strip renderers (swapped to corridor color on clear)
     readonly Dictionary<long, Renderer> rubbleGlowRenderers = new Dictionary<long, Renderer>();
-    // Blast door walls that auto-open when powered
-    readonly List<(Vector2Int a, Vector2Int b, CorridorWallModel wall)> blastDoorWalls = new List<(Vector2Int, Vector2Int, CorridorWallModel)>();
 
     void Start()
     {
@@ -55,7 +53,6 @@ public class GameManager : MonoBehaviour
         Drones.Clear();
         rubbleBarriers.Clear();
         rubbleGlowRenderers.Clear();
-        blastDoorWalls.Clear();
         Setup();
     }
 
@@ -119,13 +116,12 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // ── spawn rubble / blast door barriers for blocked connections ──
+        // ── spawn rubble barriers for blocked connections ──
         foreach (var (a, b, type) in hexMap.ConnectionList)
         {
-            if (!hexMap.Model.HasBlockingInteraction(a, b)) continue;
             if (type == PassageType.BlastDoor)
                 SpawnBlastDoorBarrier(a, b);
-            else
+            else if (hexMap.Model.HasBlockingInteraction(a, b))
                 SpawnRubbleBarrier(a, b);
         }
 
@@ -462,15 +458,6 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Register blast door walls for auto-open tracking
-        foreach (var (a, b, type) in hexMap.ConnectionList)
-        {
-            if (type != PassageType.BlastDoor) continue;
-            var wall = mapModel.GetWall(a, b) as CorridorWallModel;
-            if (wall != null && wall.IsBlocked)
-                blastDoorWalls.Add((a, b, wall));
-        }
-
         // Visual feedback: dim cable glow when battery dies
         PowerNetwork.OnPowerStateChanged += OnPowerStateChanged;
 
@@ -513,28 +500,15 @@ public class GameManager : MonoBehaviour
                 w.SetPowered(powered);
         }
 
-        // Auto-open blast doors that now have power
-        TryOpenBlastDoors();
-    }
-
-    void TryOpenBlastDoors()
-    {
-        for (int i = 0; i < blastDoorWalls.Count; i++)
+        // Toggle blast door barriers visibility
+        foreach (var (a, b, type) in hexMap.ConnectionList)
         {
-            var (a, b, wall) = blastDoorWalls[i];
-            bool powered = wall.IsPowered;
-            bool wasBlocked = wall.IsBlocked;
-
-            wall.IsBlocked = !powered;
-            // Update the neighbor side too
-            if (wall.Neighbor is CorridorWallModel neighborWall)
-                neighborWall.IsBlocked = !powered;
-
-            if (wasBlocked == powered) // state changed
+            if (type != PassageType.BlastDoor) continue;
+            long key = MapModel.ConnKey(a, b);
+            if (rubbleBarriers.TryGetValue(key, out var barrierGO))
             {
-                long key = MapModel.ConnKey(a, b);
-                if (rubbleBarriers.TryGetValue(key, out var barrierGO))
-                    barrierGO.SetActive(!powered);
+                var wall = hexMap.Model.GetWall(a, b) as CorridorWallModel;
+                barrierGO.SetActive(wall == null || !wall.IsPowered);
             }
         }
     }

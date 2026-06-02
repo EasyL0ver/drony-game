@@ -254,9 +254,6 @@ public class MapModel
         // Rubble interaction
         wallInteractions[ConnKey(hub, west)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
 
-        // Blast door interaction
-        wallInteractions[ConnKey(east, farEast)] = WallInteractionConfig.BlastDoorOpen();
-
         // Barrel placements
         lootBarrelRooms.Add(farEast);
         lootBarrelRooms.Add(sEast);
@@ -364,12 +361,8 @@ public class MapModel
             if (c.roomA == Vector2Int.zero || c.roomB == Vector2Int.zero) continue;
             if (rng.NextDouble() < 0.15)
             {
-                var originalType = c.type;
                 c.type = PassageType.BlastDoor;
                 Connections[i] = c;
-                var interaction = WallInteractionConfig.BlastDoorOpen();
-                interaction.ResultingPassageType = originalType;
-                wallInteractions[ConnKey(c.roomA, c.roomB)] = interaction;
             }
         }
     }

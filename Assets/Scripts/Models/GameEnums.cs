@@ -110,14 +110,6 @@ public class WallInteractionConfig
         DestroysDrone = gear == GearType.Bomb,
     };
 
-    public static WallInteractionConfig BlastDoorOpen() => new WallInteractionConfig
-    {
-        Label = "BLAST DOOR",
-        RequiresPower = true,
-        BlocksPassage = true,
-        ResultingPassageType = PassageType.Corridor,
-    };
-
     public static WallInteractionConfig LootPickup(GearItem loot = null) => new WallInteractionConfig
     {
         Label = "PICK UP",

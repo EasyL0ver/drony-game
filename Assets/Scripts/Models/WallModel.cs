@@ -65,7 +65,7 @@ public class CorridorWallModel : WallModel
         PassageType = passageType;
     }
 
-    /// <summary>Inject power dependency for interactions that require power.</summary>
+    /// <summary>Inject power dependency.</summary>
     public void SetPowerProvider(IPowerProvider provider)
     {
         _powerProvider = provider;
@@ -83,9 +83,6 @@ public class CorridorWallModel : WallModel
         }
     }
 
-    /// <summary>Whether this is a blast door (draws network power on traversal).</summary>
-    public bool IsBlastDoor => _rubbleInteraction != null && _rubbleInteraction.RequiresPower;
-
     /// <summary>Draw network power when a drone passes through a blast door. Returns energy drawn.</summary>
     public int OnTraversed()
     {
@@ -95,8 +92,22 @@ public class CorridorWallModel : WallModel
 
     public override WallPassability GetPassability(DroneModel drone)
     {
-        if (Neighbor == null || IsBlocked)
-            return WallPassability.Blocked;
+        if (Neighbor == null) return WallPassability.Blocked;
+
+        // Blast doors: passable only when powered, never use IsBlocked
+        if (IsBlastDoor)
+        {
+            if (!IsPowered) return WallPassability.Blocked;
+            return new WallPassability
+            {
+                CanPass = true,
+                Duration = PassageBaseDuration(PassageType),
+                EnergyCost = PassageEnergyCost(PassageType),
+                Label = "BLAST DOOR",
+            };
+        }
+
+        if (IsBlocked) return WallPassability.Blocked;
 
         if (!drone.CanTraverse(PassageType))
             return WallPassability.Blocked;
@@ -113,6 +124,7 @@ public class CorridorWallModel : WallModel
     public override List<WallInteractionConfig> GetInteractions(DroneModel drone)
     {
         var list = new List<WallInteractionConfig>();
+        if (IsBlastDoor) return list; // blast doors have no interaction
         if (_rubbleInteraction != null)
         {
             if (_rubbleInteraction.RequiredGear != GearType.None && !drone.HasGear(_rubbleInteraction.RequiredGear))
@@ -131,12 +143,8 @@ public class CorridorWallModel : WallModel
         IsBlocked = true;
     }
 
-    /// <summary>Set blast door blocking this corridor.</summary>
-    public void SetBlastDoor(WallInteractionConfig doorConfig)
-    {
-        _rubbleInteraction = doorConfig;
-        IsBlocked = true;
-    }
+    /// <summary>Whether this is a blast door (derived from passage type).</summary>
+    public bool IsBlastDoor => PassageType == PassageType.BlastDoor;
 
     /// <summary>Clear rubble: unblocks passage, removes interaction, returns new passage type.</summary>
     public PassageType? CompleteInteraction()
