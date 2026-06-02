@@ -72,9 +72,9 @@ public class DroneStatusUI : MonoBehaviour
     static readonly Color slotHoverCol    = new Color(0.08f, 0.18f, 0.25f, 0.9f);
 
     // Slot size border colors
-    static readonly Color sizeSmallCol    = new Color(0.3f, 0.8f, 0.4f, 0.8f);   // green
-    static readonly Color sizeMediumCol   = new Color(0.3f, 0.6f, 1.0f, 0.8f);   // blue
-    static readonly Color sizeLargeCol    = new Color(1.0f, 0.7f, 0.2f, 0.8f);   // gold
+    static readonly Color sizeSmallCol    = new Color(0.2f, 1.0f, 0.3f, 0.8f);   // green (vent)
+    static readonly Color sizeMediumCol   = new Color(1.0f, 0.55f, 0.0f, 0.8f);  // orange (duct)
+    static readonly Color sizeLargeCol    = new Color(0.0f, 0.83f, 0.67f, 0.8f); // teal (corridor)
 
     static Color SlotSizeColor(SlotSize size)
     {
