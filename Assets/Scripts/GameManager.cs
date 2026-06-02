@@ -492,6 +492,8 @@ public class GameManager : MonoBehaviour
                 w.SetPowered(false);
         }
 
+        // Force initial blast door glow colors now that providers are injected
+        OnPowerStateChanged();
     }
 
     void OnPowerStateChanged()
@@ -756,17 +758,14 @@ public class GameManager : MonoBehaviour
         stripeGO.transform.rotation = Quaternion.LookRotation(along, Vector3.up);
         stripeGO.GetComponent<Renderer>().sharedMaterial = matStripe;
 
-        // Per-passage glow strip (corridor color when powered, impassable when not)
+        // Per-passage glow strip (starts corridor color; OnPowerStateChanged will update if unpowered)
         Mesh glowMesh = hexMap.BuildPassageGlowMesh(roomA, roomB, PassageType.BlastDoor);
         if (glowMesh.vertexCount > 0)
         {
             var glowGO = new GameObject("BlastDoorGlow");
             glowGO.transform.SetParent(transform, false);
             glowGO.AddComponent<MeshFilter>().sharedMesh = glowMesh;
-            var wall = hexMap.Model.GetWall(roomA, roomB) as CorridorWallModel;
-            bool powered = wall != null && wall.IsPowered;
-            Color glowCol = powered ? Palette.CorridorGlow : Palette.ImpassableGlow;
-            var glowMat = hexMap.MakeEmissive(glowCol, 4f);
+            var glowMat = hexMap.MakeEmissive(Palette.CorridorGlow, 4f);
             var rend = glowGO.AddComponent<MeshRenderer>();
             rend.sharedMaterial = glowMat;
 
