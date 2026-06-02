@@ -240,32 +240,25 @@ public class Passage : WallView
 
     IEnumerator RunBombInteraction(Transform drone, float duration, int token, System.Action onComplete)
     {
-        // Wall is at transform.position, forward points into the room.
-        // Drone starts at park point (wall + forward * ParkOffset).
         Vector3 wallPos = transform.position;
         Vector3 intoRoom = transform.forward;
         Vector3 startPos = drone.position;
         float hoverY = startPos.y;
 
-        // Phase timing
-        float pullBackTime = duration * 0.3f;   // arc backward
-        float flashTime = duration * 0.3f;      // flash red, hold
-        float chargeTime = duration * 0.4f;     // slam into wall
+        float pullBackTime = duration * 0.3f;
+        float flashTime = duration * 0.3f;
+        float chargeTime = duration * 0.4f;
 
-        // Pull-back target: further into the room
         float pullBackDist = 1.2f;
         Vector3 pullBackTarget = startPos + intoRoom * pullBackDist;
         pullBackTarget.y = hoverY;
 
-        // Impact target: at the wall surface
         Vector3 impactPos = wallPos;
         impactPos.y = hoverY;
 
-        // Get drone glow material for flashing
         IDroneVisual droneVisual = drone.GetComponentInChildren<LowPolyDrone>() as IDroneVisual
                                 ?? drone.GetComponentInChildren<HaulerDrone>() as IDroneVisual;
-        Material glowMat = droneVisual?.GlowMaterial;
-        Color originalGlow = glowMat != null ? glowMat.GetColor("_EmissionColor") : Color.black;
+        Color bombRed = new Color(1f, 0.1f, 0f);
 
         // ── Phase 1: Arc backward ──
         float elapsed = 0f;
@@ -273,39 +266,27 @@ public class Passage : WallView
         {
             if (token != animationToken) yield break;
             float t = elapsed / pullBackTime;
-            // Ease out (decelerate)
             float ease = 1f - (1f - t) * (1f - t);
-            // Arc upward at midpoint
             Vector3 pos = Vector3.Lerp(startPos, pullBackTarget, ease);
             pos.y = hoverY + Mathf.Sin(t * Mathf.PI) * 0.4f;
             drone.position = pos;
-            // Rotate to face away from wall (looking into room)
             drone.rotation = Quaternion.LookRotation(intoRoom);
             elapsed += Time.deltaTime;
             yield return null;
         }
         drone.position = pullBackTarget;
 
-        // ── Phase 2: Flash red, vibrate ──
-        Color bombRed = new Color(1f, 0.1f, 0f);
-        float flashIntensity = 12f;
+        // ── Phase 2: Arming flash + vibrate ──
+        droneVisual?.Flash(bombRed, flashTime + chargeTime);
+
         elapsed = 0f;
         while (elapsed < flashTime)
         {
             if (token != animationToken) yield break;
             float t = elapsed / flashTime;
-            // Rapid pulsing flash
-            float pulse = Mathf.Abs(Mathf.Sin(t * Mathf.PI * 8f));
-            if (glowMat != null)
-            {
-                glowMat.color = Color.Lerp(Color.red, Color.white, pulse * 0.3f);
-                glowMat.SetColor("_EmissionColor", bombRed * Mathf.Lerp(flashIntensity, flashIntensity * 2f, pulse));
-            }
-            // Vibrate
             Vector3 shake = Random.insideUnitSphere * 0.03f * (0.5f + t);
             shake.y = 0f;
             drone.position = pullBackTarget + shake;
-            // Turn to face the wall
             float turnT = Mathf.SmoothStep(0f, 1f, t);
             drone.rotation = Quaternion.Slerp(
                 Quaternion.LookRotation(intoRoom),
@@ -323,25 +304,14 @@ public class Passage : WallView
         {
             if (token != animationToken) yield break;
             float t = elapsed / chargeTime;
-            // Ease in (accelerate)
             float ease = t * t;
             Vector3 pos = Vector3.Lerp(pullBackTarget, impactPos, ease);
-            pos.y = hoverY - t * 0.1f; // slight dive
+            pos.y = hoverY - t * 0.1f;
             drone.position = pos;
-            // Keep flashing intensely during charge
-            if (glowMat != null)
-            {
-                float flash = Mathf.Abs(Mathf.Sin(t * Mathf.PI * 12f));
-                glowMat.SetColor("_EmissionColor", bombRed * (flashIntensity * (1f + flash + t * 2f)));
-            }
             elapsed += Time.deltaTime;
             yield return null;
         }
         drone.position = impactPos;
-
-        // Restore glow (drone is about to be destroyed anyway, but just in case)
-        if (glowMat != null)
-            glowMat.SetColor("_EmissionColor", originalGlow);
 
         activeAnimation = null;
         if (token == animationToken) onComplete?.Invoke();

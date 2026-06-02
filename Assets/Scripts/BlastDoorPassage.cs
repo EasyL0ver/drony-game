@@ -14,8 +14,9 @@ public class BlastDoorPassage : Passage
     GameObject barrier;
     Renderer glowRenderer;
 
-    const float signalDuration = 0.4f;
-    const float openDuration = 0.3f;
+    const float signalDuration = 0.6f;
+    const float openDuration = 0.8f;
+    const float closeDelay = 0.5f;
 
     public void SetBarrier(GameObject barrierGO, Renderer glow)
     {
@@ -40,14 +41,18 @@ public class BlastDoorPassage : Passage
 
     IEnumerator BlastDoorSequence(Transform drone, float duration, int token, System.Action onComplete)
     {
-        // 1. Signal: flash glow to green
+        // 1. Signal: flash door glow and drone glow to green
+        Color signalGreen = new Color(0.2f, 1f, 0.3f);
         Color origGlow = Color.clear;
         Material glowMat = glowRenderer != null ? glowRenderer.sharedMaterial : null;
         if (glowMat != null)
         {
             origGlow = glowMat.GetColor("_EmissionColor");
-            glowMat.SetColor("_EmissionColor", new Color(0.2f, 1f, 0.3f) * 4f);
+            glowMat.SetColor("_EmissionColor", signalGreen * 4f);
         }
+        IDroneVisual droneVisual = drone.GetComponentInChildren<LowPolyDrone>() as IDroneVisual
+                                ?? drone.GetComponentInChildren<HaulerDrone>() as IDroneVisual;
+        droneVisual?.Flash(signalGreen, signalDuration);
 
         yield return new WaitForSeconds(signalDuration);
         if (animationToken != token) yield break;
@@ -97,22 +102,34 @@ public class BlastDoorPassage : Passage
 
         base.PlayTraversal(drone, duration, true, () =>
         {
-            // Restore door (close)
-            if (capturedDoorPanel != null)
-            {
-                capturedDoorPanel.gameObject.SetActive(true);
-                capturedDoorPanel.localScale = capturedOrigDoorScale;
-                capturedDoorPanel.localPosition = capturedOrigDoorPos;
-            }
-            if (capturedStripe != null)
-            {
-                capturedStripe.gameObject.SetActive(true);
-                capturedStripe.localScale = capturedOrigStripeScale;
-                capturedStripe.localPosition = capturedOrigStripePos;
-            }
-            if (glowRenderer != null) glowRenderer.enabled = true;
-            if (capturedGlowMat != null) capturedGlowMat.SetColor("_EmissionColor", capturedOrigGlow);
+            StartCoroutine(CloseDoorAfterDelay(
+                capturedDoorPanel, capturedOrigDoorScale, capturedOrigDoorPos,
+                capturedStripe, capturedOrigStripeScale, capturedOrigStripePos,
+                capturedGlowMat, capturedOrigGlow));
             onComplete?.Invoke();
         });
+    }
+
+    IEnumerator CloseDoorAfterDelay(
+        Transform doorPanel, Vector3 origScale, Vector3 origPos,
+        Transform stripe, Vector3 stripeScale, Vector3 stripePos,
+        Material gMat, Color origGlow)
+    {
+        yield return new WaitForSeconds(closeDelay);
+
+        if (doorPanel != null)
+        {
+            doorPanel.gameObject.SetActive(true);
+            doorPanel.localScale = origScale;
+            doorPanel.localPosition = origPos;
+        }
+        if (stripe != null)
+        {
+            stripe.gameObject.SetActive(true);
+            stripe.localScale = stripeScale;
+            stripe.localPosition = stripePos;
+        }
+        if (glowRenderer != null) glowRenderer.enabled = true;
+        if (gMat != null) gMat.SetColor("_EmissionColor", origGlow);
     }
 }

@@ -108,4 +108,37 @@ public class LowPolyDrone : MonoBehaviour, IDroneVisual
             if (t != null) rotors[i] = t;
         }
     }
+
+    // ── flash ──────────────────────────────
+
+    Coroutine flashRoutine;
+
+    public void Flash(Color color, float duration = 0.3f)
+    {
+        if (flashRoutine != null) StopCoroutine(flashRoutine);
+        flashRoutine = StartCoroutine(FlashRoutine(color, duration));
+    }
+
+    System.Collections.IEnumerator FlashRoutine(Color color, float duration)
+    {
+        if (matGlow == null) yield break;
+        matGlow.SetColor("_EmissionColor", color * glowIntensity * 2f);
+        matGlow.color = color;
+
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float lerp = t / duration;
+            Color c = Color.Lerp(color, glowColor, lerp);
+            float intensity = Mathf.Lerp(glowIntensity * 2f, glowIntensity, lerp);
+            matGlow.SetColor("_EmissionColor", c * intensity);
+            matGlow.color = c;
+            yield return null;
+        }
+
+        matGlow.SetColor("_EmissionColor", glowColor * glowIntensity);
+        matGlow.color = glowColor;
+        flashRoutine = null;
+    }
 }
