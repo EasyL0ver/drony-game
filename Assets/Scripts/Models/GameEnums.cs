@@ -4,7 +4,7 @@
 
 public enum FogState { Unknown, Scanning, Discovered, Visible }
 
-public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent }
+public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent, BlastDoor }
 
 public enum RoomSize { Large, Medium, Small }
 
@@ -39,6 +39,9 @@ public class WallInteractionConfig
 
     /// <summary>If true, this interaction blocks passage until completed.</summary>
     public bool BlocksPassage { get; set; }
+
+    /// <summary>If true, interaction requires the room to be powered.</summary>
+    public bool RequiresPower { get; set; }
 
     /// <summary>Passage type after interaction completes (only if BlocksPassage).</summary>
     public PassageType ResultingPassageType { get; set; }
@@ -105,6 +108,16 @@ public class WallInteractionConfig
         BlocksPassage = true,
         ResultingPassageType = PassageType.Corridor,
         DestroysDrone = gear == GearType.Bomb,
+    };
+
+    public static WallInteractionConfig BlastDoorOpen() => new WallInteractionConfig
+    {
+        Label = "OPEN",
+        BaseDuration = 2f,
+        RequiresPower = true,
+        PowerCost = 5,
+        BlocksPassage = true,
+        ResultingPassageType = PassageType.Corridor,
     };
 
     public static WallInteractionConfig LootPickup(GearItem loot = null) => new WallInteractionConfig

@@ -237,7 +237,7 @@ public class MapModel
         {
             // Hauler highway (corridors)
             new Connection { roomA = hub,     roomB = east,    type = PassageType.Corridor },
-            new Connection { roomA = east,    roomB = farEast, type = PassageType.Corridor },
+            new Connection { roomA = east,    roomB = farEast, type = PassageType.BlastDoor },
             new Connection { roomA = hub,     roomB = south,   type = PassageType.Corridor },
             new Connection { roomA = south,   roomB = sEast,   type = PassageType.Corridor },
             // Bombed path opens west wing
@@ -253,6 +253,9 @@ public class MapModel
 
         // Rubble interaction
         wallInteractions[ConnKey(hub, west)] = WallInteractionConfig.RubbleClear(GearType.Bomb);
+
+        // Blast door interaction
+        wallInteractions[ConnKey(east, farEast)] = WallInteractionConfig.BlastDoorOpen();
 
         // Barrel placements
         lootBarrelRooms.Add(farEast);
@@ -348,6 +351,23 @@ public class MapModel
                 c.type = PassageType.Rubble;
                 Connections[i] = c;
                 var interaction = WallInteractionConfig.RubbleClear(GearType.Bomb);
+                interaction.ResultingPassageType = originalType;
+                wallInteractions[ConnKey(c.roomA, c.roomB)] = interaction;
+            }
+        }
+
+        // Randomly place blast doors on some remaining corridors/ducts
+        for (int i = 0; i < Connections.Count; i++)
+        {
+            var c = Connections[i];
+            if (c.type != PassageType.Corridor && c.type != PassageType.Duct) continue;
+            if (c.roomA == Vector2Int.zero || c.roomB == Vector2Int.zero) continue;
+            if (rng.NextDouble() < 0.15)
+            {
+                var originalType = c.type;
+                c.type = PassageType.BlastDoor;
+                Connections[i] = c;
+                var interaction = WallInteractionConfig.BlastDoorOpen();
                 interaction.ResultingPassageType = originalType;
                 wallInteractions[ConnKey(c.roomA, c.roomB)] = interaction;
             }
@@ -470,6 +490,7 @@ public class MapModel
         {
             case PassageType.Corridor:    return CorridorWidth;
             case PassageType.Rubble:      return CorridorWidth;
+            case PassageType.BlastDoor:   return CorridorWidth;
             case PassageType.Duct:        return DuctWidth;
             case PassageType.Vent:        return VentPipeRadius * 2f;
             case PassageType.CrookedVent: return VentPipeRadius * 2f;
@@ -483,6 +504,7 @@ public class MapModel
         {
             case PassageType.Corridor:    return WallHeight * 0.88f;
             case PassageType.Rubble:      return WallHeight * 0.88f;
+            case PassageType.BlastDoor:   return WallHeight * 0.88f;
             case PassageType.Duct:        return WallHeight * 0.38f;
             case PassageType.Vent:        return WallHeight * 0.65f;
             case PassageType.CrookedVent: return WallHeight * 0.65f;
@@ -517,7 +539,7 @@ public class MapModel
     // ── Passage lookup ───────────────────────
 
     /// <summary>Get the WallModel for the edge from room 'a' toward room 'b', or null.</summary>
-    WallModel GetWall(Vector2Int a, Vector2Int b)
+    public WallModel GetWall(Vector2Int a, Vector2Int b)
     {
         if (rooms == null || !rooms.TryGetValue(a, out var room)) return null;
         int edge = EdgeToward(a, b);
@@ -601,6 +623,7 @@ public class MapModel
         {
             case PassageType.Corridor:    return 2f;
             case PassageType.Rubble:      return 2f;
+            case PassageType.BlastDoor:   return 2f;
             case PassageType.Duct:        return 4f;
             case PassageType.Vent:        return 6f;
             case PassageType.CrookedVent: return 8f;
@@ -614,6 +637,7 @@ public class MapModel
         {
             case PassageType.Corridor:    return 1;
             case PassageType.Rubble:      return 1;
+            case PassageType.BlastDoor:   return 1;
             case PassageType.Duct:        return 2;
             case PassageType.Vent:        return 3;
             case PassageType.CrookedVent: return 4;
@@ -627,6 +651,7 @@ public class MapModel
         {
             case PassageType.Corridor:    return "CORRIDOR";
             case PassageType.Rubble:      return "RUBBLE";
+            case PassageType.BlastDoor:   return "BLAST DOOR";
             case PassageType.Duct:        return "DUCT";
             case PassageType.Vent:        return "VENT";
             case PassageType.CrookedVent: return "CROOKED VENT";

@@ -300,6 +300,7 @@ public class HexMapGenerator : MonoBehaviour
         {
             case PassageType.Corridor:    return corridorWidth;
             case PassageType.Rubble:      return corridorWidth;
+            case PassageType.BlastDoor:   return corridorWidth;
             case PassageType.Duct:        return ductWidth;
             case PassageType.Vent:        return ventPipeRadius * 2f;
             case PassageType.CrookedVent: return ventPipeRadius * 2f;
@@ -313,6 +314,7 @@ public class HexMapGenerator : MonoBehaviour
         {
             case PassageType.Corridor:    return wallHeight * 0.88f;
             case PassageType.Rubble:      return wallHeight * 0.88f;
+            case PassageType.BlastDoor:   return wallHeight * 0.88f;
             case PassageType.Duct:        return wallHeight * 0.38f;
             case PassageType.Vent:        return wallHeight * 0.65f;
             case PassageType.CrookedVent: return wallHeight * 0.65f;

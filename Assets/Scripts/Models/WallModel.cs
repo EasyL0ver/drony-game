@@ -57,11 +57,30 @@ public class CorridorWallModel : WallModel
     public bool IsBlocked { get; set; }
 
     private WallInteractionConfig _rubbleInteraction;
+    private IPowerProvider _powerProvider;
 
     public CorridorWallModel(RoomModel owner, int edgeIndex, PassageType passageType = PassageType.Corridor)
         : base(owner, edgeIndex)
     {
         PassageType = passageType;
+    }
+
+    /// <summary>Inject power dependency for interactions that require power.</summary>
+    public void SetPowerProvider(IPowerProvider provider)
+    {
+        _powerProvider = provider;
+    }
+
+    /// <summary>Whether either neighboring room currently has power.</summary>
+    public bool IsPowered
+    {
+        get
+        {
+            if (_powerProvider == null) return false;
+            if (_powerProvider.IsRoomPowered(Owner.Coord)) return true;
+            if (Neighbor != null && _powerProvider.IsRoomPowered(Neighbor.Owner.Coord)) return true;
+            return false;
+        }
     }
 
     public override WallPassability GetPassability(DroneModel drone)
@@ -86,8 +105,11 @@ public class CorridorWallModel : WallModel
         var list = new List<WallInteractionConfig>();
         if (_rubbleInteraction != null)
         {
-            if (_rubbleInteraction.RequiredGear == GearType.None || drone.HasGear(_rubbleInteraction.RequiredGear))
-                list.Add(_rubbleInteraction);
+            if (_rubbleInteraction.RequiredGear != GearType.None && !drone.HasGear(_rubbleInteraction.RequiredGear))
+                return list;
+            if (_rubbleInteraction.RequiresPower && !IsPowered)
+                return list;
+            list.Add(_rubbleInteraction);
         }
         return list;
     }
@@ -96,6 +118,13 @@ public class CorridorWallModel : WallModel
     public void SetRubble(WallInteractionConfig rubbleConfig)
     {
         _rubbleInteraction = rubbleConfig;
+        IsBlocked = true;
+    }
+
+    /// <summary>Set blast door blocking this corridor.</summary>
+    public void SetBlastDoor(WallInteractionConfig doorConfig)
+    {
+        _rubbleInteraction = doorConfig;
         IsBlocked = true;
     }
 

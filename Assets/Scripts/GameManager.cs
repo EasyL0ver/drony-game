@@ -32,6 +32,8 @@ public class GameManager : MonoBehaviour
     readonly Dictionary<long, GameObject> rubbleBarriers = new Dictionary<long, GameObject>();
     // Per-rubble glow strip renderers (swapped to corridor color on clear)
     readonly Dictionary<long, Renderer> rubbleGlowRenderers = new Dictionary<long, Renderer>();
+    // Blast door walls that auto-open when powered
+    readonly List<(Vector2Int a, Vector2Int b, CorridorWallModel wall)> blastDoorWalls = new List<(Vector2Int, Vector2Int, CorridorWallModel)>();
 
     void Start()
     {
@@ -53,6 +55,7 @@ public class GameManager : MonoBehaviour
         Drones.Clear();
         rubbleBarriers.Clear();
         rubbleGlowRenderers.Clear();
+        blastDoorWalls.Clear();
         Setup();
     }
 
@@ -116,10 +119,13 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // ── spawn rubble barriers for blocked connections ──
+        // ── spawn rubble / blast door barriers for blocked connections ──
         foreach (var (a, b, type) in hexMap.ConnectionList)
         {
-            if (hexMap.Model.HasBlockingInteraction(a, b))
+            if (!hexMap.Model.HasBlockingInteraction(a, b)) continue;
+            if (type == PassageType.BlastDoor)
+                SpawnBlastDoorBarrier(a, b);
+            else
                 SpawnRubbleBarrier(a, b);
         }
 
@@ -451,7 +457,18 @@ public class GameManager : MonoBehaviour
             {
                 if (tile.RModel.Walls[e] is StationWallModel station)
                     station.SetPowerProvider(PowerNetwork);
+                if (tile.RModel.Walls[e] is CorridorWallModel cw && cw.IsBlocked)
+                    cw.SetPowerProvider(PowerNetwork);
             }
+        }
+
+        // Register blast door walls for auto-open tracking
+        foreach (var (a, b, type) in hexMap.ConnectionList)
+        {
+            if (type != PassageType.BlastDoor) continue;
+            var wall = mapModel.GetWall(a, b) as CorridorWallModel;
+            if (wall != null && wall.IsBlocked)
+                blastDoorWalls.Add((a, b, wall));
         }
 
         // Visual feedback: dim cable glow when battery dies
@@ -494,6 +511,30 @@ public class GameManager : MonoBehaviour
             tile.SetPowered(powered);
             foreach (var w in tile.GetComponentsInChildren<WallView>())
                 w.SetPowered(powered);
+        }
+
+        // Auto-open blast doors that now have power
+        TryOpenBlastDoors();
+    }
+
+    void TryOpenBlastDoors()
+    {
+        for (int i = blastDoorWalls.Count - 1; i >= 0; i--)
+        {
+            var (a, b, wall) = blastDoorWalls[i];
+            if (!wall.IsPowered) continue;
+
+            // Draw energy from network
+            int cost = 5;
+            int drawn = PowerNetwork.Draw(cost);
+            if (drawn < cost) continue;
+
+            // Complete the interaction (unblocks passage)
+            hexMap.Model.CompleteWallInteraction(a, b);
+            blastDoorWalls.RemoveAt(i);
+
+            // Destroy visual barrier and update passage
+            OnWallInteractionCompleted(a, b);
         }
     }
 
@@ -660,6 +701,71 @@ public class GameManager : MonoBehaviour
         if (glowMesh.vertexCount > 0)
         {
             var glowGO = new GameObject("RubbleGlow");
+            glowGO.transform.SetParent(transform, false);
+            glowGO.AddComponent<MeshFilter>().sharedMesh = glowMesh;
+            var glowMat = hexMap.MakeEmissive(Palette.ImpassableGlow, 4f);
+            var rend = glowGO.AddComponent<MeshRenderer>();
+            rend.sharedMaterial = glowMat;
+
+            long key = MapModel.ConnKey(roomA, roomB);
+            rubbleGlowRenderers[key] = rend;
+        }
+
+        long barrierKey = MapModel.ConnKey(roomA, roomB);
+        rubbleBarriers[barrierKey] = barrier;
+    }
+
+    void SpawnBlastDoorBarrier(Vector2Int roomA, Vector2Int roomB)
+    {
+        var (midA, midB) = hexMap.Model.PassageEndpoints(roomA, roomB);
+        Vector3 center = (midA + midB) * 0.5f;
+        float passW = hexMap.Model.PassageWidth(PassageType.BlastDoor);
+        float passH = hexMap.Model.PassageWallHeight(PassageType.BlastDoor);
+
+        Vector3 along = (midB - midA).normalized;
+        Vector3 across = Vector3.Cross(Vector3.up, along).normalized;
+
+        var barrier = new GameObject($"BlastDoor_{roomA}_{roomB}");
+        barrier.transform.position = center;
+        barrier.transform.SetParent(transform, true);
+
+        float halfLen = Vector3.Distance(midA, midB) * 0.5f;
+        float halfW = passW * 0.5f;
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Lit");
+        if (sh == null) sh = Shader.Find("Standard");
+
+        // Heavy steel door material
+        var matDoor = new Material(sh);
+        matDoor.color = new Color(0.25f, 0.28f, 0.32f);
+        matDoor.SetColor("_BaseColor", new Color(0.25f, 0.28f, 0.32f));
+        matDoor.SetFloat("_Metallic", 0.85f);
+        matDoor.SetFloat("_Smoothness", 0.6f);
+
+        // Door panel: a flat slab across the passage
+        var doorGO = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        doorGO.name = "DoorPanel";
+        doorGO.transform.SetParent(barrier.transform, false);
+        doorGO.transform.localPosition = Vector3.up * passH * 0.5f;
+        doorGO.transform.localScale = new Vector3(passW, passH, 0.15f);
+        doorGO.transform.rotation = Quaternion.LookRotation(along, Vector3.up);
+        doorGO.GetComponent<Renderer>().sharedMaterial = matDoor;
+
+        // Warning stripe emissive
+        var matStripe = hexMap.MakeEmissive(new Color(0.9f, 0.4f, 0.05f), 3f);
+        var stripeGO = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        stripeGO.name = "WarningStripe";
+        stripeGO.transform.SetParent(barrier.transform, false);
+        stripeGO.transform.localPosition = Vector3.up * passH * 0.75f;
+        stripeGO.transform.localScale = new Vector3(passW * 0.9f, passH * 0.08f, 0.16f);
+        stripeGO.transform.rotation = Quaternion.LookRotation(along, Vector3.up);
+        stripeGO.GetComponent<Renderer>().sharedMaterial = matStripe;
+
+        // Per-passage glow strip
+        Mesh glowMesh = hexMap.BuildPassageGlowMesh(roomA, roomB, PassageType.BlastDoor);
+        if (glowMesh.vertexCount > 0)
+        {
+            var glowGO = new GameObject("BlastDoorGlow");
             glowGO.transform.SetParent(transform, false);
             glowGO.AddComponent<MeshFilter>().sharedMesh = glowMesh;
             var glowMat = hexMap.MakeEmissive(Palette.ImpassableGlow, 4f);

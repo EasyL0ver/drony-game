@@ -91,12 +91,22 @@ public class FogOfWar : MonoBehaviour
             wallAB.Neighbor = wallBA;
             wallAB.PassageType = type;
             if (wi != null && wi.BlocksPassage)
-                wallAB.SetRubble(wi);
+            {
+                if (wi.RequiresPower)
+                    wallAB.SetBlastDoor(wi);
+                else
+                    wallAB.SetRubble(wi);
+            }
 
             wallBA.Neighbor = wallAB;
             wallBA.PassageType = type;
             if (wi != null && wi.BlocksPassage)
-                wallBA.SetRubble(wi);
+            {
+                if (wi.RequiresPower)
+                    wallBA.SetBlastDoor(wi);
+                else
+                    wallBA.SetRubble(wi);
+            }
         }
     }
 
