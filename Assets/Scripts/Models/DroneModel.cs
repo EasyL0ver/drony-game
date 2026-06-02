@@ -49,6 +49,15 @@ public class DroneModel : IPowerSource
         return false;
     }
 
+    /// <summary>Get the first equipped item matching the given type T, or null.</summary>
+    public T GetEquipped<T>() where T : class
+    {
+        if (Equipment == null) return null;
+        for (int i = 0; i < Equipment.Length; i++)
+            if (Equipment[i] is T match) return match;
+        return null;
+    }
+
     /// <summary>True if an item matching type AND size is equipped.</summary>
     public bool HasGear(GearType type, SlotSize size)
     {
@@ -116,7 +125,7 @@ public class DroneModel : IPowerSource
     }
 
     /// <summary>True if the drone has a Scanner and can scan rooms.</summary>
-    public bool CanScan => HasGear(GearType.Scanner);
+    public bool CanScan => GetEquipped<IAutoActivateGear>() != null;
 
     /// <summary>True if the drone has a RubbleClearer and can clear blocked passages.</summary>
     public bool CanClearRubble => HasGear(GearType.Bomb);
@@ -301,12 +310,12 @@ public class DroneModel : IPowerSource
     /// </summary>
     /// <param name="newPath">List of rooms to visit (excluding current).</param>
     /// <param name="map">Map model for passage types and travel times.</param>
-    /// <param name="getRoomState">Returns FogState for a room coord.</param>
-    /// <param name="scanDurationForRoom">Returns scan duration for a room coord, or 0 if not needed.</param>
+    /// <param name="getRoomModel">Returns RoomModel for a room coord.</param>
     public bool TryBuildJourney(List<Vector2Int> newPath, MapModel map,
-                                System.Func<Vector2Int, FogState> getRoomState,
-                                System.Func<Vector2Int, float> scanDurationForRoom)
+                                System.Func<Vector2Int, RoomModel> getRoomModel)
     {
+        var autoGear = GetEquipped<IAutoActivateGear>();
+
         // Calculate total energy cost before committing
         int cost = 0;
         Vector2Int prev = CurrentRoom;
@@ -317,12 +326,12 @@ public class DroneModel : IPowerSource
         }
 
         var dest = newPath[newPath.Count - 1];
-        var destState = getRoomState(dest);
-        float scanDur = 0f;
-        if (destState == FogState.Unknown && CanScan)
+        var destRoom = getRoomModel(dest);
+        float activationDur = 0f;
+        if (autoGear != null && destRoom != null && autoGear.IsEligible(destRoom))
         {
-            cost += MapModel.ScanEnergyCost;
-            scanDur = scanDurationForRoom(dest);
+            cost += autoGear.ActivationEnergyCost;
+            activationDur = autoGear.GetDuration(destRoom);
         }
 
         int available = CurrentEnergy - JourneyEnergyCost;
@@ -365,14 +374,14 @@ public class DroneModel : IPowerSource
                 prev = room;
             }
 
-            if (destState == FogState.Unknown && CanScan)
+            if (autoGear != null && destRoom != null && autoGear.IsEligible(destRoom))
             {
                 JourneyPlan.Add(new JourneyStep
                 {
-                    label = "SCAN",
-                    duration = scanDur,
+                    label = autoGear.StepLabel,
+                    duration = activationDur,
                     isScan = true,
-                    energyCost = MapModel.ScanEnergyCost,
+                    energyCost = autoGear.ActivationEnergyCost,
                 });
             }
         }
@@ -384,8 +393,7 @@ public class DroneModel : IPowerSource
     /// Build preview plan from a path (doesn't commit movement).
     /// </summary>
     public void BuildPreviewPlan(List<Vector2Int> previewPath, MapModel map,
-                                 System.Func<Vector2Int, FogState> getRoomState,
-                                 System.Func<Vector2Int, float> scanDurationForRoom)
+                                 System.Func<Vector2Int, RoomModel> getRoomModel)
     {
         PreviewPlan.Clear();
         if (previewPath == null || previewPath.Count == 0) return;
@@ -405,16 +413,17 @@ public class DroneModel : IPowerSource
             prev = room;
         }
 
+        var autoGear = GetEquipped<IAutoActivateGear>();
         var dest = previewPath[previewPath.Count - 1];
-        var destState = getRoomState(dest);
-        if (destState == FogState.Unknown && CanScan)
+        var destRoom = getRoomModel(dest);
+        if (autoGear != null && destRoom != null && autoGear.IsEligible(destRoom))
         {
             PreviewPlan.Add(new JourneyStep
             {
-                label = "SCAN",
-                duration = scanDurationForRoom(dest),
+                label = autoGear.StepLabel,
+                duration = autoGear.GetDuration(destRoom),
                 isScan = true,
-                energyCost = MapModel.ScanEnergyCost,
+                energyCost = autoGear.ActivationEnergyCost,
             });
         }
     }

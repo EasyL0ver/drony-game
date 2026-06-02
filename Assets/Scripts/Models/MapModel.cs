@@ -288,8 +288,6 @@ public class MapModel
         }
     }
 
-    public const int ScanEnergyCost = 2;
-
     // ── Pathfinding (Dijkstra) ───────────────
 
     /// <summary>

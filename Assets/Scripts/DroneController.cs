@@ -311,18 +311,19 @@ public class DroneController : MonoBehaviour
                     layer = 0,
                 });
 
-                // If this leads to unknown room and drone can scan, add scan step+anchor
-                if (Model.CanScan)
+                // If this leads to a room where an auto-activate item triggers, add step+anchor
+                var autoGear = Model.GetEquipped<IAutoActivateGear>();
+                if (autoGear != null)
                 {
                     var destTile = fog?.GetTile(targetCoord);
-                    if (destTile != null && destTile.State == FogState.Unknown)
+                    if (destTile != null && autoGear.IsEligible(destTile.RModel))
                     {
                         journeySteps.Add(new JourneyStep
                         {
-                            label = "SCAN",
-                            duration = destTile.ScanTotalTime,
+                            label = autoGear.StepLabel,
+                            duration = autoGear.GetDuration(destTile.RModel),
                             isScan = true,
-                            energyCost = MapModel.ScanEnergyCost,
+                            energyCost = autoGear.ActivationEnergyCost,
                         });
                         Vector3 roomCenter = map.HexCenter(targetCoord);
                         journeyAnchors.Add(new StepAnchor
@@ -438,18 +439,19 @@ public class DroneController : MonoBehaviour
                     layer = 0,
                 });
 
-                // If traversal leads to unknown room and drone can scan, add scan step
-                if (Model.CanScan && wall.Neighbor?.Owner != null)
+                // If traversal leads to a room where auto-activate item triggers, add step
+                var autoItem = Model.GetEquipped<IAutoActivateGear>();
+                if (autoItem != null && wall.Neighbor?.Owner != null)
                 {
                     var destTile = fog?.GetTile(wall.Neighbor.Owner.Coord);
-                    if (destTile != null && destTile.State == FogState.Unknown)
+                    if (destTile != null && autoItem.IsEligible(destTile.RModel))
                     {
                         steps.Add(new JourneyStep
                         {
-                            label = "SCAN",
-                            duration = destTile.ScanTotalTime,
+                            label = autoItem.StepLabel,
+                            duration = autoItem.GetDuration(destTile.RModel),
                             isScan = true,
-                            energyCost = MapModel.ScanEnergyCost,
+                            energyCost = autoItem.ActivationEnergyCost,
                         });
                         Vector3 roomCenter = map.HexCenter(targetCoord);
                         anchors.Add(new StepAnchor
@@ -607,11 +609,12 @@ public class DroneController : MonoBehaviour
         activeJourney.AdvanceHop();
         AdvanceJourneyStep();
 
-        // Must scan → go to center first
-        bool needsScan = newTile.State == FogState.Unknown && Model.CanScan;
+        // Check if auto-activate item should trigger
+        var activeGear = Model.GetEquipped<IAutoActivateGear>();
+        bool needsActivation = activeGear != null && newTile != null && activeGear.IsEligible(newTile.RModel);
         bool hasMoreHops = activeJourney.CurrentHopIndex < activeJourney.Walls.Count;
 
-        if (needsScan || !hasMoreHops)
+        if (needsActivation || !hasMoreHops)
         {
             // Navigate to room center
             Vector3 center = new Vector3(newTile.Center.x, hoverY, newTile.Center.z);
@@ -621,10 +624,10 @@ public class DroneController : MonoBehaviour
             newTile.ShowLine(transform.position, center, JourneyLineColor);
             newTile.NavigateDrone(transform, center, DurationForDistance(dist), () =>
             {
-                if (needsScan)
+                if (needsActivation)
                 {
                     newTile.OnDroneArrived(true);
-                    StartScanning(newTile);
+                    StartAutoActivation(newTile, activeGear);
                 }
                 else
                 {
@@ -714,24 +717,25 @@ public class DroneController : MonoBehaviour
         });
     }
 
-    void StartScanning(RoomTile tile)
+    void StartAutoActivation(RoomTile tile, IAutoActivateGear gear)
     {
         stepStartTime = Time.time;
-
-        // Wait for scan to complete
         state = State.WallAnimating;
+
+        // Wait for scan/activation to complete
         Action handler = null;
         handler = () =>
         {
             tile.RModel.OnScanComplete -= handler;
-            OnScanComplete(tile);
+            OnAutoActivationComplete(tile, gear);
         };
         tile.RModel.OnScanComplete += handler;
     }
 
-    void OnScanComplete(RoomTile tile)
+    void OnAutoActivationComplete(RoomTile tile, IAutoActivateGear gear)
     {
-        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - MapModel.ScanEnergyCost);
+        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - gear.ActivationEnergyCost);
+        gear.OnActivationComplete(tile.RModel);
         AdvanceJourneyStep();
         StartNextHop();
     }

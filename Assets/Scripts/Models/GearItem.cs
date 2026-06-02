@@ -29,15 +29,7 @@ public class GearItem
 /// </summary>
 public static class GearCatalog
 {
-    public static readonly GearItem Scanner = new GearItem(
-        GearType.Scanner,
-        "Scanner",
-        "Allows the drone to scan and reveal unknown rooms.",
-        2,
-        "\u25CE", // ◎ bullseye — radar/scan
-        SlotSize.Small,
-        sellPrice: 1
-    );
+    public static readonly ScannerItem Scanner = new ScannerItem();
 
     public static readonly GearItem Bomb = new GearItem(
         GearType.Bomb,
