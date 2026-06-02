@@ -194,6 +194,26 @@ public abstract class WallView : MonoBehaviour
         matGlow.SetFloat("_Smoothness", 0.9f);
     }
 
+    bool isPowered = true;
+
+    /// <summary>
+    /// Toggle powered state. When unpowered, glow emission is removed but color stays.
+    /// </summary>
+    public virtual void SetPowered(bool powered)
+    {
+        isPowered = powered;
+        if (matGlow == null) return;
+        if (powered)
+        {
+            matGlow.EnableKeyword("_EMISSION");
+            matGlow.SetColor("_EmissionColor", baseGlowEmission);
+        }
+        else
+        {
+            matGlow.SetColor("_EmissionColor", Color.black);
+        }
+    }
+
     public virtual void SetHoverGlow(bool hovered)
     {
         if (matGlow == null) return;
@@ -202,7 +222,8 @@ public abstract class WallView : MonoBehaviour
         matBody.color  = Color.Lerp(baseBodyCol, baseGlowCol, t);
         matAccent.color = Color.Lerp(baseAccentCol, baseGlowCol, t);
         matGlow.color  = Color.Lerp(baseGlowCol, Color.white, t);
-        matGlow.SetColor("_EmissionColor", hovered ? baseGlowEmission * 3f : baseGlowEmission);
+        if (isPowered)
+            matGlow.SetColor("_EmissionColor", hovered ? baseGlowEmission * 3f : baseGlowEmission);
     }
 
     // ── mesh primitives (delegate to MeshPrimitives) ───────────────

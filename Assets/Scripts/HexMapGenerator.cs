@@ -49,13 +49,16 @@ public class HexMapGenerator : MonoBehaviour
     public float HexRadiusValue => hexRadius;
     public float GridScaleValue => gridScale;
 
+    // Per-room open edge data (which edges have passages cut into the wall)
+    Dictionary<Vector2Int, Dictionary<int, PassageInfo>> openEdges;
+
     [Header("Colors")]
     Color floorColor      = Palette.FloorColor;
     Color wallColor       = Palette.WallColor;
     Color corridorGlow    = Palette.CorridorGlow;
     Color ductGlow        = Palette.DuctGlow;
     Color ventGlow        = Palette.VentGlow;
-    [SerializeField] float glowIntensity   = 4f;
+    [SerializeField] float glowIntensity   = 1.5f;
 
     // Cable glow material — exposed so GameManager can dim it when battery dies
     Material matCableGlow;
@@ -108,7 +111,7 @@ public class HexMapGenerator : MonoBehaviour
         var connections = ConnectionList;
 
         // --- 2. Open edges per room ---
-        var openEdges = new Dictionary<Vector2Int, Dictionary<int, PassageInfo>>();
+        openEdges = new Dictionary<Vector2Int, Dictionary<int, PassageInfo>>();
         foreach (var r in rooms)
             openEdges[r] = new Dictionary<int, PassageInfo>();
 
@@ -122,51 +125,7 @@ public class HexMapGenerator : MonoBehaviour
             openEdges[b][(ea + 3) % 6] = info;
         }
 
-        // --- 3. Mesh builders ---
-        var floorMB    = new MB();
-        var wallMB     = new MB();
-        var ventPipeMB = new MB();
-        var corrGlowMB = new MB();
-        var ductGlowMB = new MB();
-        var ventGlowMB = new MB();
-
-        foreach (var room in rooms)
-        {
-            Vector3 c = HexCenter(room);
-            float r = RoomRadius(roomSizes[room]);
-            float wh = RoomWallHeight(roomSizes[room]);
-            MB accentMB = roomSizes[room] == RoomSize.Large  ? corrGlowMB
-                        : roomSizes[room] == RoomSize.Medium ? ductGlowMB
-                        :                                      ventGlowMB;
-            EmitHexFloor(floorMB, c, r);
-            EmitFloorAccents(accentMB, c, r);
-            EmitHexWalls(wallMB, accentMB, c, r, wh, openEdges[room]);
-        }
-
-        foreach (var (a, b, type) in connections)
-        {
-            if (type == PassageType.Vent)
-            {
-                EmitVentPipe(ventPipeMB, ventGlowMB, a, b, roomSizes[a], roomSizes[b]);
-            }
-            else if (type == PassageType.CrookedVent)
-            {
-                EmitCrookedVentPipe(ventPipeMB, ventGlowMB, a, b, roomSizes[a], roomSizes[b]);
-            }
-            else
-            {
-                float w  = PassageWidth(type);
-                float wh = PassageWallHeight(type);
-                // Rubble glow is handled per-connection by GameManager (not baked)
-                MB glow  = type == PassageType.Rubble ? null
-                         : type == PassageType.Duct   ? ductGlowMB
-                                                      : corrGlowMB;
-                EmitPassage(floorMB, wallMB, glow, a, b, w, wh, type,
-                            roomSizes[a], roomSizes[b]);
-            }
-        }
-
-        // --- 3b. Power cables (separate visual layer) ---
+        // --- 3. Mesh builders (cables only — passages are built per-WallView) ---
         var cablePipeMB = new MB();
         foreach (var cable in Model.CableConnections)
         {
@@ -175,21 +134,133 @@ public class HexMapGenerator : MonoBehaviour
         }
 
         // --- 4. Instantiate ---
-        var matFloor    = MakeMat(floorColor, 0.25f, 0.40f);
-        var matWall     = MakeMat(wallColor, 0.65f, 0.50f);
-        var matVentPipe = MakeMat(new Color(0.06f, 0.06f, 0.08f), 0.70f, 0.55f);
-        var matCorrGlow = MakeEmissive(corridorGlow, glowIntensity);
-        var matDuctGlow = MakeEmissive(ductGlow, glowIntensity);
-        var matVentGlow = MakeEmissive(ventGlow, glowIntensity);
         matCableGlow = MakeEmissive(Palette.CableGlow, glowIntensity);
 
-        SpawnChild("Floors",       floorMB.ToMesh("FloorMesh"),    matFloor);
-        SpawnChild("Walls",        wallMB.ToMesh("WallMesh"),      matWall);
-        SpawnChild("Vent_Pipes",   ventPipeMB.ToMesh("VentPipe"),  matVentPipe);
-        SpawnChild("Glow_Corridor",corrGlowMB.ToMesh("CorrGlow"), matCorrGlow);
-        SpawnChild("Glow_Duct",    ductGlowMB.ToMesh("DuctGlow"), matDuctGlow);
-        SpawnChild("Glow_Vent",    ventGlowMB.ToMesh("VentGlow"), matVentGlow);
         SpawnChild("Cable_Pipes",  cablePipeMB.ToMesh("CablePipe"), matCableGlow);
+    }
+
+    // ═══════════════════════════════════════
+    //  PER-ROOM GEOMETRY (owned by RoomTile)
+    // ═══════════════════════════════════════
+
+    /// <summary>
+    /// Build floor, wall, and glow geometry for a single room as child GameObjects
+    /// of the given parent transform. Returns the glow material for power toggling.
+    /// </summary>
+    public Material BuildRoomGeometry(Transform parent, Vector2Int coord, RoomSize size)
+    {
+        Vector3 c = HexCenter(coord);
+        float r = RoomRadius(size);
+        float wh = RoomWallHeight(size);
+
+        var floorMB = new MB();
+        var wallMB  = new MB();
+        var glowMB  = new MB();
+
+        EmitHexFloor(floorMB, c, r);
+        EmitFloorAccents(glowMB, c, r);
+        EmitHexWalls(wallMB, glowMB, c, r, wh,
+                     openEdges.ContainsKey(coord) ? openEdges[coord] : new Dictionary<int, PassageInfo>());
+
+        // Determine glow color based on room size
+        Color glowColor = size == RoomSize.Large  ? corridorGlow
+                        : size == RoomSize.Medium ? ductGlow
+                        :                          ventGlow;
+
+        var matFloor = MakeMat(floorColor, 0.25f, 0.40f);
+        var matWall  = MakeMat(wallColor, 0.65f, 0.25f);
+        var matGlow  = MakeEmissive(glowColor, glowIntensity);
+
+        SpawnChildUnder(parent, "Floor", floorMB.ToMesh("Floor"), matFloor);
+        SpawnChildUnder(parent, "Walls", wallMB.ToMesh("Walls"), matWall);
+        SpawnChildUnder(parent, "Glow",  glowMB.ToMesh("Glow"),  matGlow);
+
+        return matGlow;
+    }
+
+    void SpawnChildUnder(Transform parent, string name, Mesh mesh, Material mat)
+    {
+        if (mesh.vertexCount == 0) return;
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, true); // worldPositionStays=true: keep at origin for world-space vertices
+        go.AddComponent<MeshFilter>().sharedMesh = mesh;
+        go.AddComponent<MeshRenderer>().sharedMaterial = mat;
+    }
+
+    /// <summary>
+    /// Build one half of a corridor/duct passage (from room's wall to midpoint).
+    /// Each side Passage calls this for its own half. Returns the glow material.
+    /// </summary>
+    public Material BuildPassageGeometry(Transform parent, Vector2Int room, Vector2Int neighbor, PassageType type)
+    {
+        var roomSizes = RoomSizeMap;
+        float w  = PassageWidth(type);
+        float wh = PassageWallHeight(type);
+
+        var floorMB = new MB();
+        var wallMB  = new MB();
+        var glowMB  = new MB();
+
+        EmitHalfPassage(floorMB, wallMB, type == PassageType.Rubble ? null : glowMB,
+                        room, neighbor, w, wh, type, roomSizes[room], roomSizes[neighbor]);
+
+        Color glowColor = type == PassageType.Duct ? ductGlow : corridorGlow;
+
+        var matFloor = MakeMat(floorColor, 0.25f, 0.40f);
+        var matWall  = MakeMat(wallColor, 0.65f, 0.25f);
+
+        SpawnChildUnder(parent, "PassFloor", floorMB.ToMesh("PassFloor"), matFloor);
+        SpawnChildUnder(parent, "PassWalls", wallMB.ToMesh("PassWalls"), matWall);
+
+        Material matGlow = null;
+        if (type != PassageType.Rubble)
+        {
+            matGlow = MakeEmissive(glowColor, glowIntensity);
+            SpawnChildUnder(parent, "PassGlow", glowMB.ToMesh("PassGlow"), matGlow);
+        }
+        return matGlow;
+    }
+
+    /// <summary>
+    /// Build one half of a vent pipe (from room's wall to midpoint).
+    /// Returns the glow material.
+    /// </summary>
+    public Material BuildVentGeometry(Transform parent, Vector2Int room, Vector2Int neighbor)
+    {
+        var roomSizes = RoomSizeMap;
+        var pipeMB = new MB();
+        var glowMB = new MB();
+
+        EmitHalfVentPipe(pipeMB, glowMB, room, neighbor, roomSizes[room], roomSizes[neighbor]);
+
+        var matPipe = MakeMat(new Color(0.06f, 0.06f, 0.08f), 0.70f, 0.55f);
+        var matGlow = MakeEmissive(ventGlow, glowIntensity);
+
+        SpawnChildUnder(parent, "VentPipe", pipeMB.ToMesh("VentPipe"), matPipe);
+        SpawnChildUnder(parent, "VentGlow", glowMB.ToMesh("VentGlow"), matGlow);
+
+        return matGlow;
+    }
+
+    /// <summary>
+    /// Build one half of a crooked vent pipe (from room's wall to midpoint).
+    /// Returns the glow material.
+    /// </summary>
+    public Material BuildCrookedVentGeometry(Transform parent, Vector2Int room, Vector2Int neighbor)
+    {
+        var roomSizes = RoomSizeMap;
+        var pipeMB = new MB();
+        var glowMB = new MB();
+
+        EmitHalfCrookedVentPipe(pipeMB, glowMB, room, neighbor, roomSizes[room], roomSizes[neighbor]);
+
+        var matPipe = MakeMat(new Color(0.06f, 0.06f, 0.08f), 0.70f, 0.55f);
+        var matGlow = MakeEmissive(ventGlow, glowIntensity);
+
+        SpawnChildUnder(parent, "CrookedVentPipe", pipeMB.ToMesh("CVentPipe"), matPipe);
+        SpawnChildUnder(parent, "CrookedVentGlow", glowMB.ToMesh("CVentGlow"), matGlow);
+
+        return matGlow;
     }
 
     public float RoomRadius(RoomSize s)
@@ -763,6 +834,82 @@ public class HexMapGenerator : MonoBehaviour
         }
     }
 
+    /// <summary>Emit one half of a passage — from room's wall midpoint to the center between rooms.</summary>
+    void EmitHalfPassage(MB floorMB, MB wallMB, MB glowMB,
+                         Vector2Int room, Vector2Int neighbor,
+                         float width, float wHeight, PassageType type,
+                         RoomSize sizeRoom, RoomSize sizeNeighbor)
+    {
+        int eRoom = EdgeToward(room, neighbor);
+        int eNeighbor = (eRoom + 3) % 6;
+
+        Vector3 cRoom = HexCenter(room);
+        Vector3 cNeighbor = HexCenter(neighbor);
+
+        float rRoom = RoomRadius(sizeRoom);
+        float rNeighbor = RoomRadius(sizeNeighbor);
+        Vector3 wallMid = (Corner(cRoom, eRoom, rRoom) + Corner(cRoom, (eRoom + 1) % 6, rRoom)) * 0.5f;
+        Vector3 neighborWallMid = (Corner(cNeighbor, eNeighbor, rNeighbor) + Corner(cNeighbor, (eNeighbor + 1) % 6, rNeighbor)) * 0.5f;
+        Vector3 center = (wallMid + neighborWallMid) * 0.5f;
+
+        Vector3 corrDir  = (neighborWallMid - wallMid).normalized;
+        Vector3 corrPerp = Vector3.Cross(Vector3.up, corrDir).normalized;
+        float   hw       = width * 0.5f;
+        Vector3 off      = corrPerp * hw;
+
+        // Floor (from wallMid to center)
+        floorMB.Quad(wallMid + off, wallMid - off, center - off, center + off);
+        Vector3 dn = Vector3.down * floorThickness;
+        floorMB.Quad(wallMid + off, center + off, center + off + dn, wallMid + off + dn);
+        floorMB.Quad(center - off, wallMid - off, wallMid - off + dn, center - off + dn);
+
+        // Side walls
+        float sideH = type == PassageType.Corridor ? wallHeight * 0.88f : wHeight;
+        Vector3 upV = Vector3.up * sideH;
+        Vector3 wt  = corrPerp * wallThickness;
+        {
+            Vector3 fA = wallMid - off, fB = center - off;
+            Vector3 bA = fA - wt,       bB = fB - wt;
+            wallMB.Quad(fA, fA + upV, fB + upV, fB);
+            wallMB.Quad(fA + upV, bA + upV, bB + upV, fB + upV);
+
+            Vector3 fC = center + off, fD = wallMid + off;
+            Vector3 bC = fC + wt,      bD = fD + wt;
+            wallMB.Quad(fC, fC + upV, fD + upV, fD);
+            wallMB.Quad(fC + upV, bC + upV, bD + upV, fD + upV);
+        }
+
+        // Glow
+        if (glowMB != null)
+        {
+            EmitWallTrim(glowMB, wallMid - off, center - off, sideH);
+            EmitWallTrim(glowMB, center + off, wallMid + off, sideH);
+
+            float sw = 0.05f;
+            Vector3 up = Vector3.up * 0.005f;
+            glowMB.Quad(wallMid + off + up,
+                        wallMid + off - corrPerp * sw + up,
+                        center + off - corrPerp * sw + up,
+                        center + off + up);
+            glowMB.Quad(wallMid - off + corrPerp * sw + up,
+                        wallMid - off + up,
+                        center - off + up,
+                        center - off + corrPerp * sw + up);
+        }
+
+        // Ceiling slab for enclosed passages
+        if (type != PassageType.Corridor && type != PassageType.Rubble)
+        {
+            Vector3 ceilY = Vector3.up * wHeight;
+            float ceilT = wallThickness * 0.5f;
+            Vector3 cUp = Vector3.up * ceilT;
+            floorMB.Quad(wallMid - off + ceilY + cUp, wallMid + off + ceilY + cUp,
+                         center + off + ceilY + cUp, center - off + ceilY + cUp);
+            floorMB.Quad(wallMid + off + ceilY, wallMid - off + ceilY,
+                         center - off + ceilY, center + off + ceilY);
+        }
+    }
+
     // ═══════════════════════════════════════
     //  VENT PIPE GEOMETRY
     // ═══════════════════════════════════════
@@ -854,6 +1001,104 @@ public class HexMapGenerator : MonoBehaviour
 
         // Glow rings at each bend
         for (int i = 1; i < waypoints.Count - 1; i++)
+        {
+            Vector3 dir = waypoints[i + 1] - waypoints[i - 1];
+            EmitPipeRing(glowMB, waypoints[i], dir, ventPipeRadius * 1.02f);
+        }
+    }
+
+    /// <summary>Emit one half of a vent pipe — from room's wall to midpoint.</summary>
+    void EmitHalfVentPipe(MB pipeMB, MB glowMB,
+                          Vector2Int room, Vector2Int neighbor,
+                          RoomSize sizeRoom, RoomSize sizeNeighbor)
+    {
+        int eRoom = EdgeToward(room, neighbor);
+        int eNeighbor = (eRoom + 3) % 6;
+
+        Vector3 cRoom = HexCenter(room);
+        Vector3 cNeighbor = HexCenter(neighbor);
+
+        float rRoom = RoomRadius(sizeRoom);
+        float rNeighbor = RoomRadius(sizeNeighbor);
+        Vector3 midRoom = (Corner(cRoom, eRoom, rRoom) + Corner(cRoom, (eRoom + 1) % 6, rRoom)) * 0.5f;
+        Vector3 midNeighbor = (Corner(cNeighbor, eNeighbor, rNeighbor) + Corner(cNeighbor, (eNeighbor + 1) % 6, rNeighbor)) * 0.5f;
+
+        Vector3 pipeHoriz = (midNeighbor - midRoom).normalized;
+        float extend = wallThickness * 0.5f + ventPipeRadius * 0.5f;
+        Vector3 pipeStart = midRoom - pipeHoriz * extend;
+        Vector3 pipeEnd = midNeighbor + pipeHoriz * extend;
+
+        float smallerWH = Mathf.Min(RoomWallHeight(sizeRoom), RoomWallHeight(sizeNeighbor));
+        float pipeY = smallerWH * 0.5f;
+        Vector3 startA = new Vector3(pipeStart.x, pipeY, pipeStart.z);
+        Vector3 startB = new Vector3(pipeEnd.x, pipeY, pipeEnd.z);
+        Vector3 halfPoint = (startA + startB) * 0.5f;
+
+        // Pipe from room's end to midpoint
+        EmitPipeSegment(pipeMB, startA, halfPoint);
+
+        // Glow band at room entrance
+        Vector3 pipeDir = startB - startA;
+        EmitPipeBand(glowMB, startA, pipeDir);
+
+        // Rings in our half only
+        float pipeLen = pipeDir.magnitude;
+        float spacing = ventPipeRadius * 6f;
+        int totalRings = Mathf.Max(1, Mathf.FloorToInt(pipeLen / spacing));
+        for (int i = 1; i <= totalRings; i++)
+        {
+            float t = i / (float)(totalRings + 1);
+            if (t > 0.5f) break; // only our half
+            Vector3 pos = Vector3.Lerp(startA, startB, t);
+            EmitPipeRing(glowMB, pos, pipeDir, ventPipeRadius * 1.02f);
+        }
+    }
+
+    /// <summary>Emit one half of a crooked vent pipe — from room's wall to midpoint.</summary>
+    void EmitHalfCrookedVentPipe(MB pipeMB, MB glowMB,
+                                 Vector2Int room, Vector2Int neighbor,
+                                 RoomSize sizeRoom, RoomSize sizeNeighbor)
+    {
+        int eRoom = EdgeToward(room, neighbor);
+        int eNeighbor = (eRoom + 3) % 6;
+
+        Vector3 cRoom = HexCenter(room);
+        Vector3 cNeighbor = HexCenter(neighbor);
+
+        float rRoom = RoomRadius(sizeRoom);
+        float rNeighbor = RoomRadius(sizeNeighbor);
+        Vector3 midRoom = (Corner(cRoom, eRoom, rRoom) + Corner(cRoom, (eRoom + 1) % 6, rRoom)) * 0.5f;
+        Vector3 midNeighbor = (Corner(cNeighbor, eNeighbor, rNeighbor) + Corner(cNeighbor, (eNeighbor + 1) % 6, rNeighbor)) * 0.5f;
+
+        float extend = wallThickness * 0.5f + ventPipeRadius * 0.5f;
+        Vector3 pipeHoriz = (midNeighbor - midRoom).normalized;
+        Vector3 pipeA = midRoom - pipeHoriz * extend;
+        Vector3 pipeB = midNeighbor + pipeHoriz * extend;
+
+        float smallerWH = Mathf.Min(RoomWallHeight(sizeRoom), RoomWallHeight(sizeNeighbor));
+        float pipeY = smallerWH * 0.5f;
+
+        Vector3 start = new Vector3(pipeA.x, pipeY, pipeA.z);
+        Vector3 end = new Vector3(pipeB.x, pipeY, pipeB.z);
+
+        // Use consistent seed based on canonical ordering (smaller coord first)
+        Vector2Int canonical = room.x < neighbor.x || (room.x == neighbor.x && room.y < neighbor.y) ? room : neighbor;
+        int eCanonical = EdgeToward(canonical, canonical == room ? neighbor : room);
+        int seed = canonical.x * 73 + canonical.y * 137 + eCanonical * 31 + 12345;
+
+        var waypoints = CrookedVentPassage.GenerateWaypoints(start, end, seed);
+
+        // Emit only the first half of waypoints
+        int halfIdx = waypoints.Count / 2;
+        for (int i = 0; i < halfIdx; i++)
+            EmitPipeSegment(pipeMB, waypoints[i], waypoints[i + 1]);
+
+        // Glow band at room entrance
+        Vector3 pipeDir = end - start;
+        EmitPipeBand(glowMB, start, pipeDir);
+
+        // Glow rings at bends in our half
+        for (int i = 1; i < halfIdx; i++)
         {
             Vector3 dir = waypoints[i + 1] - waypoints[i - 1];
             EmitPipeRing(glowMB, waypoints[i], dir, ventPipeRadius * 1.02f);
@@ -1050,7 +1295,7 @@ public class HexMapGenerator : MonoBehaviour
         var m = MakeMat(c * 0.30f, 0.20f, 0.80f);
         m.EnableKeyword("_EMISSION");
         m.SetColor("_EmissionColor", c * intensity);
-        m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+        m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
         return m;
     }
 

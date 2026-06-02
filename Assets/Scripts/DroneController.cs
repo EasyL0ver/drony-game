@@ -18,6 +18,7 @@ public class DroneController : MonoBehaviour
     // Events
     public event Action<Vector2Int, Vector2Int> OnWallInteractionCompleted;
     public event Action<DroneController> OnDroneDestroyed;
+    public event Action<DroneController, Vector2Int> OnRoomChanged;
 
     enum State { Idle, RoomNavigating, WallAnimating }
     State state = State.Idle;
@@ -65,6 +66,7 @@ public class DroneController : MonoBehaviour
             Type = droneType,
             BaseEnergy = 10,
             CurrentEnergy = 10,
+            CurrentRoom = startRoom,
         };
         Model.InitSlots();
         hoverY = Model.TravelHeight;
@@ -588,8 +590,10 @@ public class DroneController : MonoBehaviour
         var oldTile = fog?.GetTile(CurrentRoom);
         oldTile?.OnDroneExit(this);
         CurrentRoom = newRoom;
+        Model.CurrentRoom = newRoom;
         var newTile = fog?.GetTile(CurrentRoom);
         newTile?.OnDroneEnter(this);
+        OnRoomChanged?.Invoke(this, newRoom);
 
         // Energy — use the wall's cost
         int hopIdx = activeJourney.CurrentHopIndex;

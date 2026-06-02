@@ -48,7 +48,7 @@ public class MapModel
     public Vector2Int? batteryRoom { get; private set; }
 
     /// <summary>Starting energy for the battery.</summary>
-    public float batteryMaxEnergy { get; private set; } = 100f;
+    public int batteryMaxEnergy { get; private set; } = 100;
 
     /// <summary>A cable edge between two adjacent rooms.</summary>
     public struct CableConnection
@@ -266,7 +266,7 @@ public class MapModel
 
         // Power cable network: battery in hub, cables to station rooms
         batteryRoom = hub;
-        batteryMaxEnergy = 120f;
+        batteryMaxEnergy = 120;
         CableConnections = new List<CableConnection>
         {
             new CableConnection { roomA = hub,  roomB = east },   // powers charging station

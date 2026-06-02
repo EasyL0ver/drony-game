@@ -192,11 +192,11 @@ public class StationWallModel : WallModel
     /// </summary>
     public bool TryDrawPower(WallInteractionConfig cfg)
     {
-        if (cfg == null || cfg.PowerCost <= 0f) return true;
+        if (cfg == null || cfg.PowerCost <= 0) return true;
         if (_powerProvider == null) return true;
         if (!_powerProvider.IsRoomPowered(Owner.Coord)) return false;
 
-        float drawn = _powerProvider.Draw(cfg.PowerCost);
+        int drawn = _powerProvider.Draw(cfg.PowerCost);
         return drawn >= cfg.PowerCost;
     }
 

@@ -10,7 +10,7 @@ public class BatteryStation : WallView
 {
     public override float ParkOffset => 1.2f;
 
-    PowerSource powerSource;
+    IPowerSource powerSource;
     GameObject labelGO;
     TextMesh labelText;
 
@@ -21,7 +21,7 @@ public class BatteryStation : WallView
     }
 
     /// <summary>Link this view to its power source for displaying energy info.</summary>
-    public void SetPowerSource(PowerSource source)
+    public void SetPowerSource(IPowerSource source)
     {
         powerSource = source;
     }
@@ -39,8 +39,8 @@ public class BatteryStation : WallView
     {
         if (powerSource == null) return;
         EnsureLabel();
-        int cur = Mathf.CeilToInt(powerSource.CurrentEnergy);
-        int max = Mathf.CeilToInt(powerSource.MaxEnergy);
+        int cur = powerSource.CurrentEnergy;
+        int max = powerSource.MaxEnergy;
         labelText.text = $"\u26A1 {cur}/{max}";
         labelGO.SetActive(true);
     }

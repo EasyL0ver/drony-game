@@ -24,6 +24,25 @@ public class Passage : WallView
         Type = type;
     }
 
+    // Passage glow material for power toggling (set after geometry is built)
+    Material passageGlowMat;
+    Color passageGlowEmission;
+
+    /// <summary>Store the passage glow material for power state toggling.</summary>
+    public void SetPassageGlow(Material mat)
+    {
+        passageGlowMat = mat;
+        if (mat != null)
+            passageGlowEmission = mat.GetColor("_EmissionColor");
+    }
+
+    public override void SetPowered(bool powered)
+    {
+        base.SetPowered(powered);
+        if (passageGlowMat != null)
+            passageGlowMat.SetColor("_EmissionColor", powered ? passageGlowEmission : Color.black);
+    }
+
     public void UpdateType(PassageType newType)
     {
         Type = newType;

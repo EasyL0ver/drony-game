@@ -6,7 +6,7 @@ using System.Collections.Generic;
 /// Owns energy, journey plan, path queue, movement state.
 /// No MonoBehaviour, no visuals, no GameObjects.
 /// </summary>
-public class DroneModel
+public class DroneModel : IPowerSource
 {
     // ── Identity ─────────────────────────────
 
@@ -121,6 +121,9 @@ public class DroneModel
     /// <summary>True if the drone has a RubbleClearer and can clear blocked passages.</summary>
     public bool CanClearRubble => HasGear(GearType.Bomb);
 
+    /// <summary>True if the drone has a Power Tap and can feed the power network.</summary>
+    public bool HasPowerTap => HasGear(GearType.PowerTap);
+
     /// <summary>Check if there's a free slot that can fit the given size.</summary>
     public bool HasFreeSlot(SlotSize size)
     {
@@ -151,6 +154,10 @@ public class DroneModel
 
     public int CurrentEnergy { get; set; } = 10;
     public float EnergyFraction => MaxEnergy > 0 ? (float)CurrentEnergy / MaxEnergy : 0f;
+
+    // ── IPowerSource ────────────────────────
+    Vector2Int IPowerSource.Room => CurrentRoom;
+    bool IPowerSource.IsAlive => CurrentEnergy > 0;
 
     // ── Movement speed ───────────────────────
 

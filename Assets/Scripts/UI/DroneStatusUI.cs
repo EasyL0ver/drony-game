@@ -761,6 +761,8 @@ public class DroneStatusUI : MonoBehaviour
                 gm.Player.Points += item.SellPrice;
                 if (item.Size == SlotSize.Large)
                     drone.ClearCargoVisual();
+                if (item.Type == GearType.PowerTap && gm.PowerNetwork != null)
+                    gm.PowerNetwork.UnregisterDrone(drone.Model);
             }
             return;
         }
@@ -774,6 +776,8 @@ public class DroneStatusUI : MonoBehaviour
             // Unequip — refund points
             drone.Model.Unequip(slotIdx);
             gm.Player.Refund(equipped);
+            if (equipped.Type == GearType.PowerTap && gm.PowerNetwork != null)
+                gm.PowerNetwork.UnregisterDrone(drone.Model);
         }
         else
         {
@@ -938,6 +942,10 @@ public class DroneStatusUI : MonoBehaviour
             gm.Player.Refund(gear);
             return;
         }
+
+        // If PowerTap was equipped, register drone as power source
+        if (gear.Type == GearType.PowerTap && gm.PowerNetwork != null)
+            gm.PowerNetwork.RegisterDrone(shopTargetDrone.Model);
 
         CloseShop();
     }

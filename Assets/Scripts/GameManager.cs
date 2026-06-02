@@ -252,6 +252,7 @@ public class GameManager : MonoBehaviour
             // Listen for wall interaction completion (rubble clear, etc.)
             controller.OnWallInteractionCompleted += OnWallInteractionCompleted;
             controller.OnDroneDestroyed += OnDroneDestroyed;
+            controller.OnRoomChanged += OnDroneRoomChanged;
         }
 
         // ── hauler drone (test mode) ──
@@ -271,6 +272,7 @@ public class GameManager : MonoBehaviour
             Drones.Add(hController);
             hController.OnWallInteractionCompleted += OnWallInteractionCompleted;
             hController.OnDroneDestroyed += OnDroneDestroyed;
+            hController.OnRoomChanged += OnDroneRoomChanged;
         }
 
         // ── selection manager ──
@@ -454,19 +456,44 @@ public class GameManager : MonoBehaviour
 
         // Visual feedback: dim cable glow when battery dies
         PowerNetwork.OnPowerStateChanged += OnPowerStateChanged;
+
+        // Register any drones that already have PowerTap equipped
+        foreach (var drone in Drones)
+            if (drone.Model.HasPowerTap)
+                PowerNetwork.RegisterDrone(drone.Model);
+
+        // Set initial power state: rooms not on the grid start dark
+        foreach (var coord in mapModel.RoomList)
+        {
+            if (PowerNetwork.IsRoomPowered(coord)) continue;
+            var tile = fog.GetTile(coord);
+            if (tile == null) continue;
+            tile.SetPowered(false);
+            foreach (var w in tile.GetComponentsInChildren<WallView>())
+                w.SetPowered(false);
+        }
     }
 
     void OnPowerStateChanged()
     {
         if (hexMap == null || hexMap.CableGlowMaterial == null) return;
 
-        if (PowerNetwork.IsActive)
-        {
+        bool active = PowerNetwork.IsActive;
+
+        if (active)
             hexMap.CableGlowMaterial.SetColor("_EmissionColor", Palette.CableGlow * 4f);
-        }
         else
-        {
             hexMap.CableGlowMaterial.SetColor("_EmissionColor", Palette.CableDead * 0.5f);
+
+        // Toggle room + station glow based on current power state
+        foreach (var coord in hexMap.Model.RoomList)
+        {
+            bool powered = PowerNetwork.IsRoomPowered(coord);
+            var tile = fog.GetTile(coord);
+            if (tile == null) continue;
+            tile.SetPowered(powered);
+            foreach (var w in tile.GetComponentsInChildren<WallView>())
+                w.SetPowered(powered);
         }
     }
 
@@ -508,6 +535,14 @@ public class GameManager : MonoBehaviour
         var passage = go.AddComponent<Passage>();
         passage.Init(room, neighbor, edge, type);
         passage.SetModel(tile.RModel.Walls[edge]);
+
+        // Each side builds its own half of the passage geometry
+        Material passGlow;
+        if (type == PassageType.Vent)
+            passGlow = hexMap.BuildVentGeometry(go.transform, room, neighbor);
+        else
+            passGlow = hexMap.BuildPassageGeometry(go.transform, room, neighbor, type);
+        passage.SetPassageGlow(passGlow);
 
         // For vent passages, provide pipe geometry for ring animation
         if (type == PassageType.Vent)
@@ -562,6 +597,10 @@ public class GameManager : MonoBehaviour
         var crookedVent = go.AddComponent<CrookedVentPassage>();
         crookedVent.Init(room, neighbor, edge, pipeStart, pipeEnd, seed);
         crookedVent.SetModel(tile.RModel.Walls[edge]);
+
+        // Each side builds its own half
+        var crookedGlow = hexMap.BuildCrookedVentGeometry(go.transform, room, neighbor);
+        crookedVent.SetPassageGlow(crookedGlow);
 
         float passW = hexMap.Model.PassageWidth(PassageType.CrookedVent);
         var col = go.AddComponent<BoxCollider>();
@@ -771,6 +810,16 @@ public class GameManager : MonoBehaviour
     {
         drone.OnWallInteractionCompleted -= OnWallInteractionCompleted;
         drone.OnDroneDestroyed -= OnDroneDestroyed;
+        drone.OnRoomChanged -= OnDroneRoomChanged;
+        if (PowerNetwork != null)
+            PowerNetwork.UnregisterDrone(drone.Model);
         Drones.Remove(drone);
+    }
+
+    void OnDroneRoomChanged(DroneController drone, Vector2Int newRoom)
+    {
+        if (PowerNetwork == null) return;
+        if (!drone.Model.HasPowerTap) return;
+        PowerNetwork.NotifyDroneMoved(drone.Model);
     }
 }

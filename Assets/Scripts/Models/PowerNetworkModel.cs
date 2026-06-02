@@ -13,22 +13,34 @@ public interface IPowerProvider
     /// Attempt to draw energy from the network. Returns actual amount drawn.
     /// May return less than requested if sources are depleted.
     /// </summary>
-    float Draw(float amount);
+    int Draw(int amount);
 }
 
 /// <summary>
-/// A single power source (battery) in the network.
+/// Interface for anything that can supply power to the network.
 /// </summary>
-public class PowerSource
+public interface IPowerSource
 {
-    public Vector2Int Room { get; private set; }
-    public float MaxEnergy { get; private set; }
-    public float CurrentEnergy { get; set; }
+    Vector2Int Room { get; }
+    int MaxEnergy { get; }
+    int CurrentEnergy { get; set; }
+    bool IsAlive { get; }
+    float EnergyFraction { get; }
+}
 
-    public bool IsAlive => CurrentEnergy > 0f;
-    public float EnergyFraction => MaxEnergy > 0f ? CurrentEnergy / MaxEnergy : 0f;
+/// <summary>
+/// A static power source (battery station) in the network.
+/// </summary>
+public class PowerSource : IPowerSource
+{
+    public Vector2Int Room { get; set; }
+    public int MaxEnergy { get; private set; }
+    public int CurrentEnergy { get; set; }
 
-    public PowerSource(Vector2Int room, float maxEnergy)
+    public bool IsAlive => CurrentEnergy > 0;
+    public float EnergyFraction => MaxEnergy > 0 ? (float)CurrentEnergy / MaxEnergy : 0f;
+
+    public PowerSource(Vector2Int room, int maxEnergy)
     {
         Room = room;
         MaxEnergy = maxEnergy;
@@ -45,11 +57,11 @@ public class PowerSource
 public class PowerNetworkModel : IPowerProvider
 {
     // ── Power sources ────────────────────────
-    readonly List<PowerSource> sources = new List<PowerSource>();
+    readonly List<IPowerSource> sources = new List<IPowerSource>();
     int roundRobinIndex;
 
     /// <summary>All power sources in the network.</summary>
-    public IReadOnlyList<PowerSource> Sources => sources;
+    public IReadOnlyList<IPowerSource> Sources => sources;
 
     /// <summary>True if any source still has energy.</summary>
     public bool IsActive
@@ -78,13 +90,51 @@ public class PowerNetworkModel : IPowerProvider
 
     // ── Power source management ──────────────
 
-    /// <summary>Add a power source (battery) at the given room.</summary>
-    public PowerSource AddSource(Vector2Int room, float maxEnergy)
+    /// <summary>Add a static power source (battery) at the given room.</summary>
+    public PowerSource AddSource(Vector2Int room, int maxEnergy)
     {
         var source = new PowerSource(room, maxEnergy);
         sources.Add(source);
         RecomputeNetwork();
         return source;
+    }
+
+    /// <summary>Register an existing IPowerSource (e.g. drone-backed).</summary>
+    public void AddSource(IPowerSource source)
+    {
+        sources.Add(source);
+        RecomputeNetwork();
+    }
+
+    /// <summary>Remove a power source from the network.</summary>
+    public void RemoveSource(IPowerSource source)
+    {
+        if (sources.Remove(source))
+            RecomputeNetwork();
+    }
+
+    // ── Drone (PowerTap) management ─────────────
+
+    /// <summary>Register a drone as a mobile power source.</summary>
+    public void RegisterDrone(DroneModel drone)
+    {
+        if (sources.Contains(drone)) return;
+        sources.Add(drone);
+        RecomputeNetwork();
+    }
+
+    /// <summary>Unregister a drone power source.</summary>
+    public void UnregisterDrone(DroneModel drone)
+    {
+        if (sources.Remove(drone))
+            RecomputeNetwork();
+    }
+
+    /// <summary>Call when a registered drone moves to a new room.</summary>
+    public void NotifyDroneMoved(DroneModel drone)
+    {
+        if (!sources.Contains(drone)) return;
+        RecomputeNetwork();
     }
 
     // ── Cable management ─────────────────────
@@ -155,14 +205,14 @@ public class PowerNetworkModel : IPowerProvider
     /// Draw energy from the network. Round-robins across live sources.
     /// Returns the actual amount drawn (may be less if sources are depleted).
     /// </summary>
-    public float Draw(float amount)
+    public int Draw(int amount)
     {
-        if (sources.Count == 0) return 0f;
+        if (sources.Count == 0) return 0;
 
-        float remaining = amount;
+        int remaining = amount;
         int attempts = 0;
 
-        while (remaining > 0f && attempts < sources.Count)
+        while (remaining > 0 && attempts < sources.Count)
         {
             roundRobinIndex = roundRobinIndex % sources.Count;
             var source = sources[roundRobinIndex];
@@ -174,7 +224,7 @@ public class PowerNetworkModel : IPowerProvider
                 continue;
             }
 
-            float drawn = Mathf.Min(remaining, source.CurrentEnergy);
+            int drawn = Mathf.Min(remaining, source.CurrentEnergy);
             source.CurrentEnergy -= drawn;
             remaining -= drawn;
             attempts = 0;

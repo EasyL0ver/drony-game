@@ -8,7 +8,7 @@ public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent }
 
 public enum RoomSize { Large, Medium, Small }
 
-public enum GearType { None, Scanner, Bomb, Cargo, Battery }
+public enum GearType { None, Scanner, Bomb, Cargo, Battery, PowerTap }
 
 public enum SlotSize { Small, Medium, Large }
 
@@ -72,7 +72,7 @@ public class WallInteractionConfig
     public int PointsReward { get; set; }
 
     /// <summary>Power drawn from the room's power network per cycle.</summary>
-    public float PowerCost { get; set; }
+    public int PowerCost { get; set; }
 
     /// <summary>Specific loot item awarded on pickup (overrides generic CargoReward).</summary>
     public GearItem LootItem { get; set; }
@@ -84,7 +84,7 @@ public class WallInteractionConfig
         Label = "CHARGE",
         BaseDuration = 0.6f,
         EnergyGainPerCycle = 5,
-        PowerCost = 3f,
+        PowerCost = 3,
         RepeatCondition = drone => drone.CurrentEnergy < drone.MaxEnergy,
     };
 
@@ -93,7 +93,7 @@ public class WallInteractionConfig
         Label = "REFIT",
         BaseDuration = 2f,
         EnablesRefit = true,
-        PowerCost = 5f,
+        PowerCost = 5,
     };
 
     public static WallInteractionConfig RubbleClear(GearType gear) => new WallInteractionConfig

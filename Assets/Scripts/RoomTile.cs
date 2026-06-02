@@ -61,6 +61,8 @@ public class RoomTile : MonoBehaviour
     GameObject[] outlineEdges = new GameObject[6];
     bool outlineShown;
     Material matUnknown, matDiscovered, matOutline, matOutlineHover;
+    Material matRoomGlow; // per-room glow material for power toggling
+    Color roomGlowEmission; // cached emission color
 
     // Interaction — hover indicators
     GameObject hoverUnknown;    // full hex for unknown rooms
@@ -115,7 +117,17 @@ public class RoomTile : MonoBehaviour
         BuildFogMesh(map);
         BuildOutlineMesh(map);
         BuildInteractionMeshes(map);
+        matRoomGlow = map.BuildRoomGeometry(transform, coord, size);
+        if (matRoomGlow != null)
+            roomGlowEmission = matRoomGlow.GetColor("_EmissionColor");
         ApplyVisuals();
+    }
+
+    /// <summary>Toggle power state — controls glow emission on room accents.</summary>
+    public void SetPowered(bool powered)
+    {
+        if (matRoomGlow == null) return;
+        matRoomGlow.SetColor("_EmissionColor", powered ? roomGlowEmission : Color.black);
     }
 
     public void AddConnection(TileConnection conn)
@@ -189,8 +201,7 @@ public class RoomTile : MonoBehaviour
                 fogRenderer.sharedMaterial = matUnknown;
                 break;
             case FogState.Discovered:
-                fogRenderer.enabled = true;
-                fogRenderer.sharedMaterial = matDiscovered;
+                fogRenderer.enabled = false;
                 ShowOutline(false);
                 break;
             case FogState.Visible:

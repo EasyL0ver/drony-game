@@ -117,6 +117,16 @@ public static class GearCatalog
         sellPrice: 3
     );
 
+    public static readonly GearItem PowerTap = new GearItem(
+        GearType.PowerTap,
+        "Power Tap",
+        "Feeds the drone's energy into the power network while stationary.",
+        5,
+        "\u2301", // ⌁ electric arrow
+        SlotSize.Medium,
+        sellPrice: 3
+    );
+
     public static GearItem[] All = new GearItem[]
     {
         Scanner,
@@ -124,6 +134,7 @@ public static class GearCatalog
         BatteryS,
         BatteryM,
         BatteryL,
+        PowerTap,
     };
 
     public static GearItem Get(GearType type)
