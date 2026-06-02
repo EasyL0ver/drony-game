@@ -59,21 +59,15 @@ public class BlastDoorPassage : Passage
         yield return new WaitForSeconds(openDuration);
         if (animationToken != token) yield break;
 
-        // 3. Normal traversal
-        bool done = false;
-        base.PlayTraversal(drone, duration, true, () => done = true);
-
-        while (!done)
+        // 3. Normal traversal → on complete: close door and forward callback
+        var capturedGlowMat = glowMat;
+        var capturedOrigGlow = origGlow;
+        base.PlayTraversal(drone, duration, true, () =>
         {
-            if (animationToken != token) yield break;
-            yield return null;
-        }
-
-        // 4. Close door
-        if (barrier != null) barrier.SetActive(true);
-        if (glowRenderer != null) glowRenderer.enabled = true;
-        if (glowMat != null) glowMat.SetColor("_EmissionColor", origGlow);
-
-        onComplete?.Invoke();
+            if (barrier != null) barrier.SetActive(true);
+            if (glowRenderer != null) glowRenderer.enabled = true;
+            if (capturedGlowMat != null) capturedGlowMat.SetColor("_EmissionColor", capturedOrigGlow);
+            onComplete?.Invoke();
+        });
     }
 }
