@@ -72,7 +72,7 @@ public class DroneController : MonoBehaviour
         hoverY = Model.TravelHeight;
 
         var tile = fog.GetTile(startRoom);
-        transform.position = new Vector3(tile.Center.x, hoverY, tile.Center.z);
+        transform.position = IdleOffset(new Vector3(tile.Center.x, hoverY, tile.Center.z));
 
         tile.OnDroneEnter(this);
         routePreview = new RoutePreview(this, map, fog);
@@ -474,6 +474,17 @@ public class DroneController : MonoBehaviour
 
     float DurationForDistance(float dist) => Mathf.Max(0.08f, dist / DroneSpeed);
 
+    /// <summary>Offset the room center so drones don't stack on top of each other.</summary>
+    Vector3 IdleOffset(Vector3 center)
+    {
+        float angle = DroneIndex * Mathf.PI * 2f / 5f; // spread up to 5 drones evenly
+        float radius = DroneIndex == 0 ? 0f : 0.4f;
+        return new Vector3(
+            center.x + Mathf.Cos(angle) * radius,
+            center.y,
+            center.z + Mathf.Sin(angle) * radius);
+    }
+
     void StartNextHop()
     {
         if (activeJourney == null) { state = State.Idle; return; }
@@ -616,8 +627,9 @@ public class DroneController : MonoBehaviour
 
         if (needsActivation || !hasMoreHops)
         {
-            // Navigate to room center
-            Vector3 center = new Vector3(newTile.Center.x, hoverY, newTile.Center.z);
+            // Navigate to room center (offset so drones don't stack)
+            Vector3 rawCenter = new Vector3(newTile.Center.x, hoverY, newTile.Center.z);
+            Vector3 center = needsActivation ? rawCenter : IdleOffset(rawCenter);
             float dist = Vector3.Distance(transform.position, center);
 
             state = State.RoomNavigating;

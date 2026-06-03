@@ -261,7 +261,8 @@ public class GameManager : MonoBehaviour
 
             var modelGO = new GameObject("Model");
             modelGO.transform.SetParent(droneGO.transform, false);
-            modelGO.AddComponent<LowPolyDrone>();
+            var droneVisual = modelGO.AddComponent<LowPolyDrone>();
+            droneVisual.SetDroneIndex(i);
 
             Drones.Add(controller);
 

@@ -20,6 +20,12 @@ public class LowPolyDrone : MonoBehaviour, IDroneVisual
     Transform[] rotors;
     Material matHull, matArm, matGlow;
     float baseLocalY;
+    int droneIndex;
+    Vector3 lastWorldPos;
+    bool wasMoving;
+
+    /// <summary>Set the drone index for unique idle animation phase.</summary>
+    public void SetDroneIndex(int index) { droneIndex = index; }
 
     /// <summary>The shared glow material used by all emissive parts.</summary>
     public Material GlowMaterial => matGlow;
@@ -61,12 +67,44 @@ public class LowPolyDrone : MonoBehaviour, IDroneVisual
                 rotors[i].Rotate(Vector3.up, dirs[i] * rotorSpeed * dt, Space.Self);
         }
 
-        // gentle hover bob (relative to parent)
-        float bob = Mathf.Sin(Time.time * 2.5f) * 0.03f;
-        transform.localPosition = new Vector3(
-            transform.localPosition.x,
-            baseLocalY + bob,
-            transform.localPosition.z);
+        // Detect movement
+        float moveDelta = (transform.position - lastWorldPos).sqrMagnitude;
+        bool isMoving = moveDelta > 0.0001f;
+        lastWorldPos = transform.position;
+
+        if (isMoving)
+        {
+            wasMoving = true;
+            // Reset local offset when moving
+            transform.localPosition = new Vector3(
+                transform.localPosition.x,
+                baseLocalY,
+                transform.localPosition.z);
+            transform.localRotation = Quaternion.identity;
+        }
+        else
+        {
+            if (wasMoving)
+            {
+                wasMoving = false;
+                baseLocalY = transform.localPosition.y;
+            }
+
+            // Idle hover animation with per-drone phase offset
+            float phase = droneIndex * 1.7f;
+            float bob = Mathf.Sin(Time.time * 2.0f + phase) * 0.05f;
+            float sway = Mathf.Sin(Time.time * 1.3f + phase * 0.7f) * 0.02f;
+
+            transform.localPosition = new Vector3(
+                transform.localPosition.x + sway * dt,
+                baseLocalY + bob,
+                transform.localPosition.z);
+
+            // Gentle tilt
+            float tiltX = Mathf.Sin(Time.time * 1.5f + phase) * 3f;
+            float tiltZ = Mathf.Cos(Time.time * 1.1f + phase * 0.5f) * 2f;
+            transform.localRotation = Quaternion.Euler(tiltX, 0f, tiltZ);
+        }
     }
 
     // ── materials ──────────────────────────
