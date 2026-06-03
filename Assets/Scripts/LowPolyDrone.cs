@@ -44,6 +44,7 @@ public class LowPolyDrone : MonoBehaviour, IDroneVisual
             Build();
         }
         baseLocalY = transform.localPosition.y;
+        lastWorldPos = transform.position;
     }
 
     /// <summary>Manual rebuild from editor (right-click → Rebuild Drone, or menu).</summary>
