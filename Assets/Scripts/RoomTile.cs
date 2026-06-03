@@ -177,6 +177,16 @@ public class RoomTile : MonoBehaviour
     {
         ApplyVisuals();
         RefreshDroneLabel();
+
+        // When this room becomes visible/scanning, show outlines on unknown neighbors
+        if (newState == FogState.Visible || newState == FogState.Scanning)
+        {
+            foreach (var conn in Connections)
+            {
+                if (conn.neighbor.State == FogState.Unknown)
+                    conn.neighbor.ShowOutline(true);
+            }
+        }
     }
 
     void ApplyVisuals()

@@ -7,7 +7,7 @@ using UnityEngine;
 /// </summary>
 public class ChargingStation : WallView
 {
-    public override float ParkOffset => 1.2f;
+    public override float ParkOffset => 1.8f;
 
     void OnEnable()
     {

@@ -6,7 +6,7 @@ using UnityEngine;
 /// </summary>
 public class LootBarrel : WallView
 {
-    public override float ParkOffset => 1.0f;
+    public override float ParkOffset => 1.5f;
 
     void OnEnable()
     {

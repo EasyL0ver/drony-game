@@ -8,7 +8,7 @@ using UnityEngine;
 /// </summary>
 public class BatteryStation : WallView
 {
-    public override float ParkOffset => 1.2f;
+    public override float ParkOffset => 1.8f;
 
     IPowerSource powerSource;
     GameObject labelGO;

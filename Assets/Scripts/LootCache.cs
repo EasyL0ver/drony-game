@@ -7,7 +7,7 @@ using UnityEngine;
 /// </summary>
 public class LootCache : WallView
 {
-    public override float ParkOffset => 1.0f;
+    public override float ParkOffset => 1.5f;
 
     GearItem content;
     Material glowMat;
