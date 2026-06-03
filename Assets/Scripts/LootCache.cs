@@ -8,6 +8,16 @@ using UnityEngine;
 public class LootCache : WallView
 {
     public override float ParkOffset => 1.5f;
+    public override string HoverDescription
+    {
+        get
+        {
+            var cacheModel = Model as LootCacheWallModel;
+            if (cacheModel != null && cacheModel.IsScanned && content != null)
+                return $"Loot Cache — Contains: {content.Name} ({content.Size})\nRequires: Hauler drone";
+            return "Loot Cache — Unknown contents\nScan with Scanner gear, pick up with Hauler";
+        }
+    }
 
     GearItem content;
     Material glowMat;

@@ -909,7 +909,16 @@ public class DroneController : MonoBehaviour
         get { float t = 0; foreach (var s in journeySteps) t += s.duration; return t; }
     }
 
-    public float JourneyElapsedTime => journeyCurrentIndex >= 0 ? Time.time - journeyStartTime : 0f;
+    public float JourneyElapsedTime
+    {
+        get
+        {
+            float t = 0;
+            for (int i = 0; i < journeySteps.Count; i++)
+                t += GetJourneyStepElapsed(i);
+            return t;
+        }
+    }
 
     public float JourneyOverallProgress
     {
@@ -950,9 +959,11 @@ public class DroneController : MonoBehaviour
 
     public float GetJourneyStepElapsed(int i)
     {
-        if (i != journeyCurrentIndex || journeyCurrentIndex < 0) return 0f;
+        if (i < 0 || i >= journeySteps.Count) return 0f;
+        if (i < journeyCurrentIndex) return journeySteps[i].duration;
+        if (i > journeyCurrentIndex || journeyCurrentIndex < 0) return 0f;
         if (stepStartTime < 0f) return 0f;
-        return Time.time - stepStartTime;
+        return Mathf.Min(Time.time - stepStartTime, journeySteps[i].duration);
     }
 
     public IReadOnlyList<JourneyStep> PreviewJourney => cachedPreviewSteps;

@@ -9,6 +9,14 @@ using UnityEngine;
 public class BatteryStation : WallView
 {
     public override float ParkOffset => 1.8f;
+    public override string HoverDescription
+    {
+        get
+        {
+            if (powerSource == null) return "Battery — Powers nearby stations through the cable network";
+            return $"Battery — Powers nearby stations\n⚡ {powerSource.CurrentEnergy}/{powerSource.MaxEnergy} energy stored";
+        }
+    }
 
     IPowerSource powerSource;
     GameObject labelGO;

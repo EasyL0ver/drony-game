@@ -8,6 +8,7 @@ using UnityEngine;
 public class ChargingStation : WallView
 {
     public override float ParkOffset => 1.8f;
+    public override string HoverDescription => "Charging Station — Recharges drone energy\n⚡ +5 energy/cycle   🔌 3 power/cycle";
 
     void OnEnable()
     {

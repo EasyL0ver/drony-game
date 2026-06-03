@@ -7,6 +7,7 @@ using UnityEngine;
 public class LoadingStation : WallView
 {
     public override float ParkOffset => 1.8f;
+    public override string HoverDescription => "Loading Bay — Sell cargo for points\nRequires: Hauler drone with cargo";
 
     void OnEnable()
     {

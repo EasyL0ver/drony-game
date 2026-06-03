@@ -7,6 +7,7 @@ using UnityEngine;
 public class LootBarrel : WallView
 {
     public override float ParkOffset => 1.5f;
+    public override string HoverDescription => "Loot Barrel — Contains a fuel cell\nRequires: Hauler drone";
 
     void OnEnable()
     {

@@ -8,6 +8,7 @@ using UnityEngine;
 public class RefittingStation : WallView
 {
     public override float ParkOffset => 1.8f;
+    public override string HoverDescription => "Refitting Station — Equip or swap gear\n🔌 5 power/cycle";
 
     void OnEnable()
     {

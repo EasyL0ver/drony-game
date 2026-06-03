@@ -17,6 +17,9 @@ public abstract class WallView : MonoBehaviour
     /// <summary>How far in front of the wall the drone parks (along local +Z).</summary>
     public abstract float ParkOffset { get; }
 
+    /// <summary>Short description shown in the hover info panel.</summary>
+    public virtual string HoverDescription => "";
+
     /// <summary>World-space point where a visiting drone should sit.</summary>
     public Vector3 DroneParkPoint => transform.position + transform.forward * ParkOffset;
 

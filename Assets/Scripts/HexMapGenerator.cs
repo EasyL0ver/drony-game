@@ -30,7 +30,7 @@ public class MapView : MonoBehaviour
     [SerializeField] [Range(0.2f, 0.8f)] float smallScale = 0.45f;
 
     [Header("Geometry")]
-    [SerializeField] float wallHeight = 2.5f;
+    [SerializeField] float wallHeight = 1.5f;
     [SerializeField] float wallThickness = 0.18f;
     [SerializeField] float floorThickness = 0.12f;
     [SerializeField] float corridorWidth = 1.8f;

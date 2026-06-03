@@ -25,6 +25,7 @@ public class SelectionManager : MonoBehaviour
     // Hover
     RoomTile hoveredTile;
     readonly Dictionary<int, Vector2Int> droneLastRoom = new Dictionary<int, Vector2Int>();
+    HoverInfoPanel hoverInfoPanel;
 
     // Box visuals
     Color boxColor       = Palette.SelectionBoxFill;
@@ -38,6 +39,11 @@ public class SelectionManager : MonoBehaviour
     {
         gm  = gameManager;
         cam = Camera.main;
+
+        var panelGO = new GameObject("HoverInfo");
+        panelGO.transform.SetParent(transform, false);
+        hoverInfoPanel = panelGO.AddComponent<HoverInfoPanel>();
+        hoverInfoPanel.Init();
     }
 
     // ── update ───────────────────────────────
@@ -191,6 +197,29 @@ public class SelectionManager : MonoBehaviour
                 else
                     ShowPreviewsForTarget(hoveredTile.Coord, hoveredWallView);
             }
+
+            // Update hover info panel
+            UpdateHoverDescription();
+        }
+    }
+
+    void UpdateHoverDescription()
+    {
+        if (hoverInfoPanel == null) return;
+
+        if (hoveredWallView != null && !string.IsNullOrEmpty(hoveredWallView.HoverDescription))
+        {
+            hoverInfoPanel.SetDescription(hoveredWallView.HoverDescription);
+        }
+        else if (hoveredTile != null)
+        {
+            string sizeLabel = hoveredTile.Size.ToString();
+            string stateLabel = hoveredTile.State.ToString();
+            hoverInfoPanel.SetDescription($"{sizeLabel} Room — {stateLabel}");
+        }
+        else
+        {
+            hoverInfoPanel.SetDescription("");
         }
     }
 

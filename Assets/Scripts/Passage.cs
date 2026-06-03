@@ -11,6 +11,17 @@ public class Passage : WallView
 {
     public override float ParkOffset => 0.5f;
 
+    public override string HoverDescription => Type switch
+    {
+        PassageType.Corridor    => $"Corridor — Standard passage\n⚡ 1 energy   ⏱ 1.0s",
+        PassageType.Rubble      => $"Rubble — Blocked, requires bomb to clear\n⚡ 2 energy to clear",
+        PassageType.BlastDoor   => $"Blast Door — Opens automatically when powered\n⚡ 1 energy   ⏱ 1.0s",
+        PassageType.Duct        => $"Duct — Small drones only\n⚡ 2 energy   ⏱ 2.0s",
+        PassageType.Vent        => $"Vent — Medium or small drones\n⚡ 3 energy   ⏱ 3.0s",
+        PassageType.CrookedVent => $"Crooked Vent — Medium or small drones\n⚡ 4 energy   ⏱ 4.0s",
+        _                       => "Passage"
+    };
+
     public PassageType Type { get; private set; }
     public Vector2Int Room { get; private set; }
     public Vector2Int Neighbor { get; private set; }
