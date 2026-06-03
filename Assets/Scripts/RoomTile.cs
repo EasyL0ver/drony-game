@@ -26,10 +26,6 @@ public class RoomTile : MonoBehaviour
     public Vector2Int Coord => RModel.Coord;
     public RoomSize Size => RModel.Size;
     public FogState State => RModel.State;
-    public float ScanProgress => RModel.ScanProgress;
-    public float ScanTimeLeft => RModel.ScanTimeLeft;
-    public float ScanElapsed => RModel.ScanElapsed;
-    public float ScanTotalTime => RModel.ScanDuration;
 
     public List<TileConnection> Connections { get; private set; } = new List<TileConnection>();
 
@@ -93,10 +89,9 @@ public class RoomTile : MonoBehaviour
 
     public void Init(Vector2Int coord, RoomSize size,
                      MapView map, float fogElev, float outlineR,
-                     Material unknown, Material discovered, Material outline,
-                     float scanDur = 3f)
+                     Material unknown, Material discovered, Material outline)
     {
-        RModel = new RoomModel(coord, size, scanDur);
+        RModel = new RoomModel(coord, size);
         RModel.OnStateChanged += OnModelStateChanged;
 
         Center = map.HexCenter(coord);
@@ -146,10 +141,9 @@ public class RoomTile : MonoBehaviour
         RefreshDroneLabel();
     }
 
-    public void OnDroneArrived(bool canScan = true)
+    public void OnDroneArrived()
     {
-        bool scanStarted = RModel.OnDroneArrived(canScan);
-        // Show outlines on unknown neighbors when we reveal/scan
+        RModel.OnDroneArrived();
         if (State == FogState.Scanning || State == FogState.Visible)
         {
             foreach (var conn in Connections)
@@ -377,12 +371,6 @@ public class RoomTile : MonoBehaviour
 
             if (flashTimer <= 0f && moveFlash != null)
                 moveFlash.SetActive(false);
-        }
-
-        // Scanning progress — delegate to model
-        if (State == FogState.Scanning)
-        {
-            RModel.AdvanceScan(Time.deltaTime);
         }
     }
 

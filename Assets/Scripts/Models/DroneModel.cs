@@ -124,9 +124,6 @@ public class DroneModel : IPowerSource
         }
     }
 
-    /// <summary>True if the drone has a Scanner and can scan rooms.</summary>
-    public bool CanScan => GetEquipped<IAutoActivateGear>() != null;
-
     /// <summary>True if the drone has a RubbleClearer and can clear blocked passages.</summary>
     public bool CanClearRubble => HasGear(GearType.Bomb);
 
@@ -278,8 +275,8 @@ public class DroneModel : IPowerSource
 
     // ── Step progress helpers ────────────────
 
-    /// <summary>Per-step scan progress callback. Set by the controller to query room scan state.</summary>
-    public System.Func<float> GetScanProgress { get; set; }
+    /// <summary>Per-step activation progress callback (scan, energy link, etc.).</summary>
+    public System.Func<float> GetActivationProgress { get; set; }
 
     /// <summary>Per-step charge/refit progress callback. Set by the controller.</summary>
     public System.Func<float> GetStationActionProgress { get; set; }
@@ -291,7 +288,7 @@ public class DroneModel : IPowerSource
         if (i > JourneyIdx) return 0f;
         // Active step
         if (JourneyPlan[i].isScan)
-            return GetScanProgress?.Invoke() ?? 0f;
+            return GetActivationProgress?.Invoke() ?? 0f;
         if (JourneyPlan[i].isInteraction)
             return GetStationActionProgress?.Invoke() ?? 0f;
         return TravelProgress;
@@ -328,10 +325,10 @@ public class DroneModel : IPowerSource
         var dest = newPath[newPath.Count - 1];
         var destRoom = getRoomModel(dest);
         float activationDur = 0f;
-        if (autoGear != null && destRoom != null && autoGear.IsEligible(destRoom))
+        if (autoGear != null && destRoom != null && autoGear.IsEligible(this, destRoom))
         {
-            cost += autoGear.ActivationEnergyCost;
-            activationDur = autoGear.GetDuration(destRoom);
+            cost += autoGear.ActivationEnergyCost(this, destRoom);
+            activationDur = autoGear.GetDuration(this, destRoom);
         }
 
         int available = CurrentEnergy - JourneyEnergyCost;
@@ -374,14 +371,14 @@ public class DroneModel : IPowerSource
                 prev = room;
             }
 
-            if (autoGear != null && destRoom != null && autoGear.IsEligible(destRoom))
+            if (autoGear != null && destRoom != null && autoGear.IsEligible(this, destRoom))
             {
                 JourneyPlan.Add(new JourneyStep
                 {
                     label = autoGear.StepLabel,
                     duration = activationDur,
                     isScan = true,
-                    energyCost = autoGear.ActivationEnergyCost,
+                    energyCost = autoGear.ActivationEnergyCost(this, destRoom),
                 });
             }
         }
@@ -416,14 +413,14 @@ public class DroneModel : IPowerSource
         var autoGear = GetEquipped<IAutoActivateGear>();
         var dest = previewPath[previewPath.Count - 1];
         var destRoom = getRoomModel(dest);
-        if (autoGear != null && destRoom != null && autoGear.IsEligible(destRoom))
+        if (autoGear != null && destRoom != null && autoGear.IsEligible(this, destRoom))
         {
             PreviewPlan.Add(new JourneyStep
             {
                 label = autoGear.StepLabel,
-                duration = autoGear.GetDuration(destRoom),
+                duration = autoGear.GetDuration(this, destRoom),
                 isScan = true,
-                energyCost = autoGear.ActivationEnergyCost,
+                energyCost = autoGear.ActivationEnergyCost(this, destRoom),
             });
         }
     }

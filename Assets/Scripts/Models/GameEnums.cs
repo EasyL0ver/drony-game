@@ -8,7 +8,7 @@ public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent, BlastDoor }
 
 public enum RoomSize { Large, Medium, Small }
 
-public enum GearType { None, Scanner, Bomb, Cargo, Battery, PowerTap }
+public enum GearType { None, Scanner, Bomb, Cargo, Battery, PowerTap, EnergyLink }
 
 public enum SlotSize { Small, Medium, Large }
 

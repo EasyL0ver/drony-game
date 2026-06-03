@@ -316,14 +316,14 @@ public class DroneController : MonoBehaviour
                 if (autoGear != null)
                 {
                     var destTile = fog?.GetTile(targetCoord);
-                    if (destTile != null && autoGear.IsEligible(destTile.RModel))
+                    if (destTile != null && autoGear.IsEligible(Model, destTile.RModel))
                     {
                         journeySteps.Add(new JourneyStep
                         {
                             label = autoGear.StepLabel,
-                            duration = autoGear.GetDuration(destTile.RModel),
+                            duration = autoGear.GetDuration(Model, destTile.RModel),
                             isScan = true,
-                            energyCost = autoGear.ActivationEnergyCost,
+                            energyCost = autoGear.ActivationEnergyCost(Model, destTile.RModel),
                         });
                         Vector3 roomCenter = map.HexCenter(targetCoord);
                         journeyAnchors.Add(new StepAnchor
@@ -444,14 +444,14 @@ public class DroneController : MonoBehaviour
                 if (autoItem != null && wall.Neighbor?.Owner != null)
                 {
                     var destTile = fog?.GetTile(wall.Neighbor.Owner.Coord);
-                    if (destTile != null && autoItem.IsEligible(destTile.RModel))
+                    if (destTile != null && autoItem.IsEligible(Model, destTile.RModel))
                     {
                         steps.Add(new JourneyStep
                         {
                             label = autoItem.StepLabel,
-                            duration = autoItem.GetDuration(destTile.RModel),
+                            duration = autoItem.GetDuration(Model, destTile.RModel),
                             isScan = true,
-                            energyCost = autoItem.ActivationEnergyCost,
+                            energyCost = autoItem.ActivationEnergyCost(Model, destTile.RModel),
                         });
                         Vector3 roomCenter = map.HexCenter(targetCoord);
                         anchors.Add(new StepAnchor
@@ -611,7 +611,7 @@ public class DroneController : MonoBehaviour
 
         // Check if auto-activate item should trigger
         var activeGear = Model.GetEquipped<IAutoActivateGear>();
-        bool needsActivation = activeGear != null && newTile != null && activeGear.IsEligible(newTile.RModel);
+        bool needsActivation = activeGear != null && newTile != null && activeGear.IsEligible(Model, newTile.RModel);
         bool hasMoreHops = activeJourney.CurrentHopIndex < activeJourney.Walls.Count;
 
         if (needsActivation || !hasMoreHops)
@@ -624,14 +624,13 @@ public class DroneController : MonoBehaviour
             newTile.ShowLine(transform.position, center, JourneyLineColor);
             newTile.NavigateDrone(transform, center, DurationForDistance(dist), () =>
             {
+                newTile.OnDroneArrived();
                 if (needsActivation)
                 {
-                    newTile.OnDroneArrived(true);
                     StartAutoActivation(newTile, activeGear);
                 }
                 else
                 {
-                    newTile.OnDroneArrived(false);
                     StartNextHop();
                 }
             });
@@ -639,7 +638,7 @@ public class DroneController : MonoBehaviour
         else
         {
             // More hops ahead — straight line to next departure park point
-            newTile.OnDroneArrived(false);
+            newTile.OnDroneArrived();
             var nextWall = activeJourney.Walls[activeJourney.CurrentHopIndex];
 
             // Next wall is an interaction (station/rubble) — no traversal, go to center
@@ -721,21 +720,25 @@ public class DroneController : MonoBehaviour
     {
         stepStartTime = Time.time;
         state = State.WallAnimating;
+        gear.OnActivationStart(Model, tile.RModel);
+        float duration = gear.GetDuration(Model, tile.RModel);
+        float startTime = stepStartTime;
+        Model.GetActivationProgress = () => Mathf.Clamp01((Time.time - startTime) / duration);
+        StartCoroutine(RunAutoActivation(tile, gear, duration));
+    }
 
-        // Wait for scan/activation to complete
-        Action handler = null;
-        handler = () =>
-        {
-            tile.RModel.OnScanComplete -= handler;
-            OnAutoActivationComplete(tile, gear);
-        };
-        tile.RModel.OnScanComplete += handler;
+    System.Collections.IEnumerator RunAutoActivation(RoomTile tile, IAutoActivateGear gear, float duration)
+    {
+        yield return new WaitForSeconds(duration);
+        Model.GetActivationProgress = null;
+        OnAutoActivationComplete(tile, gear);
     }
 
     void OnAutoActivationComplete(RoomTile tile, IAutoActivateGear gear)
     {
-        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - gear.ActivationEnergyCost);
-        gear.OnActivationComplete(tile.RModel);
+        int cost = gear.ActivationEnergyCost(Model, tile.RModel);
+        gear.OnActivationComplete(Model, tile.RModel);
+        Model.CurrentEnergy = Mathf.Max(0, Model.CurrentEnergy - cost);
         AdvanceJourneyStep();
         StartNextHop();
     }

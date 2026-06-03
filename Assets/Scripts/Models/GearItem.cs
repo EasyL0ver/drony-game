@@ -119,6 +119,8 @@ public static class GearCatalog
         sellPrice: 3
     );
 
+    public static readonly EnergyLinkItem EnergyLink = new EnergyLinkItem();
+
     public static GearItem[] All = new GearItem[]
     {
         Scanner,
@@ -127,6 +129,7 @@ public static class GearCatalog
         BatteryM,
         BatteryL,
         PowerTap,
+        EnergyLink,
     };
 
     public static GearItem Get(GearType type)

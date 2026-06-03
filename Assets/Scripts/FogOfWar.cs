@@ -13,9 +13,6 @@ public class FogOfWar : MonoBehaviour
     Color discoveredColor = Palette.FogDiscovered;
     Color outlineColor   = Palette.FogOutline;
 
-    [Header("Scanning")]
-    [SerializeField] float scanDuration = 3f;
-
     MapView map;
     Material matUnknown, matDiscovered, matOutline;
     float outlineRadius;
@@ -60,7 +57,7 @@ public class FogOfWar : MonoBehaviour
 
             var tile = go.AddComponent<RoomTile>();
             tile.Init(room, map.RoomSizeMap[room], map, fogElevation, outlineRadius,
-                      matUnknown, matDiscovered, matOutline, scanDuration);
+                      matUnknown, matDiscovered, matOutline);
 
             Tiles[room] = tile;
         }

@@ -16,13 +16,6 @@ public class RoomModel
     /// <summary>The 6 wall models for this room's hex edges.</summary>
     public WallModel[] Walls { get; private set; }
 
-    // Scanning
-    public float ScanDuration { get; set; } = 3f;
-    public float ScanElapsed { get; private set; }
-    public float ScanProgress => ScanDuration > 0 ? Mathf.Clamp01(ScanElapsed / ScanDuration) : 0f;
-    public float ScanTimeLeft => State == FogState.Scanning
-        ? Mathf.Max(0f, ScanDuration - ScanElapsed) : 0f;
-
     // Drone tracking
     public HashSet<DroneModel> Drones { get; private set; } = new HashSet<DroneModel>();
     public int DroneCount => Drones.Count;
@@ -33,16 +26,12 @@ public class RoomModel
     /// <summary>Fired whenever FogState changes. Args: (oldState, newState).</summary>
     public event Action<FogState, FogState> OnStateChanged;
 
-    /// <summary>Fired when scanning completes (transitions from Scanning → Visible).</summary>
-    public event Action OnScanComplete;
-
     // ── Constructor ──────────────────────────
 
-    public RoomModel(Vector2Int coord, RoomSize size, float scanDuration = 3f)
+    public RoomModel(Vector2Int coord, RoomSize size)
     {
         Coord = coord;
         Size = size;
-        ScanDuration = scanDuration;
 
         Walls = new WallModel[6];
         for (int i = 0; i < 6; i++)
@@ -79,26 +68,25 @@ public class RoomModel
 
     /// <summary>
     /// A drone physically arrives in this room.
-    /// Unknown rooms begin scanning only if canScan is true; Discovered rooms go to Visible.
-    /// Returns true if scanning started.
+    /// Discovered rooms go to Visible.
     /// </summary>
-    public bool OnDroneArrived(bool canScan = true)
+    public void OnDroneArrived()
     {
-        switch (State)
-        {
-            case FogState.Unknown:
-                if (!canScan) return false;
-                ScanElapsed = 0f;
-                SetState(FogState.Scanning);
-                return true;
-            case FogState.Scanning:
-                return true; // already scanning
-            case FogState.Discovered:
-                SetState(FogState.Visible);
-                return false;
-            default:
-                return false;
-        }
+        if (State == FogState.Discovered)
+            SetState(FogState.Visible);
+    }
+
+    /// <summary>Begin scanning (sets state to Scanning for visual feedback).</summary>
+    public void BeginScan()
+    {
+        if (State == FogState.Unknown)
+            SetState(FogState.Scanning);
+    }
+
+    /// <summary>Complete scanning (transitions to Visible).</summary>
+    public void CompleteScan()
+    {
+        SetState(FogState.Visible);
     }
 
     /// <summary>A drone leaves this room. Demotes to Discovered when last drone leaves.</summary>
@@ -112,29 +100,7 @@ public class RoomModel
     /// <summary>Instantly reveal this room (e.g., starting base).</summary>
     public void RevealImmediate()
     {
-        ScanElapsed = ScanDuration;
         SetState(FogState.Visible);
-    }
-
-    // ── Scan advancement ─────────────────────
-
-    /// <summary>
-    /// Advance scan by dt seconds. Returns true when scanning just completed.
-    /// Only advances if state is Scanning and drones are present.
-    /// </summary>
-    public bool AdvanceScan(float dt)
-    {
-        if (State != FogState.Scanning || DroneCount <= 0) return false;
-
-        ScanElapsed += dt;
-        if (ScanElapsed >= ScanDuration)
-        {
-            ScanElapsed = ScanDuration;
-            SetState(FogState.Visible);
-            OnScanComplete?.Invoke();
-            return true;
-        }
-        return false;
     }
 
     // ── State management ─────────────────────
