@@ -75,6 +75,7 @@ public class BatteryStation : WallView
         if (labelText.font != null)
             labelGO.GetComponent<MeshRenderer>().sharedMaterial = labelText.font.material;
 
+        labelGO.AddComponent<BillboardLabel>();
         labelGO.SetActive(false);
     }
 
