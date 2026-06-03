@@ -40,6 +40,7 @@ public class LootCache : WallView
             cacheModel.IsScanned = true;
         }
         Rebuild();
+        ShowContentLabel();
     }
 
     void OnEnable()
@@ -80,5 +81,31 @@ public class LootCache : WallView
         if (item.SellPrice >= 5) return new Color(1f, 0.2f, 0.8f);    // purple — rare
         if (item.SellPrice >= 3) return new Color(1f, 0.6f, 0.05f);   // orange — uncommon
         return new Color(0.3f, 0.8f, 1f);                              // cyan — common
+    }
+
+    GameObject labelGO;
+
+    void ShowContentLabel()
+    {
+        if (content == null) return;
+        if (labelGO != null) return;
+
+        labelGO = new GameObject("ContentLabel");
+        labelGO.transform.SetParent(transform, false);
+        labelGO.transform.localPosition = new Vector3(0f, 1.4f, 0.3f);
+
+        var tm = labelGO.AddComponent<TextMesh>();
+        tm.text = $"{content.Icon} {content.Name}";
+        tm.fontSize = 28;
+        tm.characterSize = 0.07f;
+        tm.anchor = TextAnchor.MiddleCenter;
+        tm.alignment = TextAlignment.Center;
+        tm.color = ContentGlowColor(content);
+        tm.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (tm.font != null)
+            labelGO.GetComponent<MeshRenderer>().sharedMaterial = tm.font.material;
+
+        // Billboard: face camera each frame
+        labelGO.AddComponent<BillboardLabel>();
     }
 }
