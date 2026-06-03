@@ -707,8 +707,25 @@ public class DroneStatusUI : MonoBehaviour
 
     // ── card click ───────────────────────────
 
+    float lastClickTime;
+    DroneController lastClickDrone;
+    const float doubleClickThreshold = 0.35f;
+
     void OnCardClicked(DroneController drone)
     {
+        float now = Time.unscaledTime;
+
+        // Double-click: focus camera on drone
+        if (drone == lastClickDrone && now - lastClickTime < doubleClickThreshold)
+        {
+            gm.rtsCamera.FocusOn(drone.transform.position);
+            lastClickDrone = null;
+            return;
+        }
+
+        lastClickTime = now;
+        lastClickDrone = drone;
+
         bool additive = Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed;
 
         if (!additive)
