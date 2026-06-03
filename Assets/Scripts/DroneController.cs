@@ -784,13 +784,6 @@ public class DroneController : MonoBehaviour
             if (wall != null) wall.gameObject.SetActive(false);
         }
 
-        // Scan loot cache
-        if (cfg.Label == "SCAN" && wall != null)
-        {
-            var cache = wall.GetComponent<LootCache>();
-            if (cache != null) cache.OnScanned();
-        }
-
         // Open loot cache
         if (cfg.Label == "OPEN" && wall != null)
         {

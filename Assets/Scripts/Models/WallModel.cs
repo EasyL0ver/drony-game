@@ -375,7 +375,6 @@ public class LootCacheWallModel : WallModel
     public bool IsOpen { get; set; }
     public DroneModel OccupiedBy { get; set; }
 
-    WallInteractionConfig _scanInteraction;
     WallInteractionConfig _openInteraction;
     WallInteractionConfig _pickupInteraction;
 
@@ -383,7 +382,6 @@ public class LootCacheWallModel : WallModel
         : base(owner, edgeIndex)
     {
         Content = content;
-        _scanInteraction = WallInteractionConfig.ScanCache();
         _openInteraction = WallInteractionConfig.OpenCache();
         _pickupInteraction = WallInteractionConfig.LootPickup(content);
     }
@@ -397,12 +395,6 @@ public class LootCacheWallModel : WallModel
     {
         var list = new List<WallInteractionConfig>();
         if (OccupiedBy != null && OccupiedBy != drone) return list;
-
-        // Scan: scout with scanner, reveals content identity without opening
-        if (!IsScanned && drone.HasGear(GearType.Scanner))
-        {
-            list.Add(_scanInteraction);
-        }
 
         // Open: lockpick required, not yet opened
         if (!IsOpen && drone.HasGear(GearType.Lockpick))

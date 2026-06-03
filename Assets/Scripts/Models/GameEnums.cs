@@ -119,13 +119,6 @@ public class WallInteractionConfig
         LootItem = loot ?? GearCatalog.FuelCell,
     };
 
-    public static WallInteractionConfig ScanCache() => new WallInteractionConfig
-    {
-        Label = "SCAN",
-        BaseDuration = 1f,
-        RequiredGear = GearType.Scanner,
-    };
-
     public static WallInteractionConfig OpenCache() => new WallInteractionConfig
     {
         Label = "OPEN",

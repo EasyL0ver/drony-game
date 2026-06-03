@@ -15,13 +15,10 @@ public class LootCache : WallView
         {
             var cacheModel = Model as LootCacheWallModel;
             bool open = cacheModel != null && cacheModel.IsOpen;
-            bool scanned = cacheModel != null && cacheModel.IsScanned;
 
             if (open && content != null)
                 return $"Loot Cache (Open) — Contains: {content.Name} ({content.Size})\nRequires: Hauler drone to pick up";
-            if (scanned && content != null)
-                return $"Loot Cache (Locked) — Contains: {content.Name} ({content.Size})\nRequires: Lockpick to open";
-            return "Loot Cache (Locked) — Unknown contents\nLockpick to open, Scanner to identify";
+            return "Loot Cache (Locked) — Unknown contents\nRequires: Lockpick to open";
         }
     }
 
@@ -32,19 +29,6 @@ public class LootCache : WallView
     public void SetContent(GearItem item)
     {
         content = item;
-    }
-
-    public void OnScanned()
-    {
-        var cacheModel = Model as LootCacheWallModel;
-        if (cacheModel != null) cacheModel.IsScanned = true;
-
-        if (glowMat != null && content != null)
-        {
-            Color col = ContentGlowColor(content);
-            glowMat.color = col;
-            glowMat.SetColor("_EmissionColor", col * 3f);
-        }
     }
 
     public void OnOpened()
