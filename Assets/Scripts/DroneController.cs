@@ -791,6 +791,13 @@ public class DroneController : MonoBehaviour
             if (cache != null) cache.OnScanned();
         }
 
+        // Open loot cache
+        if (cfg.Label == "OPEN" && wall != null)
+        {
+            var cache = wall.GetComponent<LootCache>();
+            if (cache != null) cache.OnOpened();
+        }
+
         // Repeat if the config says so (e.g. charging until full)
         if (cfg.RepeatCondition != null && cfg.RepeatCondition(Model))
         {

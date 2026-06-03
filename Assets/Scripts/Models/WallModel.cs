@@ -365,16 +365,18 @@ public class StationWallModel : WallModel
 }
 
 /// <summary>
-/// Loot cache wall: starts unscanned (unknown content). 
-/// Scouts with scanner can scan to reveal. Hauler can pick up.
+/// Loot cache wall: starts locked. Lockpick opens it to reveal content.
+/// Scanner can scan to identify without opening. Hauler can pick up once opened.
 /// </summary>
 public class LootCacheWallModel : WallModel
 {
     public GearItem Content { get; private set; }
     public bool IsScanned { get; set; }
+    public bool IsOpen { get; set; }
     public DroneModel OccupiedBy { get; set; }
 
     WallInteractionConfig _scanInteraction;
+    WallInteractionConfig _openInteraction;
     WallInteractionConfig _pickupInteraction;
 
     public LootCacheWallModel(RoomModel owner, int edgeIndex, GearItem content)
@@ -382,6 +384,7 @@ public class LootCacheWallModel : WallModel
     {
         Content = content;
         _scanInteraction = WallInteractionConfig.ScanCache();
+        _openInteraction = WallInteractionConfig.OpenCache();
         _pickupInteraction = WallInteractionConfig.LootPickup(content);
     }
 
@@ -395,14 +398,20 @@ public class LootCacheWallModel : WallModel
         var list = new List<WallInteractionConfig>();
         if (OccupiedBy != null && OccupiedBy != drone) return list;
 
-        // Scan: scout with scanner, cache not yet scanned
+        // Scan: scout with scanner, reveals content identity without opening
         if (!IsScanned && drone.HasGear(GearType.Scanner))
         {
             list.Add(_scanInteraction);
         }
 
-        // Pickup: hauler with free slot of matching size
-        if (drone.Type == DroneType.Hauler && drone.HasFreeSlot(Content.Size))
+        // Open: lockpick required, not yet opened
+        if (!IsOpen && drone.HasGear(GearType.Lockpick))
+        {
+            list.Add(_openInteraction);
+        }
+
+        // Pickup: hauler with free slot, cache must be open
+        if (IsOpen && drone.Type == DroneType.Hauler && drone.HasFreeSlot(Content.Size))
         {
             list.Add(_pickupInteraction);
         }

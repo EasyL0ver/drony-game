@@ -8,7 +8,7 @@ public enum PassageType { Corridor, Duct, Vent, Rubble, CrookedVent, BlastDoor }
 
 public enum RoomSize { Large, Medium, Small }
 
-public enum GearType { None, Scanner, Bomb, Cargo, Battery, PowerTap, EnergyLink }
+public enum GearType { None, Scanner, Bomb, Cargo, Battery, PowerTap, EnergyLink, Lockpick }
 
 public enum SlotSize { Small, Medium, Large }
 
@@ -124,6 +124,13 @@ public class WallInteractionConfig
         Label = "SCAN",
         BaseDuration = 1f,
         RequiredGear = GearType.Scanner,
+    };
+
+    public static WallInteractionConfig OpenCache() => new WallInteractionConfig
+    {
+        Label = "OPEN",
+        BaseDuration = 1.5f,
+        RequiredGear = GearType.Lockpick,
     };
 
     public static WallInteractionConfig Unload() => new WallInteractionConfig

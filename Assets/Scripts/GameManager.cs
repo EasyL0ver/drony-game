@@ -475,6 +475,7 @@ public class GameManager : MonoBehaviour
 
         // Visual feedback: dim cable glow when battery dies
         PowerNetwork.OnPowerStateChanged += OnPowerStateChanged;
+        PowerNetwork.OnEnergyDrawn += OnCableEnergyDrawn;
 
         // Register any drones that already have PowerTap equipped
         foreach (var drone in Drones)
@@ -529,6 +530,38 @@ public class GameManager : MonoBehaviour
             Color col = doorPowered ? Palette.CorridorGlow : Palette.ImpassableGlow;
             rend.sharedMaterial.SetColor("_EmissionColor", col * 4f);
         }
+    }
+
+    Coroutine cableFlashRoutine;
+
+    void OnCableEnergyDrawn(int amount)
+    {
+        if (hexMap == null || hexMap.CableGlowMaterial == null) return;
+        if (cableFlashRoutine != null) StopCoroutine(cableFlashRoutine);
+        cableFlashRoutine = StartCoroutine(CableSparkFlash());
+    }
+
+    System.Collections.IEnumerator CableSparkFlash()
+    {
+        var mat = hexMap.CableGlowMaterial;
+        Color baseEmission = Palette.CableGlow * 4f;
+        Color sparkColor = Color.white * 12f;
+
+        // Quick spike to white
+        mat.SetColor("_EmissionColor", sparkColor);
+        float duration = 0.25f;
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float lerp = t / duration;
+            // Ease out: fast start, slow finish
+            float ease = 1f - (1f - lerp) * (1f - lerp);
+            mat.SetColor("_EmissionColor", Color.Lerp(sparkColor, baseEmission, ease));
+            yield return null;
+        }
+        mat.SetColor("_EmissionColor", baseEmission);
+        cableFlashRoutine = null;
     }
 
     static GearItem RollLoot()

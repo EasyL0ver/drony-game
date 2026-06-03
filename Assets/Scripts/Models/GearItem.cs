@@ -121,6 +121,16 @@ public static class GearCatalog
 
     public static readonly EnergyLinkItem EnergyLink = new EnergyLinkItem();
 
+    public static readonly GearItem Lockpick = new GearItem(
+        GearType.Lockpick,
+        "Lockpick",
+        "Opens locked loot caches without destroying contents.",
+        2,
+        "\uD83D\uDD13", // 🔓 unlock
+        SlotSize.Small,
+        sellPrice: 1
+    );
+
     public static GearItem[] All = new GearItem[]
     {
         Scanner,
@@ -130,6 +140,7 @@ public static class GearCatalog
         BatteryL,
         PowerTap,
         EnergyLink,
+        Lockpick,
     };
 
     public static GearItem Get(GearType type)

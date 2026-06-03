@@ -11,10 +11,10 @@ public class HaulerDrone : MonoBehaviour, IDroneVisual
     [SerializeField] float chassisWidth = 0.28f;
 
     [Header("Colors")]
-    Color hullColor = new Color(0.18f, 0.15f, 0.10f);
-    Color armColor = new Color(0.10f, 0.10f, 0.12f);
+    Color hullColor = new Color(0.25f, 0.22f, 0.18f);
+    Color armColor = new Color(0.14f, 0.14f, 0.16f);
     Color glowColor = Palette.DroneIdle;
-    [SerializeField] float glowIntensity = 3f;
+    [SerializeField] float glowIntensity = 4f;
 
     Transform[] wheels;
     Transform arm;

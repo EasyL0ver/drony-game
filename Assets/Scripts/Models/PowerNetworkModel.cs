@@ -201,6 +201,9 @@ public class PowerNetworkModel : IPowerProvider
 
     // ── Draw energy ──────────────────────────
 
+    /// <summary>Fired when energy is drawn from the network (amount drawn).</summary>
+    public event System.Action<int> OnEnergyDrawn;
+
     /// <summary>
     /// Draw energy from the network. Round-robins across live sources.
     /// Returns the actual amount drawn (may be less if sources are depleted).
@@ -235,7 +238,11 @@ public class PowerNetworkModel : IPowerProvider
             }
         }
 
-        return amount - remaining;
+        int totalDrawn = amount - remaining;
+        if (totalDrawn > 0)
+            OnEnergyDrawn?.Invoke(totalDrawn);
+
+        return totalDrawn;
     }
 
     // ── Network computation ──────────────────

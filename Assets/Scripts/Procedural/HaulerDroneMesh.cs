@@ -24,20 +24,26 @@ public static class HaulerDroneMesh
         float wheelW = cW * 0.18f;
         float axleY = -cH * 0.3f;
 
-        // ── Main chassis (box) ──
-        MeshPrimitives.Spawn(parent, "Chassis",
-            MeshPrimitives.Box(new Vector3(0, 0, 0), cW * 2f, cH * 2f, cL * 2f), matHull);
+        // ── Main chassis (tapered front, flat rear) ──
+        MeshPrimitives.Spawn(parent, "ChassisRear",
+            MeshPrimitives.Box(new Vector3(0, 0, -cL * 0.3f), cW * 2f, cH * 2f, cL * 1.4f), matHull);
+        MeshPrimitives.Spawn(parent, "ChassisFront",
+            MeshPrimitives.Box(new Vector3(0, -cH * 0.15f, cL * 0.55f), cW * 1.6f, cH * 1.5f, cL * 0.7f), matHull);
 
-        // ── Cargo bay (recessed area on top, slightly inset) ──
+        // ── Armored side panels ──
+        MeshPrimitives.Spawn(parent, "PanelL",
+            MeshPrimitives.Box(new Vector3(-cW + 0.01f, cH * 0.3f, -cL * 0.1f), 0.02f, cH * 1.2f, cL * 1.6f), matArm);
+        MeshPrimitives.Spawn(parent, "PanelR",
+            MeshPrimitives.Box(new Vector3(cW - 0.01f, cH * 0.3f, -cL * 0.1f), 0.02f, cH * 1.2f, cL * 1.6f), matArm);
+
+        // ── Cargo bay (recessed area on top) ──
         float bayInset = 0.02f;
         float bayDepth = cH * 0.6f;
         float bayW = cW - bayInset * 2f;
         float bayL = cL * 0.6f;
-        // Floor of cargo bay
         MeshPrimitives.Spawn(parent, "CargoBayFloor",
             MeshPrimitives.Box(new Vector3(0, cH - bayDepth * 0.5f, -cL * 0.1f),
                 bayW * 2f, 0.01f, bayL * 2f), matArm);
-        // Bay walls (thin boxes on sides)
         float wallT = 0.01f;
         MeshPrimitives.Spawn(parent, "BayWallL",
             MeshPrimitives.Box(new Vector3(-bayW, cH - bayDepth * 0.5f + bayDepth * 0.5f, -cL * 0.1f),
@@ -49,16 +55,35 @@ public static class HaulerDroneMesh
             MeshPrimitives.Box(new Vector3(0, cH - bayDepth * 0.5f + bayDepth * 0.5f, -cL * 0.1f - bayL),
                 bayW * 2f, bayDepth, wallT), matArm);
 
-        // ── Glow strip (status indicator on front) ──
-        MeshPrimitives.Spawn(parent, "GlowStrip",
-            MeshPrimitives.Box(new Vector3(0, cH * 0.3f, cL + 0.005f),
-                cW * 1.2f, cH * 0.25f, 0.008f), matGlow);
-        // Rear glow
-        MeshPrimitives.Spawn(parent, "GlowRear",
-            MeshPrimitives.Box(new Vector3(0, cH * 0.3f, -cL - 0.005f),
-                cW * 0.8f, cH * 0.15f, 0.008f), matGlow);
+        // ── Glow strips (multiple for a more techy look) ──
+        // Front visor
+        MeshPrimitives.Spawn(parent, "GlowVisor",
+            MeshPrimitives.Box(new Vector3(0, cH * 0.1f, cL + 0.005f),
+                cW * 1.4f, cH * 0.35f, 0.01f), matGlow);
+        // Side running lights
+        MeshPrimitives.Spawn(parent, "GlowSideL",
+            MeshPrimitives.Box(new Vector3(-cW - 0.005f, 0f, cL * 0.2f),
+                0.008f, cH * 0.2f, cL * 1.2f), matGlow);
+        MeshPrimitives.Spawn(parent, "GlowSideR",
+            MeshPrimitives.Box(new Vector3(cW + 0.005f, 0f, cL * 0.2f),
+                0.008f, cH * 0.2f, cL * 1.2f), matGlow);
+        // Rear taillights
+        MeshPrimitives.Spawn(parent, "GlowRearL",
+            MeshPrimitives.Box(new Vector3(-cW * 0.5f, cH * 0.2f, -cL - 0.005f),
+                cW * 0.4f, cH * 0.2f, 0.008f), matGlow);
+        MeshPrimitives.Spawn(parent, "GlowRearR",
+            MeshPrimitives.Box(new Vector3(cW * 0.5f, cH * 0.2f, -cL - 0.005f),
+                cW * 0.4f, cH * 0.2f, 0.008f), matGlow);
+        // Top spine light
+        MeshPrimitives.Spawn(parent, "GlowSpine",
+            MeshPrimitives.Box(new Vector3(0, cH + 0.005f, cL * 0.3f),
+                0.02f, 0.008f, cL * 0.8f), matGlow);
+        // Underbody glow
+        MeshPrimitives.Spawn(parent, "GlowUnder",
+            MeshPrimitives.Box(new Vector3(0, -cH - 0.003f, 0),
+                cW * 0.8f, 0.006f, cL * 1.0f), matGlow);
 
-        // ── Wheels (4, Prism-based cylinders on sides) ──
+        // ── Wheels (4) ──
         var wheels = new Transform[4];
         float[][] wheelPos = new float[][]
         {
@@ -81,13 +106,15 @@ public static class HaulerDroneMesh
         float armBaseW = cW * 0.25f;
         Vector3 armRoot = new Vector3(0, cH, cL * 0.55f);
 
-        // Base pillar
         var armPillarGO = MeshPrimitives.Spawn(parent, "ArmPillar",
             MeshPrimitives.Box(Vector3.zero, armBaseW, armBaseH, armBaseW), matHull);
         armPillarGO.transform.localPosition = armRoot + Vector3.up * armBaseH * 0.5f;
         var armT = armPillarGO.transform;
 
-        // Forearm (extends forward)
+        // Arm glow joint
+        MeshPrimitives.Spawn(parent, "ArmJointGlow",
+            MeshPrimitives.Box(armRoot + Vector3.up * armBaseH, armBaseW * 1.2f, 0.02f, armBaseW * 1.2f), matGlow);
+
         float forearmLen = cL * 0.4f;
         var forearmGO = MeshPrimitives.Spawn(parent, "ArmForearm",
             MeshPrimitives.Box(new Vector3(0, 0, forearmLen * 0.5f),
@@ -95,7 +122,7 @@ public static class HaulerDroneMesh
         forearmGO.transform.localPosition = armRoot + Vector3.up * armBaseH;
         forearmGO.transform.SetParent(armPillarGO.transform, true);
 
-        // Claw (two prongs)
+        // Claw (two prongs with glow tips)
         float clawLen = cW * 0.3f;
         float prongW = 0.008f;
         Vector3 clawBase = armRoot + Vector3.up * armBaseH + Vector3.forward * forearmLen;
@@ -108,7 +135,6 @@ public static class HaulerDroneMesh
         MeshPrimitives.Spawn(clawParent.transform, "ProngR",
             MeshPrimitives.Box(new Vector3(armBaseW * 0.3f, -clawLen * 0.5f, 0),
                 prongW, clawLen, prongW), matGlow);
-        // Cross bar
         MeshPrimitives.Spawn(clawParent.transform, "ClawBar",
             MeshPrimitives.Box(new Vector3(0, 0, 0),
                 armBaseW * 0.7f, prongW, prongW), matArm);

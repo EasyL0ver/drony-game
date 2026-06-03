@@ -1,27 +1,33 @@
 using UnityEngine;
 
 /// <summary>
-/// Loot cache wall entity. Starts as unknown (grey), can be scanned to reveal content.
-/// Hauler can pick up content regardless of scan state.
-/// Visual changes when scanned to show content value color.
+/// Loot cache wall entity. Wall-mounted storage locker that starts locked.
+/// Lockpick gear opens it, then hauler can pick up contents.
+/// Scanner can identify contents without opening.
 /// </summary>
 public class LootCache : WallView
 {
     public override float ParkOffset => 1.5f;
+
     public override string HoverDescription
     {
         get
         {
             var cacheModel = Model as LootCacheWallModel;
-            if (cacheModel != null && cacheModel.IsScanned && content != null)
-                return $"Loot Cache — Contains: {content.Name} ({content.Size})\nRequires: Hauler drone";
-            return "Loot Cache — Unknown contents\nScan with Scanner gear, pick up with Hauler";
+            bool open = cacheModel != null && cacheModel.IsOpen;
+            bool scanned = cacheModel != null && cacheModel.IsScanned;
+
+            if (open && content != null)
+                return $"Loot Cache (Open) — Contains: {content.Name} ({content.Size})\nRequires: Hauler drone to pick up";
+            if (scanned && content != null)
+                return $"Loot Cache (Locked) — Contains: {content.Name} ({content.Size})\nRequires: Lockpick to open";
+            return "Loot Cache (Locked) — Unknown contents\nLockpick to open, Scanner to identify";
         }
     }
 
     GearItem content;
     Material glowMat;
-    GameObject meshContainer;
+    Material doorMat;
 
     public void SetContent(GearItem item)
     {
@@ -33,7 +39,6 @@ public class LootCache : WallView
         var cacheModel = Model as LootCacheWallModel;
         if (cacheModel != null) cacheModel.IsScanned = true;
 
-        // Update glow color to reflect content value
         if (glowMat != null && content != null)
         {
             Color col = ContentGlowColor(content);
@@ -42,34 +47,47 @@ public class LootCache : WallView
         }
     }
 
+    public void OnOpened()
+    {
+        var cacheModel = Model as LootCacheWallModel;
+        if (cacheModel != null)
+        {
+            cacheModel.IsOpen = true;
+            cacheModel.IsScanned = true;
+        }
+        Rebuild();
+    }
+
     void OnEnable()
     {
         if (transform.childCount == 0)
-            Build();
+            Build(false);
     }
 
-    [ContextMenu("Rebuild Cache")]
-    public void Build()
+    void Rebuild()
     {
         while (transform.childCount > 0)
             DestroyImmediate(transform.GetChild(0).gameObject);
+        var cacheModel = Model as LootCacheWallModel;
+        bool open = cacheModel != null && cacheModel.IsOpen;
+        Build(open);
+    }
 
-        // Unscanned: neutral grey glow
-        Color baseGlow = new Color(0.5f, 0.5f, 0.5f);
+    void Build(bool isOpen)
+    {
+        Color baseGlow = isOpen && content != null ? ContentGlowColor(content) : new Color(0.5f, 0.5f, 0.5f);
 
         InitMaterials(
-            new Color(0.15f, 0.15f, 0.18f),   // base: dark metal
-            new Color(0.12f, 0.12f, 0.15f),   // body
-            new Color(0.20f, 0.20f, 0.22f),   // accent
-            baseGlow                            // glow: grey (unknown)
+            new Color(0.15f, 0.15f, 0.18f),
+            new Color(0.20f, 0.20f, 0.22f),
+            new Color(0.20f, 0.20f, 0.22f),
+            baseGlow
         );
 
         glowMat = matGlow;
+        doorMat = matBody;
 
-        meshContainer = new GameObject("CacheMesh");
-        meshContainer.transform.SetParent(transform, false);
-        meshContainer.transform.localPosition = new Vector3(0, 0, 0.45f);
-        LootBarrelMesh.Build(meshContainer.transform, matBase, matAccent, matGlow);
+        LootCacheMesh.Build(transform, matBase, matBody, matGlow, isOpen);
     }
 
     static Color ContentGlowColor(GearItem item)
