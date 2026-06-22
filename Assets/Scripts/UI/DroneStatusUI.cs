@@ -29,6 +29,8 @@ public class DroneStatusUI : MonoBehaviour
         public List<Button> slotButtons;
         public List<Text> slotSizeLabels;
         public List<Outline> slotOutlines;
+        // Passage size dots (Corridor, Duct, Vent)
+        public List<Image> passageDots;
         // Journey display (step bar + overall bar)
         public GameObject journeyRow;       // parent container
         public Image stepBarBg;
@@ -363,6 +365,7 @@ public class DroneStatusUI : MonoBehaviour
         PassageType[] sizes = { PassageType.Corridor, PassageType.Duct, PassageType.Vent };
         Color[] dotColors = { Palette.CorridorGlow, Palette.DuctGlow, Palette.VentGlow };
         float dotSize = 5f, dotGap2 = 3f;
+        var passageDotImages = new List<Image>();
         for (int d = 0; d < sizes.Length; d++)
         {
             var dotGO = MakeImage(cardGO.transform, $"Dot_{sizes[d]}", dotColors[d]);
@@ -372,6 +375,7 @@ public class DroneStatusUI : MonoBehaviour
             float dx = -pad - (sizes.Length - 1 - d) * (dotSize + dotGap2);
             dotRT.anchoredPosition = new Vector2(dx, (nY0 + nY1) * 0.5f);
             dotRT.sizeDelta = new Vector2(dotSize, dotSize);
+            passageDotImages.Add(dotGO.GetComponent<Image>());
         }
 
         // ── RIGHT COLUMN: Energy bar ──
@@ -472,6 +476,7 @@ public class DroneStatusUI : MonoBehaviour
             slotButtons = slotButtons,
             slotSizeLabels = slotSizeLabels,
             slotOutlines = slotOutlines,
+            passageDots = passageDotImages,
             journeyRow = jContGO,
             stepBarBg = sBgGO.GetComponent<Image>(),
             stepBarFill = sFillGO.GetComponent<Image>(),
@@ -605,6 +610,14 @@ public class DroneStatusUI : MonoBehaviour
                     c.slotBgs[s].color = atRefitStation ? slotEmptyCol : slotLockedCol;
                     c.slotSizeLabels[s].enabled = true;
                 }
+            }
+
+            // ── Passage size dots (reflect current traversal capability) ──
+            PassageType[] passageTypes = { PassageType.Corridor, PassageType.Duct, PassageType.Vent };
+            for (int d = 0; d < c.passageDots.Count && d < passageTypes.Length; d++)
+            {
+                bool canFit = c.drone.Model.CanTraverse(passageTypes[d]);
+                c.passageDots[d].enabled = canFit;
             }
 
             // ── Journey display (step bar + overall bar) ──
@@ -843,8 +856,6 @@ public class DroneStatusUI : MonoBehaviour
         float panelW = 260f;
         float itemH = 44f;
         float headerH = 50f;
-        float panelH = headerH + GearCatalog.All.Length * (itemH + 4) + 12;
-        panelRT.sizeDelta = new Vector2(panelW, panelH);
 
         // Stop clicks on panel from closing
         var panelBtn = panelGO.AddComponent<Button>();
@@ -877,10 +888,21 @@ public class DroneStatusUI : MonoBehaviour
         ptsRT.offsetMin = new Vector2(8, -48);
         ptsRT.offsetMax = new Vector2(-8, -28);
 
-        // Gear items
+        // Gear items — only show items that fit in the clicked slot
+        SlotSize targetSlotSize = drone.Model.SlotLayout[slotIdx];
+        var eligibleGear = new System.Collections.Generic.List<GearItem>();
         for (int g = 0; g < GearCatalog.All.Length; g++)
         {
-            var gear = GearCatalog.All[g];
+            if (GearCatalog.All[g].Size <= targetSlotSize)
+                eligibleGear.Add(GearCatalog.All[g]);
+        }
+
+        float panelH = headerH + eligibleGear.Count * (itemH + 4) + 12;
+        panelRT.sizeDelta = new Vector2(panelW, panelH);
+
+        for (int g = 0; g < eligibleGear.Count; g++)
+        {
+            var gear = eligibleGear[g];
             float yTop = -(headerH + g * (itemH + 4));
             float yBot = yTop - itemH;
 

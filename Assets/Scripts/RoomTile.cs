@@ -519,9 +519,9 @@ public class RoomTile : MonoBehaviour
     /// Smoothly move a drone from its current position to a target point within this room.
     /// Uses smooth-step easing. Calls onComplete when done.
     /// </summary>
-    public void NavigateDrone(Transform drone, Vector3 target, float duration, System.Action onComplete)
+    public Coroutine NavigateDrone(Transform drone, Vector3 target, float duration, System.Action onComplete)
     {
-        StartCoroutine(RunNavigate(drone, target, duration, onComplete));
+        return StartCoroutine(RunNavigate(drone, target, duration, onComplete));
     }
 
     /// <summary>Navigate drone to this room's center point at the given hover height.</summary>

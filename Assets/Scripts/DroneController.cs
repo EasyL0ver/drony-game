@@ -53,6 +53,15 @@ public class DroneController : MonoBehaviour
     WallInteractionConfig lastCompletedInteraction;
     WallView activeInteractionWall;
 
+    // Movement invalidation: every new order or cancel bumps moveEpoch.
+    // Async movement/animation callbacks capture the epoch at scheduling time
+    // and bail out if it changed, preventing stale callbacks from a cancelled
+    // journey from corrupting state (e.g. re-pathing while traveling).
+    int moveEpoch;
+    RoomTile navTile;          // tile running the current in-room navigation coroutine
+    Coroutine navCoroutine;    // the current in-room navigation coroutine
+    WallView animWall;         // wall currently running a traversal/interaction animation
+
     public void Init(MapView mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0, DroneType droneType = DroneType.Scout)
     {
         map = mapGen;
@@ -193,12 +202,14 @@ public class DroneController : MonoBehaviour
         parkPoint.y = hoverY;
         float dist = Vector3.Distance(transform.position, parkPoint);
 
+        int epoch = moveEpoch;
         state = State.RoomNavigating;
         activeInteractionWall = wall;
         currentTile.ShowLine(transform.position, parkPoint, JourneyLineColor);
         if (wall.Model is StationWallModel stationA) stationA.OccupiedBy = Model;
-        currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
+        Navigate(currentTile, parkPoint, DurationForDistance(dist), () =>
         {
+            if (epoch != moveEpoch) return;
             // Draw power before starting first cycle
             if (wall.Model is StationWallModel stationPow && !stationPow.TryDrawPower(cfg))
             {
@@ -209,8 +220,9 @@ public class DroneController : MonoBehaviour
             }
             stepStartTime = Time.time;
             state = State.WallAnimating;
-            wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
+            Interact(wall, cfg.BaseDuration, cfg, () =>
             {
+                if (epoch != moveEpoch) return;
                 OnInteractionComplete(cfg, wall);
             });
         });
@@ -218,6 +230,11 @@ public class DroneController : MonoBehaviour
 
     public void Cancel()
     {
+        // Invalidate any in-flight movement/animation callbacks from the
+        // journey being cancelled so they can't fire against the next journey.
+        moveEpoch++;
+        StopActiveMovement();
+
         if (activeInteractionWall != null && activeInteractionWall.Model is StationWallModel stationC)
             stationC.OccupiedBy = null;
         activeInteractionWall = null;
@@ -225,6 +242,40 @@ public class DroneController : MonoBehaviour
         activeJourney = null;
         ClearJourneySteps();
         routePreview?.ClearJourney();
+    }
+
+    /// <summary>Stop the in-flight in-room navigation and wall animation coroutines.</summary>
+    void StopActiveMovement()
+    {
+        if (navTile != null && navCoroutine != null)
+            navTile.StopCoroutine(navCoroutine);
+        navCoroutine = null;
+        navTile = null;
+        animWall?.CancelInteraction();
+        animWall = null;
+        if (Model != null) Model.GetActivationProgress = null;
+    }
+
+    // ── Tracked movement helpers ─────────────
+    // Wrap the tile/wall animation calls so the controller can stop them on
+    // cancel and so callbacks can be invalidated via moveEpoch.
+
+    void Navigate(RoomTile tile, Vector3 target, float duration, System.Action onComplete)
+    {
+        navTile = tile;
+        navCoroutine = tile.NavigateDrone(transform, target, duration, onComplete);
+    }
+
+    void Traverse(WallView wall, float duration, bool departing, System.Action onComplete)
+    {
+        animWall = wall;
+        wall.PlayTraversal(transform, duration, departing, onComplete);
+    }
+
+    void Interact(WallView wall, float duration, WallInteractionConfig cfg, System.Action onComplete)
+    {
+        animWall = wall;
+        wall.PlayInteraction(transform, duration, cfg, onComplete);
     }
 
     void BuildWallList(List<Vector2Int> rooms, List<WallModel> result)
@@ -545,21 +596,25 @@ public class DroneController : MonoBehaviour
         float depDur = totalDist > 0.01f ? totalDur * (depDist / totalDist) : totalDur * 0.5f;
         float arrDur = totalDist > 0.01f ? totalDur * (arrDist / totalDist) : totalDur * 0.5f;
 
+        int epoch = moveEpoch;
         state = State.RoomNavigating;
         Color lineCol = JourneyLineColor;
         currentTile.ShowLine(transform.position, parkPoint, lineCol);
-        currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(approachDist), () =>
+        Navigate(currentTile, parkPoint, DurationForDistance(approachDist), () =>
         {
+            if (epoch != moveEpoch) return;
             stepStartTime = Time.time;
             state = State.WallAnimating;
             capturedDeparture.ShowLine(parkPoint, depMid, lineCol);
-            capturedDeparture.PlayTraversal(transform, depDur, true, () =>
+            Traverse(capturedDeparture, depDur, true, () =>
             {
+                if (epoch != moveEpoch) return;
                 if (capturedArrival != null)
                 {
                     capturedArrival.ShowLine(depMid, arrPark, lineCol);
-                    capturedArrival.PlayTraversal(transform, arrDur, false, () =>
+                    Traverse(capturedArrival, arrDur, false, () =>
                     {
+                        if (epoch != moveEpoch) return;
                         OnHopComplete(capturedTarget);
                     });
                 }
@@ -582,17 +637,20 @@ public class DroneController : MonoBehaviour
         parkPoint.y = hoverY;
         float dist = Vector3.Distance(transform.position, parkPoint);
 
+        int epoch = moveEpoch;
         state = State.RoomNavigating;
         activeInteractionWall = passage;
         if (wallModel is StationWallModel stationB) stationB.OccupiedBy = Model;
         Color lineCol = JourneyLineColor;
         currentTile.ShowLine(transform.position, parkPoint, lineCol);
-        currentTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
+        Navigate(currentTile, parkPoint, DurationForDistance(dist), () =>
         {
+            if (epoch != moveEpoch) return;
             stepStartTime = Time.time;
             state = State.WallAnimating;
-            passage.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
+            Interact(passage, cfg.BaseDuration, cfg, () =>
             {
+                if (epoch != moveEpoch) return;
                 OnInteractionComplete(cfg, passage);
             });
         });
@@ -600,6 +658,7 @@ public class DroneController : MonoBehaviour
 
     void OnHopComplete(Vector2Int newRoom)
     {
+        int epoch = moveEpoch;
         int hopIdx = activeJourney.CurrentHopIndex;
         var wall = activeJourney.Walls[hopIdx];
 
@@ -634,8 +693,9 @@ public class DroneController : MonoBehaviour
 
             state = State.RoomNavigating;
             newTile.ShowLine(transform.position, center, JourneyLineColor);
-            newTile.NavigateDrone(transform, center, DurationForDistance(dist), () =>
+            Navigate(newTile, center, DurationForDistance(dist), () =>
             {
+                if (epoch != moveEpoch) return;
                 newTile.OnDroneArrived();
                 if (needsActivation)
                 {
@@ -671,8 +731,9 @@ public class DroneController : MonoBehaviour
 
             state = State.RoomNavigating;
             newTile.ShowLine(transform.position, parkPoint, JourneyLineColor);
-            newTile.NavigateDrone(transform, parkPoint, DurationForDistance(dist), () =>
+            Navigate(newTile, parkPoint, DurationForDistance(dist), () =>
             {
+                if (epoch != moveEpoch) return;
                 StartNextHopFromPark(nextWall, nextTargetRoom, nextDeparture);
             });
         }
@@ -707,17 +768,20 @@ public class DroneController : MonoBehaviour
         float depDur = totalDist > 0.01f ? totalDur * (depDist / totalDist) : totalDur * 0.5f;
         float arrDur = totalDist > 0.01f ? totalDur * (arrDist / totalDist) : totalDur * 0.5f;
 
+        int epoch = moveEpoch;
         stepStartTime = Time.time;
         state = State.WallAnimating;
         Color lineCol = JourneyLineColor;
         departure.ShowLine(parkPos, depMid, lineCol);
-        departure.PlayTraversal(transform, depDur, true, () =>
+        Traverse(departure, depDur, true, () =>
         {
+            if (epoch != moveEpoch) return;
             if (arrival != null)
             {
                 arrival.ShowLine(depMid, arrPark, lineCol);
-                arrival.PlayTraversal(transform, arrDur, false, () =>
+                Traverse(arrival, arrDur, false, () =>
                 {
+                    if (epoch != moveEpoch) return;
                     OnHopComplete(targetRoom);
                 });
             }
@@ -735,13 +799,15 @@ public class DroneController : MonoBehaviour
         gear.OnActivationStart(Model, tile.RModel);
         float duration = gear.GetDuration(Model, tile.RModel);
         float startTime = stepStartTime;
+        int epoch = moveEpoch;
         Model.GetActivationProgress = () => Mathf.Clamp01((Time.time - startTime) / duration);
-        StartCoroutine(RunAutoActivation(tile, gear, duration));
+        StartCoroutine(RunAutoActivation(tile, gear, duration, epoch));
     }
 
-    System.Collections.IEnumerator RunAutoActivation(RoomTile tile, IAutoActivateGear gear, float duration)
+    System.Collections.IEnumerator RunAutoActivation(RoomTile tile, IAutoActivateGear gear, float duration, int epoch)
     {
         yield return new WaitForSeconds(duration);
+        if (epoch != moveEpoch) yield break;
         Model.GetActivationProgress = null;
         OnAutoActivationComplete(tile, gear);
     }
@@ -814,8 +880,10 @@ public class DroneController : MonoBehaviour
             else
             {
                 stepStartTime = Time.time;
-                wall.PlayInteraction(transform, cfg.BaseDuration, cfg, () =>
+                int epoch = moveEpoch;
+                Interact(wall, cfg.BaseDuration, cfg, () =>
                 {
+                    if (epoch != moveEpoch) return;
                     OnInteractionComplete(cfg, wall);
                 });
                 return;

@@ -16,11 +16,28 @@ public class DroneModel : IPowerSource
     /// <summary>Height at which this drone moves (ground for wheeled, hover for flying).</summary>
     public float TravelHeight => Type == DroneType.Hauler ? 0.12f : 1f;
 
+    /// <summary>True if the hauler's Large slot is occupied (carrying cargo).</summary>
+    public bool HasCargo
+    {
+        get
+        {
+            if (Type != DroneType.Hauler || Equipment == null) return false;
+            for (int i = 0; i < SlotLayout.Length; i++)
+                if (SlotLayout[i] == SlotSize.Large && Equipment[i] != null) return true;
+            return false;
+        }
+    }
+
     /// <summary>Can this drone fit through the given passage type?</summary>
     public bool CanTraverse(PassageType passage)
     {
         if (Type == DroneType.Hauler)
-            return passage == PassageType.Corridor;
+        {
+            if (HasCargo)
+                return passage == PassageType.Corridor || passage == PassageType.Rubble || passage == PassageType.BlastDoor;
+            return passage == PassageType.Corridor || passage == PassageType.Rubble || passage == PassageType.BlastDoor
+                || passage == PassageType.Duct;
+        }
         return true;
     }
 

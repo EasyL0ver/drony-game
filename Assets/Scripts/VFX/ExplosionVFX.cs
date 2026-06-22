@@ -13,6 +13,8 @@ public static class ExplosionVFX
         go.transform.position = position;
 
         var ps = go.AddComponent<ParticleSystem>();
+        // AddComponent auto-plays the system; stop it before editing duration etc.
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.loop = false;
         main.duration = 0.8f;
