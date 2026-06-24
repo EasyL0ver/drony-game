@@ -59,24 +59,25 @@ public static class DroneRenderTool
         Shader sh = Shader.Find("Universal Render Pipeline/Lit");
         if (sh == null) sh = Shader.Find("Standard");
 
-        var matHull = new Material(sh) { color = new Color(0.25f, 0.22f, 0.18f) };
-        matHull.SetFloat("_Smoothness", 0.25f);
-        var matArm = new Material(sh) { color = new Color(0.14f, 0.14f, 0.16f) };
-        matArm.SetFloat("_Smoothness", 0.2f);
+        var matHull = new Material(sh) { color = new Color(0.31f, 0.29f, 0.25f) };
+        matHull.SetFloat("_Smoothness", 0.3f);
+        var matArm = new Material(sh) { color = new Color(0.12f, 0.12f, 0.14f) };
+        matArm.SetFloat("_Smoothness", 0.18f);
 
         Color glowCol = Palette.DroneIdle;
         var matGlow = new Material(sh) { color = glowCol };
         matGlow.EnableKeyword("_EMISSION");
-        matGlow.SetColor("_EmissionColor", glowCol * 4f);
+        matGlow.SetColor("_EmissionColor", glowCol * 1.8f);
         matGlow.SetFloat("_Smoothness", 0.9f);
 
-        HaulerDroneMesh.Build(parent, 0.55f, 0.28f, matHull, matArm, matGlow);
+        var result = HaulerDroneMesh.Build(parent, 0.55f, 0.28f, matHull, matArm, matGlow);
 
         if (withCargo)
         {
             var cargo = new GameObject("CargoItem");
             cargo.transform.SetParent(parent, false);
-            cargo.transform.localPosition = new Vector3(0, 0.12f, -0.05f);
+            cargo.transform.localPosition = result.cargoAnchor;
+            cargo.transform.localScale = Vector3.one * result.cargoScale;
             var cBody = new Material(sh) { color = new Color(0.25f, 0.22f, 0.15f) };
             Color cGlow = new Color(1f, 0.6f, 0.05f);
             var cGlowMat = new Material(sh) { color = cGlow };

@@ -882,14 +882,14 @@ public class DroneController : MonoBehaviour
         if (cfg.LootItem != null && Model.HasFreeSlot(cfg.LootItem.Size))
         {
             Model.Equip(cfg.LootItem);
-            if (cfg.LootItem.Size == SlotSize.Large) OnCargoPickedUp();
+            if (cfg.LootItem.Size == SlotSize.Large) droneVisual?.ShowCargo();
             // Hide the cache
             if (wall != null) wall.gameObject.SetActive(false);
         }
         else if (cfg.CargoReward != CargoType.None && cfg.LootItem == null && Model.HasFreeSlot(SlotSize.Large))
         {
             Model.Equip(GearCatalog.FuelCell);
-            OnCargoPickedUp();
+            droneVisual?.ShowCargo();
             if (wall != null) wall.gameObject.SetActive(false);
         }
 
@@ -941,37 +941,8 @@ public class DroneController : MonoBehaviour
 
     // ── Cargo visual ────────────────────
 
-    GameObject cargoVisual;
-
-    void OnCargoPickedUp()
-    {
-        if (cargoVisual != null) return;
-        var hauler = GetComponentInChildren<HaulerDrone>();
-        if (hauler == null) return;
-
-        // Build a small crate in the cargo bay
-        cargoVisual = new GameObject("CargoItem");
-        cargoVisual.transform.SetParent(hauler.transform, false);
-        // Position in the open-top cargo bin (anchor defined by the hauler mesh)
-        cargoVisual.transform.localPosition = hauler.CargoAnchor;
-        cargoVisual.transform.localScale = Vector3.one * hauler.CargoScale;
-
-        Shader sh = Shader.Find("Universal Render Pipeline/Lit");
-        if (sh == null) sh = Shader.Find("Standard");
-
-        var matBody = new Material(sh) { color = new Color(0.25f, 0.22f, 0.15f) };
-        Color glowCol = new Color(1f, 0.6f, 0.05f);
-        var matGlow = new Material(sh) { color = glowCol };
-        matGlow.EnableKeyword("_EMISSION");
-        matGlow.SetColor("_EmissionColor", glowCol * 4f);
-
-        LootBarrelMesh.Build(cargoVisual.transform, matBody, matBody, matGlow);
-    }
-
-    public void ClearCargoVisual()
-    {
-        if (cargoVisual != null) { Destroy(cargoVisual); cargoVisual = null; }
-    }
+    /// <summary>Remove the carried-cargo visual (delegated to the drone visual).</summary>
+    public void ClearCargoVisual() => droneVisual?.HideCargo();
 
     // ── Visuals ────────────────────────
 

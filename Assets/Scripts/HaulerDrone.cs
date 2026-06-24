@@ -11,8 +11,8 @@ public class HaulerDrone : MonoBehaviour, IDroneVisual
     [SerializeField] float chassisWidth = 0.28f;
 
     [Header("Colors")]
-    Color hullColor = new Color(0.25f, 0.22f, 0.18f);
-    Color armColor = new Color(0.14f, 0.14f, 0.16f);
+    Color hullColor = new Color(0.31f, 0.29f, 0.25f);
+    Color armColor = new Color(0.12f, 0.12f, 0.14f);
     Color glowColor = Palette.DroneIdle;
     [SerializeField] float glowIntensity = 4f;
 
@@ -30,8 +30,9 @@ public class HaulerDrone : MonoBehaviour, IDroneVisual
     public float BaseGlowIntensity => glowIntensity;
 
     /// <summary>Local-space anchor and scale for a carried cargo crate.</summary>
-    public Vector3 CargoAnchor { get; private set; } = new Vector3(0f, 0.42f, -0.05f);
-    public float CargoScale { get; private set; } = 0.5f;
+    Vector3 cargoAnchor = new Vector3(0f, 0.42f, -0.05f);
+    float cargoScale = 0.5f;
+    GameObject cargoVisual;
 
     void OnEnable()
     {
@@ -83,10 +84,10 @@ public class HaulerDrone : MonoBehaviour, IDroneVisual
         if (sh == null) sh = Shader.Find("Standard");
 
         matHull = new Material(sh) { color = hullColor };
-        matHull.SetFloat("_Smoothness", 0.25f);
+        matHull.SetFloat("_Smoothness", 0.3f);
 
         matArm = new Material(sh) { color = armColor };
-        matArm.SetFloat("_Smoothness", 0.2f);
+        matArm.SetFloat("_Smoothness", 0.18f);
 
         matGlow = new Material(sh) { color = glowColor };
         matGlow.EnableKeyword("_EMISSION");
@@ -104,17 +105,46 @@ public class HaulerDrone : MonoBehaviour, IDroneVisual
         wheels = result.wheels;
         arm = result.arm;
         claw = result.claw;
-        CargoAnchor = result.cargoAnchor;
-        CargoScale = result.cargoScale;
+        cargoAnchor = result.cargoAnchor;
+        cargoScale = result.cargoScale;
     }
 
     void FindParts()
     {
-        wheels = new Transform[4];
-        for (int i = 0; i < 4; i++)
+        wheels = new Transform[6];
+        for (int i = 0; i < 6; i++)
             wheels[i] = transform.Find($"Wheel{i}");
         arm = transform.Find("ArmPillar");
         claw = transform.Find("Claw");
+    }
+
+    // ── cargo visual ───────────────────────
+
+    public void ShowCargo()
+    {
+        if (cargoVisual != null) return;
+
+        cargoVisual = new GameObject("CargoItem");
+        cargoVisual.transform.SetParent(transform, false);
+        // Position in the open-top cargo bin (anchor defined by the hauler mesh)
+        cargoVisual.transform.localPosition = cargoAnchor;
+        cargoVisual.transform.localScale = Vector3.one * cargoScale;
+
+        Shader sh = Shader.Find("Universal Render Pipeline/Lit");
+        if (sh == null) sh = Shader.Find("Standard");
+
+        var matBody = new Material(sh) { color = new Color(0.25f, 0.22f, 0.15f) };
+        Color glowCol = new Color(1f, 0.6f, 0.05f);
+        var matCrateGlow = new Material(sh) { color = glowCol };
+        matCrateGlow.EnableKeyword("_EMISSION");
+        matCrateGlow.SetColor("_EmissionColor", glowCol * 4f);
+
+        LootBarrelMesh.Build(cargoVisual.transform, matBody, matBody, matCrateGlow);
+    }
+
+    public void HideCargo()
+    {
+        if (cargoVisual != null) { Destroy(cargoVisual); cargoVisual = null; }
     }
 
     // ── flash ──────────────────────────────

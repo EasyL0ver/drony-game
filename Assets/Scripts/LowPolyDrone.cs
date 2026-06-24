@@ -158,6 +158,10 @@ public class LowPolyDrone : MonoBehaviour, IDroneVisual
         flashRoutine = StartCoroutine(FlashRoutine(color, duration));
     }
 
+    // Scout drones can't carry cargo — nothing to show/hide.
+    public void ShowCargo() { }
+    public void HideCargo() { }
+
     System.Collections.IEnumerator FlashRoutine(Color color, float duration)
     {
         if (matGlow == null) yield break;

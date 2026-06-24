@@ -14,4 +14,11 @@ public interface IDroneVisual
     /// Briefly flash the drone glow to the given color, then fade back to base.
     /// </summary>
     void Flash(Color color, float duration = 0.3f);
+
+    /// <summary>Show a carried-cargo visual on the drone (no-op for drones that
+    /// can't carry cargo).</summary>
+    void ShowCargo();
+
+    /// <summary>Remove the carried-cargo visual, if any.</summary>
+    void HideCargo();
 }
