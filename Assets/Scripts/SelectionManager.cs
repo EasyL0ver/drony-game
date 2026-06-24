@@ -378,6 +378,23 @@ public class SelectionManager : MonoBehaviour
                 if (d.IsPerformingInteraction) continue;
                 if (wallModel == null || wallModel.GetInteractions(d.Model).Count == 0) continue;
 
+                // Mid-corridor crossing — defer until the drone lands, then re-path.
+                if (d.IsTraversing)
+                {
+                    var dd = d; var a = connA; var b = connB;
+                    d.QueueOrder(() =>
+                    {
+                        var qA = FindPath(dd.CurrentRoom, a, dd.Model);
+                        var qB = FindPath(dd.CurrentRoom, b, dd.Model);
+                        List<Vector2Int> qBest = (qA != null && qB != null)
+                            ? (qA.Count <= qB.Count ? qA : qB)
+                            : (qA ?? qB);
+                        if (qBest == null) qBest = new List<Vector2Int>();
+                        dd.SetPathToWallInteraction(qBest.Count > 0 ? qBest : null, a, b);
+                    });
+                    continue;
+                }
+
                 // Path to whichever side is reachable (prefer shorter)
                 var pA = FindPath(d.CurrentRoom, connA, d.Model);
                 var pB = FindPath(d.CurrentRoom, connB, d.Model);
@@ -403,6 +420,20 @@ public class SelectionManager : MonoBehaviour
         {
             if (!d.IsSelected) continue;
             if (d.IsPerformingInteraction) continue;
+
+            // Mid-corridor crossing — defer until the drone lands, then re-path
+            // from its new room (so it can turn around and come back if needed).
+            if (d.IsTraversing)
+            {
+                var dd = d; var tgt = target; var cw = clickedWall;
+                d.QueueOrder(() =>
+                {
+                    var qp = FindPath(dd.CurrentRoom, tgt, dd.Model);
+                    if (qp != null && qp.Count > 0)
+                        dd.SetPath(qp, cw);
+                });
+                continue;
+            }
 
             // Drone already on this tile — try wall action if structure was clicked
             if (d.CurrentRoom == target && clickedWall != null)

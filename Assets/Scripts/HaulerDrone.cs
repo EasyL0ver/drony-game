@@ -29,6 +29,10 @@ public class HaulerDrone : MonoBehaviour, IDroneVisual
     public Color BaseGlowColor => glowColor;
     public float BaseGlowIntensity => glowIntensity;
 
+    /// <summary>Local-space anchor and scale for a carried cargo crate.</summary>
+    public Vector3 CargoAnchor { get; private set; } = new Vector3(0f, 0.42f, -0.05f);
+    public float CargoScale { get; private set; } = 0.5f;
+
     void OnEnable()
     {
         if (transform.childCount > 0)
@@ -100,6 +104,8 @@ public class HaulerDrone : MonoBehaviour, IDroneVisual
         wheels = result.wheels;
         arm = result.arm;
         claw = result.claw;
+        CargoAnchor = result.cargoAnchor;
+        CargoScale = result.cargoScale;
     }
 
     void FindParts()

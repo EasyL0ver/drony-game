@@ -13,7 +13,10 @@ public class DroneController : MonoBehaviour
     public bool IsSelected { get; set; }
     public int DroneIndex { get; private set; }
     public bool IsMoving => state != State.Idle;
-    public bool IsPerformingInteraction => state == State.WallAnimating;
+    public bool IsPerformingInteraction => state == State.WallAnimating && !traversing;
+    /// <summary>True while crossing a corridor between two rooms (interruptible: new
+    /// orders are queued and applied once the crossing finishes).</summary>
+    public bool IsTraversing => state == State.WallAnimating && traversing;
 
     // Events
     public event Action<Vector2Int, Vector2Int> OnWallInteractionCompleted;
@@ -61,6 +64,13 @@ public class DroneController : MonoBehaviour
     RoomTile navTile;          // tile running the current in-room navigation coroutine
     Coroutine navCoroutine;    // the current in-room navigation coroutine
     WallView animWall;         // wall currently running a traversal/interaction animation
+    bool traversing;           // true while mid-corridor crossing (interruptible)
+    Action pendingOrder;       // order queued during a crossing, applied on arrival
+
+    /// <summary>Queue an order to run once the current corridor crossing completes.
+    /// The drone finishes the crossing, then the order re-paths from its new room
+    /// (so it can turn around and go back if needed). Last queued order wins.</summary>
+    public void QueueOrder(Action order) => pendingOrder = order;
 
     public void Init(MapView mapGen, FogOfWar fogOfWar, Vector2Int startRoom, string droneName = "Drone", int droneIndex = 0, DroneType droneType = DroneType.Scout)
     {
@@ -240,6 +250,8 @@ public class DroneController : MonoBehaviour
         activeInteractionWall = null;
         state = State.Idle;
         activeJourney = null;
+        traversing = false;
+        pendingOrder = null;
         ClearJourneySteps();
         routePreview?.ClearJourney();
     }
@@ -605,6 +617,7 @@ public class DroneController : MonoBehaviour
             if (epoch != moveEpoch) return;
             stepStartTime = Time.time;
             state = State.WallAnimating;
+            traversing = true;
             capturedDeparture.ShowLine(parkPoint, depMid, lineCol);
             Traverse(capturedDeparture, depDur, true, () =>
             {
@@ -662,6 +675,9 @@ public class DroneController : MonoBehaviour
         int hopIdx = activeJourney.CurrentHopIndex;
         var wall = activeJourney.Walls[hopIdx];
 
+        // The corridor crossing is finished; the drone is now safely in a room.
+        traversing = false;
+
         // Room transition
         var oldTile = fog?.GetTile(CurrentRoom);
         oldTile?.OnDroneExit(this);
@@ -678,6 +694,20 @@ public class DroneController : MonoBehaviour
         // Advance journey + UI step + route line segment
         activeJourney.AdvanceHop();
         AdvanceJourneyStep();
+
+        // A new order arrived mid-crossing — apply it now that we've landed in a
+        // room. It re-paths from CurrentRoom, so the drone can turn back if needed.
+        if (pendingOrder != null)
+        {
+            var order = pendingOrder;
+            pendingOrder = null;
+            int beforeEpoch = moveEpoch;
+            order();
+            // If the order started a new journey it called Cancel() (bumping the
+            // epoch) and now owns the drone. If it found no path it was a no-op, so
+            // fall through and finish the current journey normally (don't get stuck).
+            if (moveEpoch != beforeEpoch) return;
+        }
 
         // Check if auto-activate item should trigger
         var activeGear = Model.GetEquipped<IAutoActivateGear>();
@@ -771,6 +801,7 @@ public class DroneController : MonoBehaviour
         int epoch = moveEpoch;
         stepStartTime = Time.time;
         state = State.WallAnimating;
+        traversing = true;
         Color lineCol = JourneyLineColor;
         departure.ShowLine(parkPos, depMid, lineCol);
         Traverse(departure, depDur, true, () =>
@@ -921,9 +952,9 @@ public class DroneController : MonoBehaviour
         // Build a small crate in the cargo bay
         cargoVisual = new GameObject("CargoItem");
         cargoVisual.transform.SetParent(hauler.transform, false);
-        // Position in cargo bay (top of chassis, slightly back)
-        cargoVisual.transform.localPosition = new Vector3(0, 0.12f, -0.05f);
-        cargoVisual.transform.localScale = Vector3.one;
+        // Position in the open-top cargo bin (anchor defined by the hauler mesh)
+        cargoVisual.transform.localPosition = hauler.CargoAnchor;
+        cargoVisual.transform.localScale = Vector3.one * hauler.CargoScale;
 
         Shader sh = Shader.Find("Universal Render Pipeline/Lit");
         if (sh == null) sh = Shader.Find("Standard");
